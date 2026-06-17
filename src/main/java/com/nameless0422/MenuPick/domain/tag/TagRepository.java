@@ -10,4 +10,6 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
     Optional<Tag> findByUserIdAndName(Long userId, String name);
 
     List<Tag> findByUserIdAndNameStartingWith(Long userId, String prefix);
+
+    List<Tag> findAllByIdInAndUserId(Iterable<Long> ids, Long userId);
 }
