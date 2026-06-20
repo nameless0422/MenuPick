@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.common.security;
 
 import com.nameless0422.MenuPick.domain.auth.OAuthProperties;
+import com.nameless0422.MenuPick.domain.naver.NaverMapsProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -15,7 +16,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class, NaverMapsProperties.class})
 @RequiredArgsConstructor
 public class SecurityConfig {
 

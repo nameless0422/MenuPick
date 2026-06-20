@@ -37,7 +37,10 @@ public enum ErrorCode {
 
     // --- Restaurant ---
     RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "식당을 찾을 수 없습니다."),
-    RESTAURANT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 식당에 대한 접근 권한이 없습니다.");
+    RESTAURANT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 식당에 대한 접근 권한이 없습니다."),
+
+    // --- Naver Maps ---
+    NAVER_MAPS_API_ERROR(HttpStatus.BAD_GATEWAY, "네이버 지도 API 호출에 실패했습니다.");
 
     private final HttpStatus httpStatus;
     /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */

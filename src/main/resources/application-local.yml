@@ -38,6 +38,13 @@ oauth:
     user-info-uri: https://www.googleapis.com/oauth2/v2/userinfo
     redirect-uri: ${GOOGLE_REDIRECT_URI:}
 
+naver:
+  maps:
+    client-id: ${NAVER_MAPS_CLIENT_ID:}
+    client-secret: ${NAVER_MAPS_CLIENT_SECRET:}
+    geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode
+    reverse-geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc
+
 logging:
   level:
     com.nameless0422.MenuPick: DEBUG
