@@ -46,7 +46,11 @@ public enum ErrorCode {
     KAKAO_LOCAL_API_ERROR(HttpStatus.BAD_GATEWAY, "카카오 로컬 API 호출에 실패했습니다."),
 
     // --- Pick ---
-    NO_PICK_CANDIDATES(HttpStatus.NOT_FOUND, "필터 조건에 맞는 메뉴가 없습니다.");
+    NO_PICK_CANDIDATES(HttpStatus.NOT_FOUND, "필터 조건에 맞는 메뉴가 없습니다."),
+
+    // --- History ---
+    HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다."),
+    HISTORY_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 히스토리에 대한 접근 권한이 없습니다.");
 
     private final HttpStatus httpStatus;
     /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */
