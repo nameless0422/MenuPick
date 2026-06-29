@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
@@ -65,7 +67,7 @@ public class MenuController {
     }
 
     @GetMapping("/excluded")
-    public ResponseEntity<ApiResponse<java.util.List<MenuResponse.MenuSummary>>> getExcludedMenus(
+    public ResponseEntity<ApiResponse<List<MenuResponse.MenuSummary>>> getExcludedMenus(
             @AuthenticationPrincipal Long userId) {
         return ResponseEntity.ok(ApiResponse.ok(menuService.getExcludedMenus(userId)));
     }

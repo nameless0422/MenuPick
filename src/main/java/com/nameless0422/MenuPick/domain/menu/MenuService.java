@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Set;
 
 @Service
@@ -108,8 +110,8 @@ public class MenuService {
                     "존재하지 않거나 접근할 수 없는 메뉴가 포함되어 있습니다.");
         }
 
-        var menuMap = menus.stream()
-                .collect(java.util.stream.Collectors.toMap(Menu::getId, m -> m));
+        Map<Long, Menu> menuMap = menus.stream()
+                .collect(Collectors.toMap(Menu::getId, m -> m));
         request.entries().forEach(entry ->
                 menuMap.get(entry.menuId()).updateWeight(entry.weight()));
     }

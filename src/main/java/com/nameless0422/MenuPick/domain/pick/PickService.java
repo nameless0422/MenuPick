@@ -63,7 +63,7 @@ public class PickService {
         if (categories == null || categories.isEmpty()) return menus;
         return menus.stream()
                 .filter(m -> !Collections.disjoint(m.getCategories(), categories))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<Menu> filterByTags(List<Menu> menus, Set<Long> includeTagIds, Set<Long> excludeTagIds) {
@@ -76,7 +76,7 @@ public class PickService {
                                 .map(Tag::getId).collect(Collectors.toSet());
                         return menuTagIds.containsAll(includeTagIds);
                     })
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         if (excludeTagIds != null && !excludeTagIds.isEmpty()) {
@@ -86,7 +86,7 @@ public class PickService {
                                 .map(Tag::getId).collect(Collectors.toSet());
                         return Collections.disjoint(menuTagIds, excludeTagIds);
                     })
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         return result;
@@ -103,7 +103,7 @@ public class PickService {
                                     r.getLatitude().doubleValue(), r.getLongitude().doubleValue());
                             return dist <= maxDistance;
                         }))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private Menu weightedRandom(List<Menu> menus) {

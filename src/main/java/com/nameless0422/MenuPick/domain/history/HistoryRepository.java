@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.domain.history;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
@@ -11,10 +12,10 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     List<History> findByUserIdOrderByRecommendedAtDesc(Long userId);
 
     List<History> findByUserIdAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
-            Long userId, LocalDateTime after, Long cursor, org.springframework.data.domain.Pageable pageable);
+            Long userId, LocalDateTime after, Long cursor, Pageable pageable);
 
     List<History> findByUserIdAndRecommendedAtAfterOrderByIdDesc(
-            Long userId, LocalDateTime after, org.springframework.data.domain.Pageable pageable);
+            Long userId, LocalDateTime after, Pageable pageable);
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
 }
