@@ -228,6 +228,93 @@ class MenuServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
     }
 
+    // --- 일괄 가중치 수정 ---
+
+    @Test
+    @DisplayName("일괄 가중치 수정 성공")
+    void batchUpdateWeight_success() throws Exception {
+        Menu menu2 = Menu.builder().user(user).name("된장찌개").memo("").weight(1).build();
+        setId(menu2, 2L);
+
+        given(menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(List.of(1L, 2L), 1L))
+                .willReturn(List.of(menu, menu2));
+
+        var entries = List.of(
+                new MenuRequest.WeightEntry(1L, 5),
+                new MenuRequest.WeightEntry(2L, 3));
+
+        menuService.batchUpdateWeight(1L, new MenuRequest.BatchUpdateWeight(entries));
+
+        assertThat(menu.getWeight()).isEqualTo(5);
+        assertThat(menu2.getWeight()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("일괄 가중치 수정 - 일부 메뉴 미존재 시 MENU_NOT_FOUND")
+    void batchUpdateWeight_partialNotFound() {
+        given(menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(List.of(1L, 999L), 1L))
+                .willReturn(List.of(menu));
+
+        var entries = List.of(
+                new MenuRequest.WeightEntry(1L, 5),
+                new MenuRequest.WeightEntry(999L, 3));
+
+        assertThatThrownBy(() -> menuService.batchUpdateWeight(1L, new MenuRequest.BatchUpdateWeight(entries)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
+    }
+
+    // --- 제외 목록 ---
+
+    @Test
+    @DisplayName("제외 목록 조회 성공")
+    void getExcludedMenus_success() throws Exception {
+        Menu excluded = Menu.builder().user(user).name("제외메뉴").memo("").weight(1).build();
+        setId(excluded, 10L);
+        excluded.exclude();
+
+        given(menuRepository.findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(1L))
+                .willReturn(List.of(excluded));
+
+        List<MenuResponse.MenuSummary> result = menuService.getExcludedMenus(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).isExcluded()).isTrue();
+    }
+
+    // --- 제외 토글 ---
+
+    @Test
+    @DisplayName("메뉴 제외 토글 - exclude")
+    void toggleExclude_exclude() {
+        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+
+        menuService.toggleExclude(1L, 1L, true);
+
+        assertThat(menu.isExcluded()).isTrue();
+    }
+
+    @Test
+    @DisplayName("메뉴 제외 토글 - include")
+    void toggleExclude_include() {
+        menu.exclude();
+        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+
+        menuService.toggleExclude(1L, 1L, false);
+
+        assertThat(menu.isExcluded()).isFalse();
+    }
+
+    @Test
+    @DisplayName("메뉴 제외 토글 - 타 사용자 접근 시 MENU_ACCESS_DENIED")
+    void toggleExclude_otherUser_forbidden() {
+        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+
+        assertThatThrownBy(() -> menuService.toggleExclude(2L, 1L, true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MENU_ACCESS_DENIED);
+    }
+
     // --- Helper ---
 
     private List<Menu> createMenuList(int count) throws Exception {

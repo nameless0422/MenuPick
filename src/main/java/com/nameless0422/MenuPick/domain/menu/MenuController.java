@@ -55,4 +55,27 @@ public class MenuController {
         menuService.deleteMenu(userId, menuId);
         return ResponseEntity.ok(ApiResponse.ok());
     }
+
+    @PatchMapping("/weights")
+    public ResponseEntity<ApiResponse<Void>> batchUpdateWeight(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody @Valid MenuRequest.BatchUpdateWeight request) {
+        menuService.batchUpdateWeight(userId, request);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
+    @GetMapping("/excluded")
+    public ResponseEntity<ApiResponse<java.util.List<MenuResponse.MenuSummary>>> getExcludedMenus(
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(menuService.getExcludedMenus(userId)));
+    }
+
+    @PatchMapping("/{menuId}/exclude")
+    public ResponseEntity<ApiResponse<Void>> toggleExclude(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long menuId,
+            @RequestParam boolean exclude) {
+        menuService.toggleExclude(userId, menuId, exclude);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
 }

@@ -72,6 +72,10 @@ public class Menu extends BaseTimeEntity {
         this.weight = weight;
     }
 
+    public void updateWeight(int weight) {
+        this.weight = weight;
+    }
+
     public void exclude() {
         this.isExcluded = true;
     }

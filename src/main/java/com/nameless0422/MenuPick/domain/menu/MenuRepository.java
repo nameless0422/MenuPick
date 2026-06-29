@@ -20,4 +20,8 @@ public interface MenuRepository extends JpaRepository<Menu, Long> {
 
     @Query("SELECT m FROM Menu m JOIN m.tags t WHERE t.id = :tagId")
     List<Menu> findAllByTagId(@Param("tagId") Long tagId);
+
+    List<Menu> findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(Long userId);
+
+    List<Menu> findAllByIdInAndUserIdAndDeletedAtIsNull(List<Long> ids, Long userId);
 }

@@ -97,6 +97,39 @@ public class MenuService {
         menu.softDelete();
     }
 
+    @Transactional
+    public void batchUpdateWeight(Long userId, MenuRequest.BatchUpdateWeight request) {
+        List<Long> menuIds = request.entries().stream()
+                .map(MenuRequest.WeightEntry::menuId).toList();
+        List<Menu> menus = menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(menuIds, userId);
+
+        if (menus.size() != menuIds.size()) {
+            throw new BusinessException(ErrorCode.MENU_NOT_FOUND,
+                    "존재하지 않거나 접근할 수 없는 메뉴가 포함되어 있습니다.");
+        }
+
+        var menuMap = menus.stream()
+                .collect(java.util.stream.Collectors.toMap(Menu::getId, m -> m));
+        request.entries().forEach(entry ->
+                menuMap.get(entry.menuId()).updateWeight(entry.weight()));
+    }
+
+    public List<MenuResponse.MenuSummary> getExcludedMenus(Long userId) {
+        return menuRepository.findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(userId)
+                .stream().map(this::toSummary).toList();
+    }
+
+    @Transactional
+    public void toggleExclude(Long userId, Long menuId, boolean exclude) {
+        Menu menu = findMenuOrThrow(menuId);
+        verifyOwnership(menu, userId);
+        if (exclude) {
+            menu.exclude();
+        } else {
+            menu.include();
+        }
+    }
+
     private Menu findMenuOrThrow(Long menuId) {
         Menu menu = menuRepository.findById(menuId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));

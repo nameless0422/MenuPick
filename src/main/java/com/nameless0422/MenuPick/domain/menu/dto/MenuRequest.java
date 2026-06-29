@@ -31,4 +31,15 @@ public class MenuRequest {
             Set<String> categories,
             Set<Long> tagIds
     ) {}
+
+    public record BatchUpdateWeight(
+            @jakarta.validation.constraints.NotEmpty(message = "가중치 변경 목록은 필수입니다.")
+            java.util.List<WeightEntry> entries
+    ) {}
+
+    public record WeightEntry(
+            Long menuId,
+            @Min(1) @Max(5)
+            int weight
+    ) {}
 }

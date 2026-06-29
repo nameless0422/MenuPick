@@ -158,4 +158,68 @@ class MenuControllerTest {
         mockMvc.perform(delete("/api/v1/menus/1"))
                 .andExpect(status().isUnauthorized());
     }
+
+    // --- 일괄 가중치 수정 ---
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/weights - 일괄 가중치 수정 성공")
+    void batchUpdateWeight_success() throws Exception {
+        var request = new MenuRequest.BatchUpdateWeight(
+                List.of(new MenuRequest.WeightEntry(1L, 5), new MenuRequest.WeightEntry(2L, 3)));
+
+        mockMvc.perform(patch("/api/v1/menus/weights")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(menuService).batchUpdateWeight(eq(1L), any(MenuRequest.BatchUpdateWeight.class));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/weights - 미인증 시 401")
+    void batchUpdateWeight_unauthorized() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/weights")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // --- 제외 목록 조회 ---
+
+    @Test
+    @DisplayName("GET /api/v1/menus/excluded - 제외 목록 조회 성공")
+    void getExcludedMenus_success() throws Exception {
+        var summary = new MenuResponse.MenuSummary(1L, "제외메뉴", 1, true, Set.of("한식"), List.of());
+        given(menuService.getExcludedMenus(1L)).willReturn(List.of(summary));
+
+        mockMvc.perform(get("/api/v1/menus/excluded")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("제외메뉴"))
+                .andExpect(jsonPath("$.data[0].isExcluded").value(true));
+    }
+
+    // --- 제외 토글 ---
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/{menuId}/exclude - 제외 처리 성공")
+    void toggleExclude_success() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/1/exclude")
+                        .with(authentication(AUTH))
+                        .param("exclude", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(menuService).toggleExclude(1L, 1L, true);
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/{menuId}/exclude - 미인증 시 401")
+    void toggleExclude_unauthorized() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/1/exclude")
+                        .param("exclude", "true"))
+                .andExpect(status().isUnauthorized());
+    }
 }
