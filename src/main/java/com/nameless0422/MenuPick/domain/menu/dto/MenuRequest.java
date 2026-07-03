@@ -3,8 +3,10 @@ package com.nameless0422.MenuPick.domain.menu.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
+import java.util.List;
 import java.util.Set;
 
 public class MenuRequest {
@@ -33,8 +35,8 @@ public class MenuRequest {
     ) {}
 
     public record BatchUpdateWeight(
-            @jakarta.validation.constraints.NotEmpty(message = "가중치 변경 목록은 필수입니다.")
-            java.util.List<WeightEntry> entries
+            @NotEmpty(message = "가중치 변경 목록은 필수입니다.")
+            List<WeightEntry> entries
     ) {}
 
     public record WeightEntry(

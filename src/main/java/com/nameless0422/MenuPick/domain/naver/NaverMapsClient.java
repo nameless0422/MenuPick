@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.naver.dto.NaverMapsResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -15,6 +16,7 @@ public class NaverMapsClient {
     private final NaverMapsProperties naverMapsProperties;
     private final WebClient webClient;
 
+    @Cacheable(value = "naverGeocode", key = "#query + ':' + #page + ':' + #count")
     public NaverMapsResponse.GeocodeResult geocode(String query, Integer page, Integer count) {
         try {
             return webClient.get()
@@ -37,6 +39,7 @@ public class NaverMapsClient {
         }
     }
 
+    @Cacheable(value = "naverReverseGeocode", key = "#coords + ':' + #orders")
     public NaverMapsResponse.ReverseGeocodeResult reverseGeocode(String coords, String orders) {
         try {
             return webClient.get()

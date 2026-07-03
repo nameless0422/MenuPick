@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.kakao.dto.KakaoLocalResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -15,6 +16,8 @@ public class KakaoLocalClient {
     private final KakaoLocalProperties kakaoLocalProperties;
     private final WebClient webClient;
 
+    @Cacheable(value = "kakaoKeywordSearch",
+            key = "#query + ':' + #categoryGroupCode + ':' + #x + ':' + #y + ':' + #radius + ':' + #page + ':' + #size + ':' + #sort")
     public KakaoLocalResponse.PlaceSearchResult searchByKeyword(
             String query, String categoryGroupCode,
             String x, String y, Integer radius,
@@ -43,6 +46,8 @@ public class KakaoLocalClient {
         }
     }
 
+    @Cacheable(value = "kakaoCategorySearch",
+            key = "#categoryGroupCode + ':' + #x + ':' + #y + ':' + #radius + ':' + #page + ':' + #size + ':' + #sort")
     public KakaoLocalResponse.PlaceSearchResult searchByCategory(
             String categoryGroupCode, String x, String y, Integer radius,
             Integer page, Integer size, String sort) {
