@@ -157,6 +157,69 @@ class HistoryServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.HISTORY_NOT_FOUND);
     }
 
+    // --- 엣지 케이스 ---
+
+    @Test
+    @DisplayName("days=0 또는 음수 — 기본 7일로 동작")
+    void getHistories_zeroDays_fallbackToDefault() {
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of());
+
+        // days=0은 조건에 의해 DEFAULT_DAYS(7)로 동작
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, 0, 20);
+
+        assertThat(result.histories()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이미 방문 처리된 히스토리를 다시 방문 처리")
+    void markVisited_alreadyVisited() {
+        var history = createHistory(1L, menu, restaurant, true, LocalDateTime.now());
+        LocalDateTime firstVisitedAt = history.getVisitedAt();
+
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+
+        historyService.markVisited(1L, 1L);
+
+        assertThat(history.isVisited()).isTrue();
+        // visitedAt이 갱신됨
+        assertThat(history.getVisitedAt()).isAfterOrEqualTo(firstVisitedAt);
+    }
+
+    @Test
+    @DisplayName("메뉴와 식당이 모두 null인 히스토리 조회")
+    void getHistories_nullMenuAndRestaurant() {
+        var history = createHistory(1L, null, null, false, LocalDateTime.now());
+
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of(history));
+
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+
+        assertThat(result.histories().get(0).menuName()).isNull();
+        assertThat(result.histories().get(0).restaurantName()).isNull();
+    }
+
+    @Test
+    @DisplayName("필터 조건이 없는 히스토리 조회")
+    void getHistories_noFilterConditions() {
+        var history = History.builder()
+                .user(user).menu(menu).restaurant(restaurant)
+                .recommendedAt(LocalDateTime.now())
+                .build();
+        ReflectionTestUtils.setField(history, "id", 1L);
+
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of(history));
+
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+
+        assertThat(result.histories().get(0).filterConditions()).isEmpty();
+    }
+
     private History createHistory(Long id, Menu menu, Restaurant restaurant,
                                    boolean visited, LocalDateTime recommendedAt) {
         var history = History.builder()

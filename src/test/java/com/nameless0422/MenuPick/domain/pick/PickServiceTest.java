@@ -226,6 +226,110 @@ class PickServiceTest {
         }));
     }
 
+    // --- 엣지 케이스 ---
+
+    @Test
+    @DisplayName("식당이 없는 메뉴 — 거리 필터 시 제외됨")
+    void pick_menuWithoutRestaurants_filteredOutByDistance() {
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+
+        PickRequest request = new PickRequest(null, null, null,
+                new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
+
+        assertThatThrownBy(() -> pickService.pick(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
+    }
+
+    @Test
+    @DisplayName("같은 좌표 — Haversine 거리 0m")
+    void haversine_sameLocation_distanceZero() {
+        double dist = PickService.calculateHaversineDistance(37.5666, 126.9784, 37.5666, 126.9784);
+        assertThat(dist).isEqualTo(0.0);
+    }
+
+    @Test
+    @DisplayName("모든 필터를 복합 적용 — 카테고리 + 태그 포함 + 거리")
+    void pick_combinedFilters() {
+        koreanMenu.addTag(tag1);
+        Restaurant nearRestaurant = Restaurant.builder()
+                .user(user).name("근처식당").address("서울")
+                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
+                .build();
+        setId(nearRestaurant, 1L);
+        setMenuRestaurants(koreanMenu, List.of(
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(nearRestaurant).build()));
+
+        japaneseMenu.addTag(tag1);
+        Restaurant farRestaurant = Restaurant.builder()
+                .user(user).name("먼식당").address("부산")
+                .latitude(new BigDecimal("35.1796")).longitude(new BigDecimal("129.0756"))
+                .build();
+        setId(farRestaurant, 2L);
+        setMenuRestaurants(japaneseMenu, List.of(
+                MenuRestaurant.builder().menu(japaneseMenu).restaurant(farRestaurant).build()));
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu, japaneseMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickRequest request = new PickRequest(Set.of("KOREAN"), Set.of(1L), null,
+                new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
+        PickResponse.PickResult result = pickService.pick(1L, request);
+
+        assertThat(result.menu().name()).isEqualTo("김치찌개");
+    }
+
+    @Test
+    @DisplayName("필터 후 모든 후보 제거 시 NO_PICK_CANDIDATES")
+    void pick_allFilteredOut_throwsException() {
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu, japaneseMenu));
+
+        PickRequest request = new PickRequest(Set.of("ITALIAN"), null, null, null, null, null);
+
+        assertThatThrownBy(() -> pickService.pick(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
+    }
+
+    @Test
+    @DisplayName("메뉴가 여러 카테고리를 가진 경우 — OR 로직")
+    void pick_menuWithMultipleCategories_matchesAny() {
+        koreanMenu.addCategory("FUSION");
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu, japaneseMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickRequest request = new PickRequest(Set.of("FUSION"), null, null, null, null, null);
+        PickResponse.PickResult result = pickService.pick(1L, request);
+
+        assertThat(result.menu().name()).isEqualTo("김치찌개");
+    }
+
+    @Test
+    @DisplayName("태그 포함 + 제외 동시 적용")
+    void pick_tagIncludeAndExclude_combined() {
+        koreanMenu.addTag(tag1);
+        koreanMenu.addTag(tag2);
+        japaneseMenu.addTag(tag1);
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu, japaneseMenu, chineseMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // tag1 포함 + tag2 제외 → japaneseMenu만
+        PickRequest request = new PickRequest(null, Set.of(1L), Set.of(2L), null, null, null);
+        PickResponse.PickResult result = pickService.pick(1L, request);
+
+        assertThat(result.menu().name()).isEqualTo("초밥");
+    }
+
     // --- 리플렉션 헬퍼 ---
 
     private void setId(Object entity, Long id) {

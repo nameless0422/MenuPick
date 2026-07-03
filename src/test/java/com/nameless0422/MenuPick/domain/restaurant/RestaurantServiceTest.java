@@ -148,6 +148,80 @@ class RestaurantServiceTest {
         assertThat(restaurant.isDeleted()).isTrue();
     }
 
+    // --- 엣지 케이스 ---
+
+    @Test
+    @DisplayName("식당 수정 — 타 사용자 접근 시 RESTAURANT_ACCESS_DENIED")
+    void updateRestaurant_otherUser_forbidden() {
+        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+
+        assertThatThrownBy(() -> restaurantService.updateRestaurant(2L, 1L,
+                new RestaurantRequest.Update("수정", "주소", null, null, null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("식당 삭제 — 타 사용자 접근 시 RESTAURANT_ACCESS_DENIED")
+    void deleteRestaurant_otherUser_forbidden() {
+        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+
+        assertThatThrownBy(() -> restaurantService.deleteRestaurant(2L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("식당 삭제 — 미존재 시 RESTAURANT_NOT_FOUND")
+    void deleteRestaurant_notFound() {
+        given(restaurantRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> restaurantService.deleteRestaurant(1L, 999L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("식당 수정 — 미존재 시 RESTAURANT_NOT_FOUND")
+    void updateRestaurant_notFound() {
+        given(restaurantRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> restaurantService.updateRestaurant(1L, 999L,
+                new RestaurantRequest.Update("수정", "주소", null, null, null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("식당 생성 — optional 필드 null로 생성")
+    void createRestaurant_withNullOptionalFields() {
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(restaurantRepository.save(any(Restaurant.class))).willAnswer(inv -> {
+            Restaurant saved = inv.getArgument(0);
+            try { setId(saved, 100L); } catch (Exception ignored) {}
+            return saved;
+        });
+
+        RestaurantResponse.RestaurantDetail result = restaurantService.createRestaurant(1L,
+                new RestaurantRequest.Create("미니멀 식당", "서울", null, null, null, null, null));
+
+        assertThat(result.name()).isEqualTo("미니멀 식당");
+        assertThat(result.phone()).isNull();
+        assertThat(result.latitude()).isNull();
+        assertThat(result.naverPlaceId()).isNull();
+    }
+
+    @Test
+    @DisplayName("식당 목록 — 빈 목록 반환")
+    void getRestaurants_emptyList() {
+        given(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(1L))
+                .willReturn(List.of());
+
+        List<RestaurantResponse.RestaurantSummary> result = restaurantService.getRestaurants(1L);
+
+        assertThat(result).isEmpty();
+    }
+
     private void setId(Object entity, Long id) throws Exception {
         Field idField = entity.getClass().getDeclaredField("id");
         idField.setAccessible(true);

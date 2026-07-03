@@ -315,6 +315,71 @@ class MenuServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.MENU_ACCESS_DENIED);
     }
 
+    // --- 엣지 케이스 ---
+
+    @Test
+    @DisplayName("메뉴 생성 — 카테고리, 태그 없이 최소 생성")
+    void createMenu_minimalFields() {
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(menuRepository.save(any(Menu.class))).willAnswer(inv -> {
+            Menu saved = inv.getArgument(0);
+            setId(saved, 100L);
+            return saved;
+        });
+
+        MenuResponse.MenuDetail result = menuService.createMenu(1L,
+                new MenuRequest.Create("간단메뉴", null, 1, null, null));
+
+        assertThat(result.name()).isEqualTo("간단메뉴");
+        assertThat(result.memo()).isNull();
+        assertThat(result.categories()).isEmpty();
+        assertThat(result.tags()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("메뉴 수정 — 카테고리를 비움")
+    void updateMenu_clearCategories() {
+        menu.addCategory("한식");
+        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+
+        MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
+                new MenuRequest.Update("김치찌개", "메모", 3, false, null, null));
+
+        assertThat(result.categories()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("제외 목록 — 빈 목록 반환")
+    void getExcludedMenus_emptyList() {
+        given(menuRepository.findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(1L))
+                .willReturn(List.of());
+
+        List<MenuResponse.MenuSummary> result = menuService.getExcludedMenus(1L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("일괄 가중치 수정 — 빈 리스트는 validation에 의해 차단 (서비스 정상)")
+    void batchUpdateWeight_emptyEntries() {
+        given(menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(List.of(), 1L))
+                .willReturn(List.of());
+
+        // entries는 비어있지만, 사이즈 동일(0==0)이므로 예외 없이 통과
+        menuService.batchUpdateWeight(1L, new MenuRequest.BatchUpdateWeight(List.of()));
+    }
+
+    @Test
+    @DisplayName("삭제된 메뉴에 제외 토글 시도 — MENU_NOT_FOUND")
+    void toggleExclude_deletedMenu_notFound() {
+        menu.softDelete();
+        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+
+        assertThatThrownBy(() -> menuService.toggleExclude(1L, 1L, true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
+    }
+
     // --- Helper ---
 
     private List<Menu> createMenuList(int count) throws Exception {
