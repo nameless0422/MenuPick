@@ -70,7 +70,7 @@ class PickControllerTest {
                 1L, "김치찌개", "맛있음", 3, false, Set.of("한식"),
                 List.of(), LocalDateTime.now(), LocalDateTime.now());
         var restaurant = new PickResponse.RestaurantWithDistance(1L, "식당A", "서울시 강남구", 500.0);
-        var result = new PickResponse.PickResult(menuDetail, List.of(restaurant));
+        var result = new PickResponse.PickResult(1L, menuDetail, List.of(restaurant));
 
         given(pickService.pick(eq(1L), any(PickRequest.class))).willReturn(result);
 
@@ -116,7 +116,7 @@ class PickControllerTest {
         var menuDetail = new MenuResponse.MenuDetail(
                 2L, "돈까스", null, 1, false, Set.of("일식"),
                 List.of(), LocalDateTime.now(), LocalDateTime.now());
-        var result = new PickResponse.PickResult(menuDetail, List.of());
+        var result = new PickResponse.PickResult(2L, menuDetail, List.of());
 
         given(pickService.pick(eq(1L), any())).willReturn(result);
 

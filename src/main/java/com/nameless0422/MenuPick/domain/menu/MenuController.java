@@ -4,14 +4,18 @@ import com.nameless0422.MenuPick.common.dto.ApiResponse;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuRequest;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Validated
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
@@ -23,7 +27,7 @@ public class MenuController {
     public ResponseEntity<ApiResponse<MenuResponse.MenuListResponse>> getMenus(
             @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ResponseEntity.ok(ApiResponse.ok(menuService.getMenus(userId, cursor, size)));
     }
 

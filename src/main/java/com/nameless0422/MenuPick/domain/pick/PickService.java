@@ -56,7 +56,7 @@ public class PickService {
 
         History history = saveHistory(userId, picked, request);
 
-        return new PickResponse.PickResult(toDetail(picked), restaurants);
+        return new PickResponse.PickResult(history.getId(), toDetail(picked), restaurants);
     }
 
     private List<Menu> filterByCategories(List<Menu> menus, Set<String> categories) {
@@ -98,6 +98,7 @@ public class PickService {
                 .filter(m -> m.getMenuRestaurants().stream()
                         .anyMatch(mr -> {
                             Restaurant r = mr.getRestaurant();
+                            if (r.isDeleted()) return false;
                             double dist = calculateHaversineDistance(
                                     lat.doubleValue(), lng.doubleValue(),
                                     r.getLatitude().doubleValue(), r.getLongitude().doubleValue());
@@ -122,6 +123,7 @@ public class PickService {
     private List<PickResponse.RestaurantWithDistance> buildRestaurantList(
             Menu menu, BigDecimal lat, BigDecimal lng) {
         return menu.getMenuRestaurants().stream()
+                .filter(mr -> !mr.getRestaurant().isDeleted())
                 .map(mr -> {
                     Restaurant r = mr.getRestaurant();
                     Double distance = (lat != null && lng != null)

@@ -103,10 +103,40 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("탈퇴한 사용자가 로그인하면 예외가 발생한다")
-    void socialLogin_deletedUser() {
+    @DisplayName("탈퇴 후 유예기간 내 로그인하면 계정이 재활성화된다")
+    void socialLogin_deletedUser_withinGracePeriod_reactivated() {
         User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
         deletedUser.softDelete();
+        AuthProvider provider = AuthProvider.builder()
+                .user(deletedUser).provider("KAKAO").socialId("kakao_123").build();
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("kakao_123", "deleted@email.com", "탈퇴유저"));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
+                .willReturn(Optional.of(provider));
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+        TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
+
+        assertThat(result.accessToken()).isEqualTo("access_token");
+        assertThat(deletedUser.isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("탈퇴 후 유예기간이 지나면 로그인 시 예외가 발생한다")
+    void socialLogin_deletedUser_afterGracePeriod_throwsException() throws Exception {
+        User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
+        deletedUser.softDelete();
+
+        // 리플렉션으로 deletedAt을 31일 전으로 설정
+        var field = User.class.getDeclaredField("deletedAt");
+        field.setAccessible(true);
+        field.set(deletedUser, java.time.LocalDateTime.now().minusDays(31));
+
         AuthProvider provider = AuthProvider.builder()
                 .user(deletedUser).provider("KAKAO").socialId("kakao_123").build();
 

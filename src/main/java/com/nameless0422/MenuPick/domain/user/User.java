@@ -44,4 +44,14 @@ public class User extends BaseTimeEntity {
     public boolean isDeleted() {
         return deletedAt != null;
     }
+
+    public void reactivate(String email, String nickname) {
+        this.deletedAt = null;
+        this.email = email;
+        this.nickname = nickname;
+    }
+
+    public boolean isWithinGracePeriod(int graceDays) {
+        return deletedAt != null && deletedAt.plusDays(graceDays).isAfter(LocalDateTime.now());
+    }
 }

@@ -4,11 +4,13 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.naver.dto.NaverMapsResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class NaverMapsClient {
@@ -33,8 +35,10 @@ public class NaverMapsClient {
                     .bodyToMono(NaverMapsResponse.GeocodeResult.class)
                     .block();
         } catch (WebClientResponseException e) {
+            log.error("네이버 Geocode API 응답 오류: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
             throw new BusinessException(ErrorCode.NAVER_MAPS_API_ERROR);
         } catch (Exception e) {
+            log.error("네이버 Geocode API 호출 실패: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.NAVER_MAPS_API_ERROR);
         }
     }
@@ -57,8 +61,10 @@ public class NaverMapsClient {
                     .bodyToMono(NaverMapsResponse.ReverseGeocodeResult.class)
                     .block();
         } catch (WebClientResponseException e) {
+            log.error("네이버 ReverseGeocode API 응답 오류: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString(), e);
             throw new BusinessException(ErrorCode.NAVER_MAPS_API_ERROR);
         } catch (Exception e) {
+            log.error("네이버 ReverseGeocode API 호출 실패: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.NAVER_MAPS_API_ERROR);
         }
     }

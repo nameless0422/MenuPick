@@ -11,6 +11,7 @@ import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AuthService {
+
+    private static final int WITHDRAW_GRACE_DAYS = 30;
 
     private final UserRepository userRepository;
     private final AuthProviderRepository authProviderRepository;
@@ -41,7 +44,12 @@ public class AuthService {
 
         User user = authProvider.getUser();
         if (user.isDeleted()) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "탈퇴한 계정입니다.");
+            if (user.isWithinGracePeriod(WITHDRAW_GRACE_DAYS)) {
+                user.reactivate(profile.email(), profile.nickname());
+            } else {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED,
+                        "탈퇴 후 " + WITHDRAW_GRACE_DAYS + "일이 경과하여 재가입할 수 없습니다. 새 계정으로 가입해주세요.");
+            }
         }
 
         return issueTokens(user.getId());
@@ -91,20 +99,26 @@ public class AuthService {
     }
 
     private AuthProvider createNewUser(String providerName, OAuthUserProfile profile) {
-        User user = userRepository.save(
-                User.builder()
-                        .email(profile.email())
-                        .nickname(profile.nickname())
-                        .build()
-        );
+        try {
+            User user = userRepository.save(
+                    User.builder()
+                            .email(profile.email())
+                            .nickname(profile.nickname())
+                            .build()
+            );
 
-        return authProviderRepository.save(
-                AuthProvider.builder()
-                        .user(user)
-                        .provider(providerName)
-                        .socialId(profile.socialId())
-                        .build()
-        );
+            return authProviderRepository.save(
+                    AuthProvider.builder()
+                            .user(user)
+                            .provider(providerName)
+                            .socialId(profile.socialId())
+                            .build()
+            );
+        } catch (DataIntegrityViolationException e) {
+            return authProviderRepository
+                    .findByProviderAndSocialId(providerName, profile.socialId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR));
+        }
     }
 
     private OAuthProvider findProvider(String name) {

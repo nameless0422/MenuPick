@@ -7,6 +7,7 @@ import java.util.List;
 public class PickResponse {
 
     public record PickResult(
+            Long historyId,
             MenuResponse.MenuDetail menu,
             List<RestaurantWithDistance> restaurants
     ) {}

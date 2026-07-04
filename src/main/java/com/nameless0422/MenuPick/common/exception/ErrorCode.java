@@ -35,6 +35,10 @@ public enum ErrorCode {
     TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "태그를 찾을 수 없습니다."),
     TAG_DUPLICATE(HttpStatus.CONFLICT, "이미 존재하는 태그입니다."),
 
+    // --- MenuRestaurant ---
+    MENU_RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "메뉴-식당 연결을 찾을 수 없습니다."),
+    MENU_RESTAURANT_DUPLICATE(HttpStatus.CONFLICT, "이미 연결된 메뉴-식당입니다."),
+
     // --- Restaurant ---
     RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "식당을 찾을 수 없습니다."),
     RESTAURANT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 식당에 대한 접근 권한이 없습니다."),

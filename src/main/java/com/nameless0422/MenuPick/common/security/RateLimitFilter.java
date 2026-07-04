@@ -8,15 +8,18 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -27,6 +30,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/v1/auth/kakao",
             "/api/v1/auth/google",
             "/api/v1/auth/refresh"
+    );
+
+    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT = new DefaultRedisScript<>(
+            "local count = redis.call('INCR', KEYS[1]) " +
+            "if count == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +
+            "return count",
+            Long.class
     );
 
     private final StringRedisTemplate redisTemplate;
@@ -43,11 +53,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        String key = KEY_PREFIX + request.getRemoteAddr();
-        Long count = redisTemplate.opsForValue().increment(key);
-
-        if (count != null && count == 1L) {
-            redisTemplate.expire(key, Duration.ofMinutes(1));
+        Long count;
+        try {
+            String key = KEY_PREFIX + resolveClientIp(request);
+            count = redisTemplate.execute(RATE_LIMIT_SCRIPT, List.of(key), "60");
+        } catch (Exception e) {
+            log.warn("Redis 장애로 rate limit 검사를 건너뜁니다: {}", e.getMessage());
+            filterChain.doFilter(request, response);
+            return;
         }
 
         if (count != null && count > MAX_REQUESTS_PER_MINUTE) {
@@ -61,6 +74,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private boolean isRateLimitedPath(HttpServletRequest request) {

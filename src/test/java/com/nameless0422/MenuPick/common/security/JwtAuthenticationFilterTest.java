@@ -39,7 +39,7 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid.token.here");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        given(jwtTokenProvider.validate("valid.token.here")).willReturn(true);
+        given(jwtTokenProvider.validateAccessToken("valid.token.here")).willReturn(true);
         given(jwtTokenProvider.getUserId("valid.token.here")).willReturn(1L);
 
         filter.doFilterInternal(request, response, filterChain);
@@ -68,7 +68,7 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer invalid.token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        given(jwtTokenProvider.validate("invalid.token")).willReturn(false);
+        given(jwtTokenProvider.validateAccessToken("invalid.token")).willReturn(false);
 
         filter.doFilterInternal(request, response, filterChain);
 
