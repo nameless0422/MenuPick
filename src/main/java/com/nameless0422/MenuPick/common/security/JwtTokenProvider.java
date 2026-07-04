@@ -42,24 +42,20 @@ public class JwtTokenProvider {
     }
 
     public boolean validateAccessToken(String token) {
+        return validateTokenType(token, TOKEN_TYPE_ACCESS);
+    }
+
+    public boolean validateRefreshToken(String token) {
+        return validateTokenType(token, TOKEN_TYPE_REFRESH);
+    }
+
+    private boolean validateTokenType(String token, String expectedType) {
         try {
             if (token == null || token.isBlank()) {
                 return false;
             }
             Claims claims = getClaims(token);
-            return TOKEN_TYPE_ACCESS.equals(claims.get(CLAIM_TOKEN_TYPE, String.class));
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
-    }
-
-    public boolean validate(String token) {
-        try {
-            if (token == null || token.isBlank()) {
-                return false;
-            }
-            getClaims(token);
-            return true;
+            return expectedType.equals(claims.get(CLAIM_TOKEN_TYPE, String.class));
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }

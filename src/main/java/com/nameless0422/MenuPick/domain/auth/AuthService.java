@@ -9,6 +9,7 @@ import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
+import com.nameless0422.MenuPick.domain.user.UserHardDeleteService;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,10 +25,9 @@ import java.util.concurrent.TimeUnit;
 @Transactional(readOnly = true)
 public class AuthService {
 
-    private static final int WITHDRAW_GRACE_DAYS = 30;
-
     private final UserRepository userRepository;
     private final AuthProviderRepository authProviderRepository;
+    private final UserHardDeleteService userHardDeleteService;
     private final JwtTokenProvider jwtTokenProvider;
     private final StringRedisTemplate redisTemplate;
     private final JwtProperties jwtProperties;
@@ -44,11 +44,13 @@ public class AuthService {
 
         User user = authProvider.getUser();
         if (user.isDeleted()) {
-            if (user.isWithinGracePeriod(WITHDRAW_GRACE_DAYS)) {
+            if (user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS)) {
                 user.reactivate(profile.email(), profile.nickname());
             } else {
-                throw new BusinessException(ErrorCode.UNAUTHORIZED,
-                        "탈퇴 후 " + WITHDRAW_GRACE_DAYS + "일이 경과하여 재가입할 수 없습니다. 새 계정으로 가입해주세요.");
+                // 유예기간 경과: 기존 데이터를 하드 삭제하고 새 계정으로 가입 처리
+                userHardDeleteService.purge(user.getId());
+                authProvider = createNewUser(providerName, profile);
+                user = authProvider.getUser();
             }
         }
 
@@ -56,7 +58,7 @@ public class AuthService {
     }
 
     public TokenResponse refresh(String refreshToken) {
-        if (!jwtTokenProvider.validate(refreshToken)) {
+        if (!jwtTokenProvider.validateRefreshToken(refreshToken)) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다.");
         }
 

@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.menu;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,4 +25,19 @@ public interface MenuRepository extends JpaRepository<Menu, Long> {
     List<Menu> findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(Long userId);
 
     List<Menu> findAllByIdInAndUserIdAndDeletedAtIsNull(List<Long> ids, Long userId);
+
+    // menu_tags, menu_categories는 엔티티가 아니라서(조인/컬렉션 테이블) 네이티브 쿼리로 삭제한다.
+    @Modifying
+    @Query(value = "DELETE FROM menu_tags WHERE menu_id IN (SELECT id FROM menus WHERE user_id = :userId)",
+            nativeQuery = true)
+    void deleteMenuTagsByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query(value = "DELETE FROM menu_categories WHERE menu_id IN (SELECT id FROM menus WHERE user_id = :userId)",
+            nativeQuery = true)
+    void deleteMenuCategoriesByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("delete from Menu m where m.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 }

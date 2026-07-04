@@ -8,6 +8,7 @@ import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
+import com.nameless0422.MenuPick.domain.user.UserHardDeleteService;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +35,7 @@ class AuthServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private AuthProviderRepository authProviderRepository;
+    @Mock private UserHardDeleteService userHardDeleteService;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -48,7 +51,7 @@ class AuthServiceTest {
                 1800000L, 1209600000L
         );
         authService = new AuthService(
-                userRepository, authProviderRepository,
+                userRepository, authProviderRepository, userHardDeleteService,
                 jwtTokenProvider, redisTemplate, jwtProperties,
                 List.of(kakaoProvider)
         );
@@ -127,8 +130,8 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("탈퇴 후 유예기간이 지나면 로그인 시 예외가 발생한다")
-    void socialLogin_deletedUser_afterGracePeriod_throwsException() throws Exception {
+    @DisplayName("탈퇴 후 유예기간이 지나면 기존 데이터를 하드 삭제하고 새 계정으로 가입한다")
+    void socialLogin_deletedUser_afterGracePeriod_purgesAndCreatesNewAccount() throws Exception {
         User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
         deletedUser.softDelete();
 
@@ -146,14 +149,27 @@ class AuthServiceTest {
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(provider));
 
-        assertThatThrownBy(() -> authService.socialLogin("KAKAO", "auth_code"))
-                .isInstanceOf(BusinessException.class);
+        User newUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
+        given(userRepository.save(any(User.class))).willReturn(newUser);
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willReturn(AuthProvider.builder().user(newUser).provider("KAKAO").socialId("kakao_123").build());
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+        TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
+
+        assertThat(result.accessToken()).isEqualTo("access_token");
+        verify(userHardDeleteService).purge(deletedUser.getId());
+        verify(userRepository).save(any(User.class));
+        verify(authProviderRepository).save(any(AuthProvider.class));
     }
 
     @Test
     @DisplayName("유효한 Refresh Token으로 토큰을 재발급한다")
     void refresh_validToken() {
-        given(jwtTokenProvider.validate("old_refresh")).willReturn(true);
+        given(jwtTokenProvider.validateRefreshToken("old_refresh")).willReturn(true);
         given(jwtTokenProvider.getUserId("old_refresh")).willReturn(1L);
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
         given(valueOperations.get("refresh:1")).willReturn("old_refresh");
@@ -169,7 +185,7 @@ class AuthServiceTest {
     @Test
     @DisplayName("Redis에 저장된 것과 다른 Refresh Token이면 예외가 발생한다")
     void refresh_tokenMismatch() {
-        given(jwtTokenProvider.validate("stolen_refresh")).willReturn(true);
+        given(jwtTokenProvider.validateRefreshToken("stolen_refresh")).willReturn(true);
         given(jwtTokenProvider.getUserId("stolen_refresh")).willReturn(1L);
         given(redisTemplate.opsForValue()).willReturn(valueOperations);
         given(valueOperations.get("refresh:1")).willReturn("original_refresh");
@@ -177,6 +193,16 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.refresh("stolen_refresh"))
                 .isInstanceOf(BusinessException.class);
         verify(redisTemplate).delete("refresh:1");
+    }
+
+    @Test
+    @DisplayName("Access Token으로 refresh를 시도하면 저장된 Refresh Token을 건드리지 않고 거부한다")
+    void refresh_withAccessToken_rejectedWithoutDeletingStoredToken() {
+        given(jwtTokenProvider.validateRefreshToken("access_token")).willReturn(false);
+
+        assertThatThrownBy(() -> authService.refresh("access_token"))
+                .isInstanceOf(BusinessException.class);
+        verify(redisTemplate, never()).delete(anyString());
     }
 
     @Test

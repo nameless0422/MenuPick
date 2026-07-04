@@ -32,7 +32,7 @@ class RateLimitFilterTest {
 
     @BeforeEach
     void setUp() {
-        rateLimitFilter = new RateLimitFilter(redisTemplate);
+        rateLimitFilter = new RateLimitFilter(redisTemplate, new RateLimitProperties(false));
     }
 
     @Test
@@ -116,15 +116,34 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("X-Forwarded-For 헤더가 있으면 해당 IP를 사용한다")
+    @DisplayName("trust-proxy가 true면 X-Forwarded-For의 첫 IP를 사용한다")
     @SuppressWarnings("unchecked")
-    void xForwardedFor_usesClientIp() throws ServletException, IOException {
+    void trustProxy_usesXForwardedFor() throws ServletException, IOException {
+        RateLimitFilter proxyTrustingFilter =
+                new RateLimitFilter(redisTemplate, new RateLimitProperties(true));
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/kakao");
         request.setRemoteAddr("10.0.0.1");
         request.addHeader("X-Forwarded-For", "203.0.113.50, 70.41.3.18");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rate_limit:203.0.113.50")), eq("60")))
+                .willReturn(1L);
+
+        proxyTrustingFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("trust-proxy가 false면 X-Forwarded-For를 무시하고 실제 연결 IP를 사용한다")
+    @SuppressWarnings("unchecked")
+    void noTrustProxy_ignoresXForwardedFor() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/kakao");
+        request.setRemoteAddr("10.0.0.1");
+        request.addHeader("X-Forwarded-For", "203.0.113.50");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rate_limit:10.0.0.1")), eq("60")))
                 .willReturn(1L);
 
         rateLimitFilter.doFilterInternal(request, response, filterChain);

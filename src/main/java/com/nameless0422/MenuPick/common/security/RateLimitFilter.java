@@ -40,6 +40,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     );
 
     private final StringRedisTemplate redisTemplate;
+    private final RateLimitProperties rateLimitProperties;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -77,9 +78,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
+        if (rateLimitProperties.trustProxy()) {
+            String xForwardedFor = request.getHeader("X-Forwarded-For");
+            if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+                return xForwardedFor.split(",")[0].trim();
+            }
         }
         return request.getRemoteAddr();
     }

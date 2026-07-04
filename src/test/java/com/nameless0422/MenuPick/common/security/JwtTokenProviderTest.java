@@ -40,15 +40,39 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    @DisplayName("유효한 토큰은 validate가 true를 반환한다")
-    void validate_validToken() {
+    @DisplayName("유효한 Access Token은 validateAccessToken이 true를 반환한다")
+    void validateAccessToken_validToken() {
         String token = jwtTokenProvider.createAccessToken(1L);
 
-        assertThat(jwtTokenProvider.validate(token)).isTrue();
+        assertThat(jwtTokenProvider.validateAccessToken(token)).isTrue();
     }
 
     @Test
-    @DisplayName("만료된 토큰은 validate가 false를 반환한다")
+    @DisplayName("유효한 Refresh Token은 validateRefreshToken이 true를 반환한다")
+    void validateRefreshToken_validToken() {
+        String token = jwtTokenProvider.createRefreshToken(1L);
+
+        assertThat(jwtTokenProvider.validateRefreshToken(token)).isTrue();
+    }
+
+    @Test
+    @DisplayName("Refresh Token은 validateAccessToken이 false를 반환한다")
+    void validateAccessToken_rejectsRefreshToken() {
+        String refreshToken = jwtTokenProvider.createRefreshToken(1L);
+
+        assertThat(jwtTokenProvider.validateAccessToken(refreshToken)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Access Token은 validateRefreshToken이 false를 반환한다")
+    void validateRefreshToken_rejectsAccessToken() {
+        String accessToken = jwtTokenProvider.createAccessToken(1L);
+
+        assertThat(jwtTokenProvider.validateRefreshToken(accessToken)).isFalse();
+    }
+
+    @Test
+    @DisplayName("만료된 토큰은 validateAccessToken이 false를 반환한다")
     void validate_expiredToken() {
         JwtProperties shortExpiry = new JwtProperties(
                 "testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!",
@@ -60,11 +84,11 @@ class JwtTokenProviderTest {
 
         String token = shortProvider.createAccessToken(1L);
 
-        assertThat(shortProvider.validate(token)).isFalse();
+        assertThat(shortProvider.validateAccessToken(token)).isFalse();
     }
 
     @Test
-    @DisplayName("잘못된 시크릿으로 서명된 토큰은 validate가 false를 반환한다")
+    @DisplayName("잘못된 시크릿으로 서명된 토큰은 validateAccessToken이 false를 반환한다")
     void validate_wrongSecret() {
         JwtProperties otherProperties = new JwtProperties(
                 "differentSecretKeyThatIsAlsoAtLeast256BitsLongForHS256!!",
@@ -76,14 +100,14 @@ class JwtTokenProviderTest {
 
         String token = otherProvider.createAccessToken(1L);
 
-        assertThat(jwtTokenProvider.validate(token)).isFalse();
+        assertThat(jwtTokenProvider.validateAccessToken(token)).isFalse();
     }
 
     @Test
-    @DisplayName("null이나 빈 문자열은 validate가 false를 반환한다")
+    @DisplayName("null이나 빈 문자열은 validateAccessToken이 false를 반환한다")
     void validate_nullOrEmpty() {
-        assertThat(jwtTokenProvider.validate(null)).isFalse();
-        assertThat(jwtTokenProvider.validate("")).isFalse();
-        assertThat(jwtTokenProvider.validate("invalid.token.here")).isFalse();
+        assertThat(jwtTokenProvider.validateAccessToken(null)).isFalse();
+        assertThat(jwtTokenProvider.validateAccessToken("")).isFalse();
+        assertThat(jwtTokenProvider.validateAccessToken("invalid.token.here")).isFalse();
     }
 }
