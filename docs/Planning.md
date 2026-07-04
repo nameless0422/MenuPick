@@ -55,9 +55,10 @@
     - [4.1 소셜 로그인 플로우](#41-소셜-로그인-플로우)
     - [4.2 JWT 토큰 정책](#42-jwt-토큰-정책)
     - [4.3 게스트 접근 정책](#43-게스트-접근-정책)
-- [5. 네이버 지도 API 연동](#5-네이버-지도-api-연동)
+    - [4.4 회원 탈퇴 및 재가입 정책](#44-회원-탈퇴-및-재가입-정책)
+- [5. 외부 지도 API 연동 (네이버 + 카카오)](#5-외부-지도-api-연동-네이버--카카오)
     - [5.1 연동 방식](#51-연동-방식)
-    - [5.2 좌표 변환 처리](#52-좌표-변환-처리)
+    - [5.2 좌표 처리](#52-좌표-처리)
     - [5.3 거리 필터링 구현 전략](#53-거리-필터링-구현-전략)
 - [6. 환경 분리 전략](#6-환경-분리-전략)
     - [6.1 환경 구성](#61-환경-구성)
@@ -80,13 +81,13 @@
 | 레이어 | 기술 | 버전 | 비고 |
 | --- | --- | --- | --- |
 | Language | Java | 17 LTS | Record, Sealed class 활용 |
-| Framework | Spring Boot | 3.x | Spring Security 6, Web MVC |
-| ORM | Spring Data JPA + Querydsl | 최신 | 복잡 필터 쿼리에 Querydsl 사용 |
-| Database | MySQL | 8.x | 공간 인덱스(Spatial Index) 활성화 |
+| Framework | Spring Boot | 4.0.x | Spring Security, Web MVC |
+| ORM | Spring Data JPA | 최신 | 파생 쿼리 + JPQL 사용 (Querydsl 미도입 — 현재 쿼리 복잡도에서 불필요) |
+| Database | MySQL | 8.x | 공간 인덱스(Spatial Index)는 데이터 증가 시 도입 검토 |
 | Migration | Flyway | 최신 | DB 스키마 버전 관리 |
-| Auth | Spring Security + JWT | - | Access/Refresh Token 이중 구조 |
-| Cache | Redis | 7.x | Refresh Token 저장, 필터 캐싱 |
-| Build | Gradle | 8.x | - |
+| Auth | Spring Security + JWT | - | Access/Refresh Token 이중 구조 (token_type 클레임으로 구분) |
+| Cache | Redis | 7.x | Refresh Token 저장, 외부 API 응답 캐싱, Rate Limit 카운터 |
+| Build | Gradle | 9.x | - |
 | Infra | Docker + Docker Compose | - | 로컬/스테이징 환경 |
 | Logging | SLF4J + Logback | - | MDC 트레이싱 포함 |
 
@@ -141,6 +142,8 @@ Content-Type: application/json
 
 응답 data 내: items[], nextCursor (null이면 마지막 페이지), hasNext
 
+size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도한 페이지 크기 요청으로 인한 리소스 남용 방지
+
 
 ### 2.4 HTTP 상태 코드 기준
 
@@ -176,13 +179,23 @@ Content-Type: application/json
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| GET | /menus | 메뉴 목록 조회 (검색/필터/페이지) | Y |
+| GET | /menus | 메뉴 목록 조회 (커서 페이지네이션) | Y |
 | POST | /menus | 메뉴 생성 | Y |
 | GET | /menus/{menuId} | 메뉴 상세 조회 | Y |
 | PUT | /menus/{menuId} | 메뉴 수정 | Y |
-| DELETE | /menus/{menuId} | 메뉴 삭제 | Y |
-| GET | /menus/pick | 필터 기반 랜덤 피커 후보 목록 반환 | Y |
-| GET | /menus/pick/demo | 샘플 데이터 기반 랜덤 픽 시연 (게스트 허용) | N (게스트) |
+| DELETE | /menus/{menuId} | 메뉴 삭제 (Soft delete) | Y |
+| PATCH | /menus/weights | 선호 가중치 일괄 수정 | Y |
+| GET | /menus/excluded | 추천 제외 메뉴 목록 조회 | Y |
+| PATCH | /menus/{menuId}/exclude | 추천 제외 여부 토글 | Y |
+
+
+#### 랜덤 픽 (Pick)
+
+| Method | Endpoint | 설명 | 인증 필요 |
+| --- | --- | --- | --- |
+| POST | /pick | 필터(카테고리/태그/거리) 기반 가중치 랜덤 추천. 히스토리 자동 저장 후 historyId를 응답에 포함 | Y |
+
+> ℹ️ 초기 설계의 `GET /menus/pick`은 필터 조건을 본문으로 받기 위해 `POST /pick`으로 변경됨. 게스트 데모(`GET /menus/pick/demo`)는 미구현 상태로 보류 (4.3 참고).
 
 
 #### 태그 (Tag)
@@ -198,18 +211,31 @@ Content-Type: application/json
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| GET | /restaurants/search?query=진주회관 | 네이버 지도 식당 검색 (프록시) | Y |
+| GET | /restaurants | 저장한 식당 목록 조회 | Y |
 | POST | /restaurants | 식당 저장 (좌표 포함) | Y |
 | GET | /restaurants/{restaurantId} | 식당 상세 조회 | Y |
 | PUT | /restaurants/{restaurantId} | 식당 정보 수정 | Y |
-| DELETE | /restaurants/{restaurantId} | 식당 삭제 | Y |
+| DELETE | /restaurants/{restaurantId} | 식당 삭제 (Soft delete) | Y |
+
+
+#### 외부 장소 검색 (Naver / Kakao 프록시)
+
+| Method | Endpoint | 설명 | 인증 필요 |
+| --- | --- | --- | --- |
+| GET | /naver/geocode | 주소 → 좌표 변환 (네이버 Geocoding) | Y |
+| GET | /naver/reverse-geocode | 좌표 → 주소 변환 (네이버 Reverse Geocoding) | Y |
+| GET | /kakao/search/keyword | 키워드 장소 검색 (카카오 로컬) | Y |
+| GET | /kakao/search/category | 카테고리 장소 검색 (카카오 로컬) | Y |
+
+> ℹ️ 초기 설계의 `GET /restaurants/search`(네이버 Local Search 단일 프록시)는 네이버 Geocoding + 카카오 로컬 검색 조합으로 대체됨 (5장 참고). 응답은 Redis에 캐싱한다.
 
 
 #### 메뉴-식당 연결 (MenuRestaurant)
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| POST | /menus/{menuId}/restaurants | 메뉴에 식당 연결 + 별점/메모 저장 | Y |
+| GET | /menus/{menuId}/restaurants | 메뉴에 연결된 식당 목록 조회 (삭제된 식당 제외) | Y |
+| POST | /menus/{menuId}/restaurants | 메뉴에 식당 연결 + 별점/메모 저장 (중복 연결 시 409) | Y |
 | PUT | /menus/{menuId}/restaurants/{restaurantId} | 별점/메모 수정 | Y |
 | DELETE | /menus/{menuId}/restaurants/{restaurantId} | 연결 해제 | Y |
 
@@ -218,10 +244,11 @@ Content-Type: application/json
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| GET | /history | 추천 히스토리 조회 (최근 7일 기본) | Y |
-| POST | /history | 추천 결과 히스토리 저장 | Y |
+| GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터) | Y |
 | PATCH | /history/{historyId}/visit | 방문 여부 업데이트 | Y |
 | DELETE | /history/{historyId} | 히스토리 삭제 | Y |
+
+> ℹ️ 초기 설계의 `POST /history`는 제거됨 — 히스토리는 `POST /pick` 처리 시 서버에서 자동 저장되며, 클라이언트는 응답의 historyId로 방문 처리 등 후속 작업을 수행한다.
 
 
 ## 3. 데이터 모델 (ERD 및 테이블 명세, 1NF 적용)
@@ -1054,6 +1081,8 @@ tags 테이블 컬럼 구성:
 | 5 | 백엔드 → 프론트 | Access Token + Refresh Token 응답 |
 | 6 | 프론트 | Access Token은 메모리, Refresh Token은 HttpOnly Cookie 저장 권장 |
 
+*동일 소셜 계정의 동시 최초 로그인 시 UNIQUE(provider, social_id) 제약 위반이 발생할 수 있다 — 위반 예외를 잡아 재조회로 흡수해 양쪽 요청 모두 정상 처리한다.*
+
 
 ### 4.2 JWT 토큰 정책
 
@@ -1062,18 +1091,23 @@ tags 테이블 컬럼 구성:
 | Access Token | 30분 | 프론트 메모리 (변수) | API 요청 인증 |
 | Refresh Token | 14일 | Redis (key: userId) | Access Token 재발급 |
 
+두 토큰은 `token_type` 클레임("access" / "refresh")으로 구조적으로 구분한다
+
+- 인증 필터는 `token_type=access`인 토큰만 허용 — Refresh Token을 Authorization 헤더에 넣어 일반 API에 접근하는 오용 차단
+- `/auth/refresh`는 `token_type=refresh`인 토큰만 허용 — Access Token으로 재발급을 시도해 저장된 Refresh Token이 삭제(강제 로그아웃)되는 공격 차단
+
 Refresh Token은 Redis에 userId를 키로 저장하여 강제 로그아웃(블랙리스트) 지원
 
-토큰 재발급 시 Refresh Token도 함께 갱신 (Rotation 정책)
+토큰 재발급 시 Refresh Token도 함께 갱신 (Rotation 정책) — 저장된 값과 불일치하는 Refresh Token 제시 시 해당 유저의 Refresh Token을 즉시 폐기 (탈취 대응)
 
-회원 탈퇴 시 Soft delete + Redis Refresh Token 즉시 삭제
+회원 탈퇴 시 Soft delete + Redis Refresh Token 즉시 삭제 (탈퇴/재가입 정책은 4.4 참고)
 
 
 ### 4.3 게스트 접근 정책
 
-게스트(미로그인) 사용자는 랜덤 픽 시연 기능에 한해 제한적으로 접근할 수 있다. 그 외 모든 기능은 로그인이 필요하다.
+> ⚠️ 게스트 데모 기능(`GET /menus/pick/demo`)은 현재 미구현 상태로 보류한다. 구현 전까지 인증 예외(permitAll) 규칙을 두지 않는다 — 존재하지 않는 엔드포인트에 대한 보안 규칙은 죽은 규칙이 되므로, 구현 시점에 규칙과 엔드포인트를 함께 추가한다.
 
-게스트 허용 API: GET /api/v1/menus/pick/demo — 샘플 데이터 기반 랜덤 픽 시연 (실제 사용자 데이터 미사용)
+(구현 시 정책) 게스트(미로그인) 사용자는 랜덤 픽 시연 기능에 한해 제한적으로 접근할 수 있다. 그 외 모든 기능은 로그인이 필요하다.
 
 그 외 API 인증 실패(401) 시 프론트는 로그인 화면으로 리다이렉트, 로그인 후 returnUrl로 복귀
 
@@ -1082,29 +1116,45 @@ Refresh Token은 Redis에 userId를 키로 저장하여 강제 로그아웃(블�
 게스트 API는 Rate Limiting 적용 필수 (IP 기준, 분당 10회) — 샘플 데이터 남용 방지
 
 
-## 5. 네이버 지도 API 연동
+### 4.4 회원 탈퇴 및 재가입 정책
+
+탈퇴는 30일 유예기간을 두는 Soft delete로 처리하고, 유예기간 경과 시 하드 삭제한다.
+
+| 시점 | 처리 |
+| --- | --- |
+| 탈퇴 요청 | users.deleted_at 기록 (Soft delete) + Redis Refresh Token 즉시 삭제 |
+| 유예기간(30일) 내 재로그인 | 계정 재활성화 (deleted_at 초기화, 최신 OAuth 프로필로 이메일/닉네임 갱신) |
+| 유예기간 경과 후 재로그인 | 기존 데이터를 즉시 하드 삭제한 뒤 새 계정으로 가입 처리 |
+| 매일 04:00 배치 | 유예기간이 지난 탈퇴 유저 일괄 하드 삭제 (유저별 트랜잭션 분리 — 개별 실패가 전체를 막지 않음) |
+
+하드 삭제는 FK 참조 순서(자식 → 부모)대로 수행한다: 히스토리 필터 조건 → 히스토리 → 메뉴-식당 연결 → 메뉴 태그/카테고리 → 메뉴 → 태그 → 식당 → 소셜 연동(auth_providers) → 유저
+
+유예기간 상수는 도메인(User.WITHDRAW_GRACE_PERIOD_DAYS)에서 단일 관리한다
+
+
+## 5. 외부 지도 API 연동 (네이버 + 카카오)
 
 
 ### 5.1 연동 방식
 
-프론트엔드가 네이버 API를 직접 호출하지 않고, 백엔드가 프록시 역할을 수행한다. API 키가 클라이언트에 노출되지 않아 보안이 강화된다.
+프론트엔드가 외부 API를 직접 호출하지 않고, 백엔드가 프록시 역할을 수행한다. API 키가 클라이언트에 노출되지 않아 보안이 강화된다.
+
+> ℹ️ 초기 설계는 네이버 Local Search 단일 연동이었으나, 장소 키워드/카테고리 검색은 카카오 로컬 API, 주소↔좌표 변환은 네이버 클라우드(NCP) Maps API 조합으로 변경됨.
 
 | 항목 | 내용 |
 | --- | --- |
-| 사용 API | 네이버 클라우드 플랫폼 - 장소 검색 API (Local Search) |
+| 사용 API | 네이버 NCP Maps — Geocoding / Reverse Geocoding, 카카오 로컬 — 키워드/카테고리 장소 검색 |
 | 호출 주체 | Spring Boot 백엔드 (WebClient 사용) |
-| API 키 관리 | 환경 변수 (NAVER_CLIENT_ID, NAVER_CLIENT_SECRET) — 코드에 하드코딩 금지 |
-| 요청 예시 | GET https://openapi.naver.com/v1/search/local.json?query={상호명}&display=5 |
-| 응답 저장 | 선택된 항목의 title, address, roadAddress, mapx, mapy를 DB에 저장 |
-| 좌표 변환 | 네이버 API 좌표(카텍 계열)를 WGS84 위경도로 변환 후 저장 |
-| 쿼터 대응 | 1일 25,000 호출 제한 — 검색 결과 캐싱(Redis, TTL 1시간) 권장 |
+| 타임아웃 | connect 5초 / response 10초 — 외부 API 지연 시 요청 스레드 무한 대기 방지 |
+| 예외 처리 | 실패 시 상태코드·응답 본문·원인 예외를 로깅한 뒤 502(BAD_GATEWAY) 계열 에러로 변환 |
+| API 키 관리 | 환경 변수 (NAVER_MAPS_CLIENT_ID/SECRET, KAKAO_REST_API_KEY) — 코드에 하드코딩 금지 |
+| 응답 저장 | 선택된 장소의 상호명, 주소, 좌표(WGS84)를 restaurants에 저장 |
+| 쿼터 대응 | 응답을 Redis에 캐싱 (@Cacheable — naverGeocode, naverReverseGeocode 등) |
 
 
-### 5.2 좌표 변환 처리
+### 5.2 좌표 처리
 
-네이버 Local Search API는 카텍(KATEC) 좌표계로 mapx, mapy를 반환
-
-백엔드에서 WGS84(위도/경도)로 변환 후 DB 저장 (라이브러리: proj4j 또는 직접 변환 공식 적용)
+네이버 NCP Geocoding과 카카오 로컬 API는 모두 WGS84 좌표를 직접 반환하므로 별도 좌표계 변환이 불필요하다 (초기 설계의 KATEC → WGS84 변환 로직 폐기)
 
 저장된 latitude/longitude 컬럼 기준으로 Haversine 공식으로 거리 계산
 
@@ -1120,18 +1170,23 @@ MySQL의 공간 함수(ST_Distance_Sphere) 활용 또는 애플리케이션 레�
 
 *초기에는 App 레벨 Haversine으로 시작하고, 데이터 증가 시 ST_Distance_Sphere + Spatial Index로 마이그레이션한다.*
 
+*거리 필터링과 추천 결과의 식당 목록 구성 시 Soft delete된 식당은 반드시 제외한다 (menu_restaurants 연결이 남아 있어도 삭제된 식당은 후보에서 배제).*
+
 
 ## 6. 환경 분리 전략
 
 
 ### 6.1 환경 구성
 
-| 환경 | 목적 | 설정 파일 | DB |
-| --- | --- | --- | --- |
-| local | 개발자 로컬 | application-local.yml | Docker MySQL (로컬) |
-| dev | 팀 공유 개발 서버 | application-dev.yml | 개발 DB |
-| staging | QA / 릴리즈 전 검증 | application-staging.yml | 스테이징 DB |
-| prod | 운영 | application-prod.yml | 운영 DB (접근 최소화) |
+| 환경 | 목적 | 설정 파일 | DB | 상태 |
+| --- | --- | --- | --- | --- |
+| local | 개발자 로컬 | application-local.yml | Docker MySQL (로컬) | 구성 완료 |
+| test | 자동화 테스트 | application-test.yml | H2 (in-memory, MySQL 모드) | 구성 완료 |
+| dev | 팀 공유 개발 서버 | application-dev.yml | 개발 DB | 미구성 (배포 시) |
+| staging | QA / 릴리즈 전 검증 | application-staging.yml | 스테이징 DB | 미구성 (배포 시) |
+| prod | 운영 | application-prod.yml | 운영 DB (접근 최소화) | 미구성 (배포 시) |
+
+활성 프로파일은 `SPRING_PROFILES_ACTIVE` 환경 변수로 지정한다 (미지정 시 local). 운영 배포 시 yml 수정 없이 환경 변수만으로 전환.
 
 
 ### 6.2 시크릿 관리 원칙
@@ -1148,13 +1203,17 @@ Spring Boot에서 ${ENV_VAR_NAME} 방식으로 주입
 
 | 변수명 | 설명 |
 | --- | --- |
-| DB_URL | MySQL 접속 URL |
+| SPRING_PROFILES_ACTIVE | 활성 프로파일 (미지정 시 local) |
 | DB_USERNAME / DB_PASSWORD | DB 계정 정보 |
-| JWT_SECRET | JWT 서명 키 (256bit 이상 랜덤 문자열) |
+| JWT_SECRET | JWT 서명 키 (256bit 이상 랜덤 문자열) — 기본값 없음, 미설정 시 앱 기동 실패 (fail-fast) |
 | REDIS_HOST / REDIS_PORT | Redis 접속 정보 |
-| NAVER_CLIENT_ID / NAVER_CLIENT_SECRET | 네이버 Open API 키 |
-| KAKAO_CLIENT_ID / KAKAO_CLIENT_SECRET | 카카오 OAuth 앱 키 |
-| GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET | 구글 OAuth 앱 키 |
+| NAVER_MAPS_CLIENT_ID / NAVER_MAPS_CLIENT_SECRET | 네이버 NCP Maps API 키 |
+| KAKAO_REST_API_KEY | 카카오 로컬 API 키 |
+| KAKAO_CLIENT_ID / KAKAO_CLIENT_SECRET / KAKAO_REDIRECT_URI | 카카오 OAuth 앱 키 |
+| GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI | 구글 OAuth 앱 키 |
+| RATE_LIMIT_TRUST_PROXY | 리버스 프록시/LB 뒤 배포 시 true — X-Forwarded-For 기반 클라이언트 IP 식별 (기본 false) |
+
+> ⚠️ JWT_SECRET은 로컬 개발용 기본값도 두지 않는다. 커밋된 기본 시크릿이 운영에 배포되는 사고를 원천 차단하기 위함이며, 로컬에서는 .env 또는 셸 환경 변수로 주입한다.
 
 
 ## 7. 비기능 요구사항
@@ -1181,7 +1240,11 @@ XSS 방지: 응답 Content-Type 명시, 입력값 검증
 
 CORS 정책: 허용 Origin 화이트리스트 관리 (운영 환경에서 * 금지)
 
-Rate Limiting: 로그인 API 1분당 10회 제한 (Spring Security 또는 Redis 카운터 활용)
+Rate Limiting: 로그인/재발급 API 1분당 10회 제한 (Redis 카운터)
+
+- INCR + EXPIRE를 Lua 스크립트로 원자 처리 — 중간에 프로세스가 죽어 TTL 없는 키가 남는 문제 방지
+- Redis 장애 시 fail-open (요청 통과 + 경고 로그) — Rate Limit 인프라 장애가 로그인 전체 장애로 번지지 않도록
+- 클라이언트 IP 식별: 기본은 직접 연결 IP, 프록시 뒤 배포 시에만 RATE_LIMIT_TRUST_PROXY=true로 X-Forwarded-For 첫 IP 사용 (직접 노출 환경에서 헤더 위조로 우회하는 것을 방지)
 
 민감 정보 로그 출력 금지 (비밀번호, 토큰, 개인정보)
 
@@ -1213,21 +1276,30 @@ API 호출 로그: 요청 URI, Method, 응답 코드, 처리 시간 기록 (AOP 
 
 ## 9. 개발 우선순위 (백엔드 기준)
 
-| Phase | 작업 | 이유 |
-| --- | --- | --- |
+| Phase | 작업 | 이유 | 상태 |
+| --- | --- | --- | --- |
 | Phase 1
-(필수 기반) | DB 스키마 설계 및 Flyway 마이그레이션 설정 | 모든 기능의 기반 |
-| Phase 1 | JWT 인증 + 카카오/구글 OAuth 로그인 API | 인증 없이는 다른 API 테스트 불가 |
-| Phase 1 | 메뉴 CRUD API + 태그 자동완성 | 핵심 데이터 입력 경로 |
+(필수 기반) | DB 스키마 설계 및 Flyway 마이그레이션 설정 | 모든 기능의 기반 | ✅ 완료 |
+| Phase 1 | JWT 인증 + 카카오/구글 OAuth 로그인 API | 인증 없이는 다른 API 테스트 불가 | ✅ 완료 |
+| Phase 1 | 메뉴 CRUD API + 태그 자동완성 | 핵심 데이터 입력 경로 | ✅ 완료 |
 | Phase 2
-(핵심 기능) | 네이버 API 프록시 + 식당 저장 API | 지도 연동의 핵심 |
-| Phase 2 | 필터링 API + 랜덤 픽 후보 반환 API | 서비스의 메인 기능 |
-| Phase 2 | Haversine 거리 필터링 구현 | 위치 기반 추천의 핵심 |
+(핵심 기능) | 외부 지도 API 프록시(네이버/카카오) + 식당 저장 API | 지도 연동의 핵심 | ✅ 완료 |
+| Phase 2 | 메뉴-식당 연결 API | 거리 필터·식당 추천의 전제 조건 | ✅ 완료 |
+| Phase 2 | 필터링 + 가중치 랜덤 픽 API | 서비스의 메인 기능 | ✅ 완료 |
+| Phase 2 | Haversine 거리 필터링 구현 | 위치 기반 추천의 핵심 | ✅ 완료 |
 | Phase 3
-(보완) | 히스토리 저장 + 방문 여부 API | 회고 및 재방문 유도 |
-| Phase 3 | 선호 가중치 / 제외 목록 API | 추천 품질 개선 |
-| Phase 3 | Redis 캐싱 적용 (네이버 API, 필터 결과) | 성능 최적화 |
+(보완) | 히스토리 자동 저장 + 방문 여부 API | 회고 및 재방문 유도 | ✅ 완료 |
+| Phase 3 | 선호 가중치 / 제외 목록 API | 추천 품질 개선 | ✅ 완료 |
+| Phase 3 | Redis 캐싱 적용 (네이버/카카오 API) | 성능 최적화 | ✅ 완료 |
+| Phase 3 | 탈퇴 유예기간·하드 삭제 배치, 토큰 타입 분리, Rate Limit 강화 | 보안·운영 안정성 | ✅ 완료 |
+| Phase 4
+(향후) | 게스트 데모 엔드포인트 (4.3) | 온보딩 퍼널 | ⬜ 보류 |
+| Phase 4 | dev/staging/prod 프로파일 구성 및 배포 | 운영 전환 | ⬜ 예정 |
+| Phase 4 | 쿼리 레벨 필터링 전환 (Pick 인메모리 필터링 대체) | 메뉴 수 증가 시 성능 | ⬜ 데이터 증가 시 |
+| Phase 4 | MDC traceId, API 호출 로그, APM 연동 (7.3) | 관측성 | ⬜ 예정 |
 
 본 문서는 개발 진행에 따라 지속 업데이트한다.
 
-최종 수정: 2026-05-18
+미해결 과제와 정책 결정 대기 항목은 [ImprovementBacklog.md](./ImprovementBacklog.md)에서 관리한다.
+
+최종 수정: 2026-07-05
