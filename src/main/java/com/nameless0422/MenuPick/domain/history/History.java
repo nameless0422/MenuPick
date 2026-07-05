@@ -59,6 +59,13 @@ public class History {
         this.visitedAt = LocalDateTime.now();
     }
 
+    public void markVisited(Restaurant restaurant) {
+        markVisited();
+        if (restaurant != null) {
+            this.restaurant = restaurant;
+        }
+    }
+
     public void addFilterCondition(String filterType, String filterValue) {
         this.filterConditions.add(
                 HistoryFilterCondition.builder()

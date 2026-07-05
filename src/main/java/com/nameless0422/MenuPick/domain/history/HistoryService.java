@@ -3,6 +3,8 @@ package com.nameless0422.MenuPick.domain.history;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
+import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ public class HistoryService {
     private static final int DEFAULT_DAYS = 7;
 
     private final HistoryRepository historyRepository;
+    private final RestaurantRepository restaurantRepository;
 
     public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, int size) {
         int effectiveDays = (days != null && days > 0) ? days : DEFAULT_DAYS;
@@ -46,10 +49,17 @@ public class HistoryService {
     }
 
     @Transactional
-    public void markVisited(Long userId, Long historyId) {
+    public void markVisited(Long userId, Long historyId, Long restaurantId) {
         History history = historyRepository.findByIdAndUserId(historyId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
-        history.markVisited();
+
+        Restaurant restaurant = null;
+        if (restaurantId != null) {
+            restaurant = restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(restaurantId, userId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.RESTAURANT_NOT_FOUND));
+        }
+
+        history.markVisited(restaurant);
     }
 
     @Transactional

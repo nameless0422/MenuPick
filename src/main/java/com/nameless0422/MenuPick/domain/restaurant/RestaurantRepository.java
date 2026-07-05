@@ -6,10 +6,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
 
     List<Restaurant> findAllByUserIdAndDeletedAtIsNull(Long userId);
+
+    Optional<Restaurant> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
 
     @Modifying
     @Query("delete from Restaurant r where r.user.id = :userId")

@@ -17,6 +17,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -100,21 +101,34 @@ class HistoryControllerTest {
     }
 
     @Test
-    @DisplayName("PATCH /api/v1/history/{id}/visit - 방문 처리 성공")
+    @DisplayName("PATCH /api/v1/history/{id}/visit - 방문 처리 성공 (바디 없음)")
     void markVisited_success() throws Exception {
         mockMvc.perform(patch("/api/v1/history/1/visit")
                         .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
-        verify(historyService).markVisited(1L, 1L);
+        verify(historyService).markVisited(1L, 1L, null);
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/history/{id}/visit - restaurantId 바디 전달")
+    void markVisited_withRestaurantId() throws Exception {
+        mockMvc.perform(patch("/api/v1/history/1/visit")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"restaurantId\": 5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(historyService).markVisited(1L, 1L, 5L);
     }
 
     @Test
     @DisplayName("PATCH /api/v1/history/{id}/visit - 미존재 시 404")
     void markVisited_notFound() throws Exception {
         doThrow(new BusinessException(ErrorCode.HISTORY_NOT_FOUND))
-                .when(historyService).markVisited(1L, 99L);
+                .when(historyService).markVisited(1L, 99L, null);
 
         mockMvc.perform(patch("/api/v1/history/99/visit")
                         .with(authentication(AUTH)))

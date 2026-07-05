@@ -5,6 +5,7 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.verify;
 class HistoryServiceTest {
 
     @Mock private HistoryRepository historyRepository;
+    @Mock private RestaurantRepository restaurantRepository;
     @InjectMocks private HistoryService historyService;
 
     private User user;
@@ -119,7 +121,7 @@ class HistoryServiceTest {
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
 
-        historyService.markVisited(1L, 1L);
+        historyService.markVisited(1L, 1L, null);
 
         assertThat(history.isVisited()).isTrue();
         assertThat(history.getVisitedAt()).isNotNull();
@@ -130,9 +132,53 @@ class HistoryServiceTest {
     void markVisited_notFound() {
         given(historyRepository.findByIdAndUserId(99L, 1L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> historyService.markVisited(1L, 99L))
+        assertThatThrownBy(() -> historyService.markVisited(1L, 99L, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.HISTORY_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("방문 처리 시 restaurantId 전달 — 히스토리의 식당이 덮어써진다")
+    void markVisited_withRestaurantId_overwritesRestaurant() {
+        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+        var visited = Restaurant.builder().user(user).name("실제방문식당").address("서울시 서초구").build();
+        ReflectionTestUtils.setField(visited, "id", 2L);
+
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(2L, 1L))
+                .willReturn(Optional.of(visited));
+
+        historyService.markVisited(1L, 1L, 2L);
+
+        assertThat(history.isVisited()).isTrue();
+        assertThat(history.getRestaurant().getName()).isEqualTo("실제방문식당");
+    }
+
+    @Test
+    @DisplayName("방문 처리 시 restaurantId 미전달 — 기존 식당이 유지된다")
+    void markVisited_withoutRestaurantId_keepsExistingRestaurant() {
+        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+
+        historyService.markVisited(1L, 1L, null);
+
+        assertThat(history.getRestaurant().getName()).isEqualTo("맛집A");
+    }
+
+    @Test
+    @DisplayName("방문 처리 시 존재하지 않는 restaurantId — 404")
+    void markVisited_restaurantNotFound() {
+        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(99L, 1L))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> historyService.markVisited(1L, 1L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
+        assertThat(history.isVisited()).isFalse();
     }
 
     @Test
@@ -180,7 +226,7 @@ class HistoryServiceTest {
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
 
-        historyService.markVisited(1L, 1L);
+        historyService.markVisited(1L, 1L, null);
 
         assertThat(history.isVisited()).isTrue();
         // visitedAt이 갱신됨

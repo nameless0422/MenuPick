@@ -226,6 +226,92 @@ class PickServiceTest {
         }));
     }
 
+    @Test
+    @DisplayName("History 저장 시 최근접 식당이 기록된다 (위치 있음)")
+    void pick_savesHistoryWithNearestRestaurant() {
+        Restaurant nearRestaurant = Restaurant.builder()
+                .user(user).name("가까운식당").address("서울")
+                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
+                .build();
+        setId(nearRestaurant, 1L);
+        Restaurant farRestaurant = Restaurant.builder()
+                .user(user).name("먼식당").address("부산")
+                .latitude(new BigDecimal("35.1796")).longitude(new BigDecimal("129.0756"))
+                .build();
+        setId(farRestaurant, 2L);
+        setMenuRestaurants(koreanMenu, List.of(
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(farRestaurant).build(),
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(nearRestaurant).build()));
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickRequest request = new PickRequest(null, null, null,
+                new BigDecimal("37.5666"), new BigDecimal("126.9784"), null);
+        pickService.pick(1L, request);
+
+        verify(historyRepository).save(argThat(history -> {
+            assertThat(history.getRestaurant()).isEqualTo(nearRestaurant);
+            return true;
+        }));
+    }
+
+    @Test
+    @DisplayName("History 저장 시 위치가 없고 연결 식당이 하나면 그 식당이 기록된다")
+    void pick_savesHistoryWithSingleRestaurant_whenNoLocation() {
+        Restaurant only = Restaurant.builder()
+                .user(user).name("유일한식당").address("서울")
+                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
+                .build();
+        setId(only, 1L);
+        setMenuRestaurants(koreanMenu, List.of(
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(only).build()));
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        pickService.pick(1L, null);
+
+        verify(historyRepository).save(argThat(history -> {
+            assertThat(history.getRestaurant()).isEqualTo(only);
+            return true;
+        }));
+    }
+
+    @Test
+    @DisplayName("History 저장 시 위치가 없고 연결 식당이 여러 개면 식당을 기록하지 않는다")
+    void pick_savesHistoryWithoutRestaurant_whenNoLocationAndMultiple() {
+        Restaurant r1 = Restaurant.builder()
+                .user(user).name("식당1").address("서울")
+                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
+                .build();
+        setId(r1, 1L);
+        Restaurant r2 = Restaurant.builder()
+                .user(user).name("식당2").address("부산")
+                .latitude(new BigDecimal("35.1796")).longitude(new BigDecimal("129.0756"))
+                .build();
+        setId(r2, 2L);
+        setMenuRestaurants(koreanMenu, List.of(
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(r1).build(),
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(r2).build()));
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        pickService.pick(1L, null);
+
+        verify(historyRepository).save(argThat(history -> {
+            assertThat(history.getRestaurant()).isNull();
+            return true;
+        }));
+    }
+
     // --- 엣지 케이스 ---
 
     @Test

@@ -245,7 +245,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터) | Y |
-| PATCH | /history/{historyId}/visit | 방문 여부 업데이트 | Y |
+| PATCH | /history/{historyId}/visit | 방문 여부 업데이트 (바디 선택: restaurantId — 실제 방문 식당 기록) | Y |
 | DELETE | /history/{historyId} | 히스토리 삭제 | Y |
 
 > ℹ️ 초기 설계의 `POST /history`는 제거됨 — 히스토리는 `POST /pick` 처리 시 서버에서 자동 저장되며, 클라이언트는 응답의 historyId로 방문 처리 등 후속 작업을 수행한다.
@@ -1082,6 +1082,8 @@ tags 테이블 컬럼 구성:
 | 6 | 프론트 | Access Token은 메모리, Refresh Token은 HttpOnly Cookie 저장 권장 |
 
 *동일 소셜 계정의 동시 최초 로그인 시 UNIQUE(provider, social_id) 제약 위반이 발생할 수 있다 — 위반 예외를 잡아 재조회로 흡수해 양쪽 요청 모두 정상 처리한다.*
+
+**계정 통합 정책 (이메일 기준 자동 통합)**: 처음 보는 (provider, social_id)라도 같은 이메일로 가입된 유저가 이미 있으면 새 계정을 만들지 않고 해당 유저에 소셜 연동(auth_providers 행)만 추가한다. 같은 사람이 카카오·구글로 각각 로그인해도 계정이 하나로 유지되고, `uq_users_email` UNIQUE 제약과도 충돌하지 않는다. OAuth 프로필에 이메일이 없으면 통합 없이 새 계정을 생성한다.
 
 
 ### 4.2 JWT 토큰 정책

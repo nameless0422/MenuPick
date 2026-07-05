@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.history;
 
 import com.nameless0422.MenuPick.common.dto.ApiResponse;
+import com.nameless0422.MenuPick.domain.history.dto.HistoryRequest;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -30,8 +31,10 @@ public class HistoryController {
     @PatchMapping("/{historyId}/visit")
     public ResponseEntity<ApiResponse<Void>> markVisited(
             @AuthenticationPrincipal Long userId,
-            @PathVariable Long historyId) {
-        historyService.markVisited(userId, historyId);
+            @PathVariable Long historyId,
+            @RequestBody(required = false) HistoryRequest.VisitRequest request) {
+        historyService.markVisited(userId, historyId,
+                request != null ? request.restaurantId() : null);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 

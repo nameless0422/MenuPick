@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -102,12 +103,15 @@ public class AuthService {
 
     private AuthProvider createNewUser(String providerName, OAuthUserProfile profile) {
         try {
-            User user = userRepository.save(
-                    User.builder()
-                            .email(profile.email())
-                            .nickname(profile.nickname())
-                            .build()
-            );
+            // 같은 이메일로 가입된 유저가 있으면 새 계정을 만들지 않고
+            // 해당 유저에 소셜 연동만 추가한다 (이메일 기준 자동 통합).
+            User user = findUserByEmail(profile.email())
+                    .orElseGet(() -> userRepository.save(
+                            User.builder()
+                                    .email(profile.email())
+                                    .nickname(profile.nickname())
+                                    .build()
+                    ));
 
             return authProviderRepository.save(
                     AuthProvider.builder()
@@ -121,6 +125,13 @@ public class AuthService {
                     .findByProviderAndSocialId(providerName, profile.socialId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR));
         }
+    }
+
+    private Optional<User> findUserByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmail(email);
     }
 
     private OAuthProvider findProvider(String name) {

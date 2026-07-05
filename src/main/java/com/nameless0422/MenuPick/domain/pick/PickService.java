@@ -50,11 +50,12 @@ public class PickService {
 
         Menu picked = weightedRandom(candidates);
 
-        List<PickResponse.RestaurantWithDistance> restaurants = buildRestaurantList(
-                picked, request != null ? request.latitude() : null,
-                request != null ? request.longitude() : null);
+        BigDecimal lat = request != null ? request.latitude() : null;
+        BigDecimal lng = request != null ? request.longitude() : null;
 
-        History history = saveHistory(userId, picked, request);
+        List<PickResponse.RestaurantWithDistance> restaurants = buildRestaurantList(picked, lat, lng);
+
+        History history = saveHistory(userId, picked, findNearestRestaurant(picked, lat, lng), request);
 
         return new PickResponse.PickResult(history.getId(), toDetail(picked), restaurants);
     }
@@ -149,10 +150,35 @@ public class PickService {
         return EARTH_RADIUS_METERS * c;
     }
 
-    private History saveHistory(Long userId, Menu picked, PickRequest request) {
+    /**
+     * 픽 시점의 대표 식당: 위치가 있으면 최근접 식당, 없으면 연결 식당이
+     * 하나뿐일 때만 그 식당을 기록한다 (여러 개면 임의 기록 대신 미기록).
+     * 실제 방문 식당은 방문 처리 시 덮어쓸 수 있다.
+     */
+    private Restaurant findNearestRestaurant(Menu menu, BigDecimal lat, BigDecimal lng) {
+        List<Restaurant> active = menu.getMenuRestaurants().stream()
+                .map(MenuRestaurant::getRestaurant)
+                .filter(r -> !r.isDeleted())
+                .toList();
+
+        if (active.isEmpty()) {
+            return null;
+        }
+        if (lat == null || lng == null) {
+            return active.size() == 1 ? active.get(0) : null;
+        }
+        return active.stream()
+                .min(Comparator.comparingDouble(r -> calculateHaversineDistance(
+                        lat.doubleValue(), lng.doubleValue(),
+                        r.getLatitude().doubleValue(), r.getLongitude().doubleValue())))
+                .orElse(null);
+    }
+
+    private History saveHistory(Long userId, Menu picked, Restaurant restaurant, PickRequest request) {
         History history = History.builder()
                 .user(userRepository.getReferenceById(userId))
                 .menu(picked)
+                .restaurant(restaurant)
                 .recommendedAt(LocalDateTime.now())
                 .build();
 

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -103,6 +104,59 @@ class AuthServiceTest {
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
         assertThat(result.accessToken()).isEqualTo("access_token");
+    }
+
+    @Test
+    @DisplayName("같은 이메일의 기존 유저가 있으면 새 계정 대신 소셜 연동만 추가한다")
+    void socialLogin_sameEmail_linksProviderToExistingUser() {
+        User existingUser = User.builder().email("same@email.com").nickname("기존유저").build();
+
+        given(kakaoProvider.getProviderName()).willReturn("GOOGLE");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("google_123", "same@email.com", "구글닉네임"));
+        given(authProviderRepository.findByProviderAndSocialId("GOOGLE", "google_123"))
+                .willReturn(Optional.empty());
+        given(userRepository.findByEmail("same@email.com")).willReturn(Optional.of(existingUser));
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+        TokenResponse result = authService.socialLogin("GOOGLE", "auth_code");
+
+        assertThat(result.accessToken()).isEqualTo("access_token");
+        verify(userRepository, never()).save(any(User.class));
+
+        ArgumentCaptor<AuthProvider> captor = ArgumentCaptor.forClass(AuthProvider.class);
+        verify(authProviderRepository).save(captor.capture());
+        assertThat(captor.getValue().getUser()).isSameAs(existingUser);
+        assertThat(captor.getValue().getProvider()).isEqualTo("GOOGLE");
+    }
+
+    @Test
+    @DisplayName("프로필에 이메일이 없으면 통합 조회 없이 새 계정을 생성한다")
+    void socialLogin_nullEmail_createsNewUserWithoutIntegration() {
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("kakao_123", null, "테스트"));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
+                .willReturn(Optional.empty());
+
+        User savedUser = User.builder().nickname("테스트").build();
+        given(userRepository.save(any(User.class))).willReturn(savedUser);
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willReturn(AuthProvider.builder().user(savedUser).provider("KAKAO").socialId("kakao_123").build());
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+        authService.socialLogin("KAKAO", "auth_code");
+
+        verify(userRepository, never()).findByEmail(any());
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
