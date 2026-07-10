@@ -9,8 +9,8 @@ import com.nameless0422.MenuPick.common.security.RateLimitFilter;
 import com.nameless0422.MenuPick.common.security.SecurityConfig;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.OAuthLoginRequest;
-import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.RefreshRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -57,7 +57,7 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/auth/kakao - 카카오 로그인 성공")
+    @DisplayName("POST /api/v1/auth/kakao - 카카오 로그인 성공 (Refresh Token은 HttpOnly 쿠키로만 전달)")
     void kakaoLogin_success() throws Exception {
         given(authService.socialLogin("KAKAO", "test_code"))
                 .willReturn(new TokenResponse("access_token", "refresh_token"));
@@ -68,7 +68,12 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.accessToken").value("access_token"))
-                .andExpect(jsonPath("$.data.refreshToken").value("refresh_token"));
+                .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+                .andExpect(cookie().value("refresh_token", "refresh_token"))
+                .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(cookie().secure("refresh_token", true))
+                .andExpect(cookie().path("refresh_token", "/api/v1/auth"))
+                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("SameSite=Strict")));
     }
 
     @Test
@@ -94,16 +99,23 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/auth/refresh - 토큰 갱신 성공")
+    @DisplayName("POST /api/v1/auth/refresh - 쿠키의 Refresh Token으로 갱신 성공")
     void refresh_success() throws Exception {
         given(authService.refresh("old_refresh"))
                 .willReturn(new TokenResponse("new_access", "new_refresh"));
 
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RefreshRequest("old_refresh"))))
+                        .cookie(new Cookie("refresh_token", "old_refresh")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.accessToken").value("new_access"));
+                .andExpect(jsonPath("$.data.accessToken").value("new_access"))
+                .andExpect(cookie().value("refresh_token", "new_refresh"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/refresh - 쿠키 없이 요청하면 401")
+    void refresh_withoutCookie_unauthorized() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -114,13 +126,14 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/auth/logout - 인증된 사용자 로그아웃 성공")
+    @DisplayName("DELETE /api/v1/auth/logout - 로그아웃 성공 시 Refresh Token 쿠키가 만료된다")
     void logout_success() throws Exception {
         mockMvc.perform(delete("/api/v1/auth/logout")
                         .with(authentication(
                                 new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(cookie().maxAge("refresh_token", 0));
 
         verify(authService).logout(1L);
     }

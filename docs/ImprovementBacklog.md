@@ -12,7 +12,7 @@
 | --- | --- | --- | --- | --- |
 | 1 | 이메일 UNIQUE 충돌 시 500 (타 소셜 동일 이메일 가입 불가) | 버그 | P1 | ✅ |
 | 2 | Pick 시 histories.restaurant_id 미기록 | 데이터 유실 | P1 | ✅ |
-| 3 | Refresh Token 전달 방식 미결 (쿠키 vs 바디) | 정책 결정 | P2 | ⬜ |
+| 3 | Refresh Token 전달 방식 미결 (쿠키 vs 바디) | 정책 결정 | P2 | ✅ |
 | 4 | 계정 통합 정책 부재 (카카오+구글 동일인) | 정책 결정 | P2 | ✅ |
 | 5 | 위치정보법·개인정보 고지 검토 | 법적 검토 | P2 | ⬜ |
 | 6 | 테스트 스키마 드리프트 (H2 vs 운영 MySQL) | 테스트 전략 | P3 | ⬜ |
@@ -54,7 +54,9 @@
 
 ## P2 — 정책 결정 필요
 
-### 3. Refresh Token 전달 방식 미결
+### 3. Refresh Token 전달 방식 미결 ✅ (2026-07-06 결정·구현)
+
+> **결정**: 클라이언트가 웹 기반으로 확정되어 **HttpOnly Cookie** 방식 채택·구현. 쿠키 속성은 `HttpOnly + Secure + SameSite=Strict + Path=/api/v1/auth`, CSRF는 SameSite=Strict로 방어(재설계 불필요). 프론트·API 동일 사이트 배포 제약 포함 근거를 [Planning.md 4.2](Planning.md#42-jwt-토큰-정책)에 반영.
 
 **문제**: Planning.md 4.1은 "Refresh Token은 HttpOnly Cookie 저장 권장"인데 실제 구현은 JSON 바디로 반환하며, CSRF는 disable 상태다. 문서와 구현이 모순이고, 어느 쪽으로 갈지 결정 자체가 없다.
 

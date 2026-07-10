@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.common.security;
 
+import com.nameless0422.MenuPick.domain.auth.AuthCookieProperties;
 import com.nameless0422.MenuPick.domain.auth.OAuthProperties;
 import com.nameless0422.MenuPick.domain.kakao.KakaoLocalProperties;
 import com.nameless0422.MenuPick.domain.naver.NaverMapsProperties;
@@ -22,7 +23,7 @@ import java.time.Duration;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class, NaverMapsProperties.class, KakaoLocalProperties.class, RateLimitProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class, NaverMapsProperties.class, KakaoLocalProperties.class, RateLimitProperties.class, AuthCookieProperties.class})
 @RequiredArgsConstructor
 public class SecurityConfig {
 

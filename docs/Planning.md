@@ -170,7 +170,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | --- | --- | --- | --- |
 | POST | /auth/kakao | 카카오 OAuth 로그인 / 회원가입 | N |
 | POST | /auth/google | 구글 OAuth 로그인 / 회원가입 | N |
-| POST | /auth/refresh | Access Token 재발급 | N (Refresh Token) |
+| POST | /auth/refresh | Access Token 재발급 (Refresh Token은 HttpOnly 쿠키로 전달) | N (쿠키) |
 | DELETE | /auth/logout | 로그아웃 (Refresh Token 무효화) | Y |
 | DELETE | /auth/withdraw | 회원 탈퇴 | Y |
 
@@ -1078,8 +1078,8 @@ tags 테이블 컬럼 구성:
 | 2 | 프론트 → 백엔드 | POST /api/v1/auth/kakao { code: '...' } |
 | 3 | 백엔드 | 카카오/구글 Token API 호출 → 사용자 프로필 획득 |
 | 4 | 백엔드 | social_id + provider 기준으로 신규 가입 or 기존 사용자 조회 |
-| 5 | 백엔드 → 프론트 | Access Token + Refresh Token 응답 |
-| 6 | 프론트 | Access Token은 메모리, Refresh Token은 HttpOnly Cookie 저장 권장 |
+| 5 | 백엔드 → 프론트 | Access Token은 응답 바디, Refresh Token은 HttpOnly 쿠키(Set-Cookie)로 전달 |
+| 6 | 프론트 | Access Token은 메모리에만 보관 — Refresh Token은 쿠키라 JS에서 접근 불가 |
 
 *동일 소셜 계정의 동시 최초 로그인 시 UNIQUE(provider, social_id) 제약 위반이 발생할 수 있다 — 위반 예외를 잡아 재조회로 흡수해 양쪽 요청 모두 정상 처리한다.*
 
@@ -1090,8 +1090,15 @@ tags 테이블 컬럼 구성:
 
 | 구분 | 만료 시간 | 저장 위치 | 용도 |
 | --- | --- | --- | --- |
-| Access Token | 30분 | 프론트 메모리 (변수) | API 요청 인증 |
-| Refresh Token | 14일 | Redis (key: userId) | Access Token 재발급 |
+| Access Token | 30분 | 프론트 메모리 (변수) | API 요청 인증 (Authorization 헤더) |
+| Refresh Token | 14일 | HttpOnly 쿠키(클라이언트) + Redis(서버, key: userId) | Access Token 재발급 |
+
+**Refresh Token 전달 방식 (HttpOnly 쿠키)** — 클라이언트가 웹 기반으로 확정되어 XSS 탈취 방어를 우선해 쿠키 방식을 채택했다.
+
+- 쿠키 속성: `HttpOnly` + `Secure`(로컬 http만 AUTH_COOKIE_SECURE=false로 완화) + `SameSite=Strict` + `Path=/api/v1/auth` (auth 외 엔드포인트로 쿠키가 전송되지 않음)
+- `/auth/refresh`는 바디 대신 쿠키에서 토큰을 읽고, 로그아웃/탈퇴 시 쿠키를 즉시 만료시킨다
+- CSRF는 disable 상태를 유지한다 — 쿠키로 인증되는 엔드포인트는 `/auth/refresh`뿐이고 `SameSite=Strict`가 교차 사이트 전송 자체를 차단하며, 나머지 API는 Authorization 헤더 인증이라 CSRF와 무관하다
+- 제약: `SameSite=Strict`이므로 프론트와 API는 같은 사이트(동일 도메인 또는 서브도메인)로 배포해야 한다
 
 두 토큰은 `token_type` 클레임("access" / "refresh")으로 구조적으로 구분한다
 
@@ -1214,6 +1221,7 @@ Spring Boot에서 ${ENV_VAR_NAME} 방식으로 주입
 | KAKAO_CLIENT_ID / KAKAO_CLIENT_SECRET / KAKAO_REDIRECT_URI | 카카오 OAuth 앱 키 |
 | GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI | 구글 OAuth 앱 키 |
 | RATE_LIMIT_TRUST_PROXY | 리버스 프록시/LB 뒤 배포 시 true — X-Forwarded-For 기반 클라이언트 IP 식별 (기본 false) |
+| AUTH_COOKIE_SECURE | Refresh Token 쿠키의 Secure 속성 (기본 true, 로컬 http 개발만 false) |
 
 > ⚠️ JWT_SECRET은 로컬 개발용 기본값도 두지 않는다. 커밋된 기본 시크릿이 운영에 배포되는 사고를 원천 차단하기 위함이며, 로컬에서는 .env 또는 셸 환경 변수로 주입한다.
 

@@ -8,9 +8,4 @@ public class AuthRequest {
             @NotBlank(message = "인가 코드는 필수입니다.")
             String code
     ) {}
-
-    public record RefreshRequest(
-            @NotBlank(message = "Refresh Token은 필수입니다.")
-            String refreshToken
-    ) {}
 }

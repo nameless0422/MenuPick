@@ -22,6 +22,11 @@ spring:
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:false}
 
+auth:
+  cookie:
+    # 로컬은 http라 secure 쿠키가 전송되지 않으므로 false. 운영 기본값은 true.
+    secure: ${AUTH_COOKIE_SECURE:false}
+
 jwt:
   secret: ${JWT_SECRET}
   access-token-expiry: 1800000
