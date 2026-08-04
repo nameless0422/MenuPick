@@ -1,0 +1,63 @@
+# 운영 환경. springdoc/swagger는 여기서 별도로 열지 않는다 — application.yml 기본값(false)을
+# 그대로 물려받는 게 의도된 동작이다 (docs/DecisionLog.md D-021, fail-safe 기본값).
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+    show-sql: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+
+rate-limit:
+  trust-proxy: ${RATE_LIMIT_TRUST_PROXY:true}
+
+cors:
+  allowed-origins: ${FRONTEND_ORIGIN}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiry: 1800000
+  refresh-token-expiry: 1209600000
+
+oauth:
+  kakao:
+    client-id: ${KAKAO_CLIENT_ID}
+    client-secret: ${KAKAO_CLIENT_SECRET}
+    token-uri: https://kauth.kakao.com/oauth/token
+    user-info-uri: https://kapi.kakao.com/v2/user/me
+    redirect-uri: ${KAKAO_REDIRECT_URI}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+    token-uri: https://oauth2.googleapis.com/token
+    user-info-uri: https://www.googleapis.com/oauth2/v2/userinfo
+    redirect-uri: ${GOOGLE_REDIRECT_URI}
+
+kakao:
+  local:
+    rest-api-key: ${KAKAO_REST_API_KEY}
+    keyword-search-base-url: https://dapi.kakao.com/v2/local/search/keyword.json
+    category-search-base-url: https://dapi.kakao.com/v2/local/search/category.json
+
+naver:
+  maps:
+    client-id: ${NAVER_MAPS_CLIENT_ID}
+    client-secret: ${NAVER_MAPS_CLIENT_SECRET}
+    geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode
+    reverse-geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc
+
+logging:
+  level:
+    com.nameless0422.MenuPick: INFO

@@ -38,6 +38,8 @@ out/
 
 ### Environment ###
 .env
+.env.*
+!.env.*.example
 docker-compose.override.yml
 
 ### Plan ###
