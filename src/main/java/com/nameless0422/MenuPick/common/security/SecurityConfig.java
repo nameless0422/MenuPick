@@ -57,6 +57,15 @@ public class SecurityConfig {
                                 "/api/v1/auth/kakao",
                                 "/api/v1/auth/google",
                                 "/api/v1/auth/refresh").permitAll()
+                        // springdoc.api-docs/swagger-ui.enabled가 false면 경로 자체가 등록되지 않는다
+                        // (기본 false, local 프로파일만 true — docs/ImprovementBacklog.md 7번)
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**").permitAll()
+                        // 로드밸런서/오케스트레이터의 헬스체크 프로브용. show-details=never라 민감정보 노출 없음
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // /actuator/metrics는 인증만 요구 (역할 기반 접근 제어가 생기면 관리자 전용으로 좁힐 것)
                         .anyRequest().authenticated())
                 .addFilterBefore(rateLimitFilter,
                         UsernamePasswordAuthenticationFilter.class)

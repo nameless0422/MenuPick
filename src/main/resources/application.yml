@@ -14,3 +14,20 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+
+# 기본은 비노출. local(또는 향후 dev) 프로파일에서만 true로 덮어써 노출한다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, metrics
+  endpoint:
+    health:
+      # 헬스체크는 SecurityConfig에서 permitAll이므로, 비인증 호출자에게 DB/Redis 커넥션 상세를 노출하지 않는다.
+      show-details: never
