@@ -7,6 +7,28 @@ on:
     branches: [main]
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check and build
+        # 백엔드 실행 없이 정적으로 확인 가능한 것만: tsc + vite build
+        run: npm run build
+
   test:
     runs-on: ubuntu-latest
     steps:
