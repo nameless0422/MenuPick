@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.user;
 
 import com.nameless0422.MenuPick.common.config.JpaConfig;
+import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
 import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.Menu;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -26,9 +28,10 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({JpaConfig.class, UserHardDeleteService.class})
-@ActiveProfiles("test")
-class UserHardDeleteServiceTest {
+@ActiveProfiles("integration")
+class UserHardDeleteServiceTest extends AbstractIntegrationTest {
 
     @Autowired private UserHardDeleteService userHardDeleteService;
     @Autowired private UserRepository userRepository;
