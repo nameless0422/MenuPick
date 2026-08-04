@@ -22,6 +22,11 @@ spring:
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:false}
 
+cors:
+  # Vite 기본 개발 서버 포트
+  allowed-origins:
+    - http://localhost:5173
+
 springdoc:
   api-docs:
     enabled: true
