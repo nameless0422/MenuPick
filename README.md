@@ -27,8 +27,18 @@
 - **내 주변 맛집**: 현재 위치 기반 반경 설정으로 근거리 식당 위주 추천.
 -----
 
+## 구성
+
+- `src/` — 백엔드 (Spring Boot). `./gradlew bootRun`
+- `frontend/` — 프론트엔드 (React + Vite + TypeScript). [frontend/README.md](frontend/README.md) 참고
+
 ## docs
 
+- [Planning.md](docs/Planning.md) — 기술 설계 계획서 (스택, API, 데이터 모델, 인증, 리스크)
+- [DecisionLog.md](docs/DecisionLog.md) — 설계·구현 결정 기록 (왜 이렇게 만들었는지, 검토한 대안, 트레이드오프). **진행하면서 계속 갱신**
+- [Requirements.md](docs/Requirements.md) — 유저 스토리, 추천 품질 KPI, Phase 일정 초안
+- [ImprovementBacklog.md](docs/ImprovementBacklog.md) — 개선 과제 백로그와 처리 현황
+- [PrivacyReview.md](docs/PrivacyReview.md) — 위치정보법·개인정보 고지 검토
 
 -----
 

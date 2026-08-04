@@ -1140,6 +1140,8 @@ Refresh Token은 Redis에 userId를 키로 저장하여 강제 로그아웃(블�
 
 유예기간 상수는 도메인(User.WITHDRAW_GRACE_PERIOD_DAYS)에서 단일 관리한다
 
+> **매일 04:00 배치는 단일 인스턴스 배포를 전제로 한다.** 스케일 아웃 시 인스턴스마다 배치가 중복 실행될 수 있어 ShedLock 도입이 필요하다 (8장 리스크 표, [ImprovementBacklog.md 11번](ImprovementBacklog.md)).
+
 
 ## 5. 외부 지도 API 연동 (네이버 + 카카오)
 
@@ -1191,11 +1193,15 @@ MySQL의 공간 함수(ST_Distance_Sphere) 활용 또는 애플리케이션 레�
 | --- | --- | --- | --- | --- |
 | local | 개발자 로컬 | application-local.yml | Docker MySQL (로컬) | 구성 완료 |
 | test | 자동화 테스트 | application-test.yml | H2 (in-memory, MySQL 모드) | 구성 완료 |
-| dev | 팀 공유 개발 서버 | application-dev.yml | 개발 DB | 미구성 (배포 시) |
-| staging | QA / 릴리즈 전 검증 | application-staging.yml | 스테이징 DB | 미구성 (배포 시) |
-| prod | 운영 | application-prod.yml | 운영 DB (접근 최소화) | 미구성 (배포 시) |
+| dev | 팀 공유 개발 서버 | application-dev.yml | 개발 DB (`DB_URL` env) | 구성 완료 (스켈레톤, 실 호스트 값은 배포 시 주입) |
+| staging | QA / 릴리즈 전 검증 | application-staging.yml | 스테이징 DB | 미구성 — 필요 시점에 추가 |
+| prod | 운영 | application-prod.yml | 운영 DB (`DB_URL` env, 접근 최소화) | 구성 완료 (스켈레톤, 실 호스트 값은 배포 시 주입) |
 
 활성 프로파일은 `SPRING_PROFILES_ACTIVE` 환경 변수로 지정한다 (미지정 시 local). 운영 배포 시 yml 수정 없이 환경 변수만으로 전환.
+
+> **배포 대상(잠정)**: Oracle Cloud Free Tier — 아직 확정은 아니다([DecisionLog.md D-023](DecisionLog.md#d-023-배포-대상--oracle-cloud-free-tier-잠정)). PaaS가 아니라 VM을 직접 운영하는 방식이라, MySQL/Redis/앱을 한 대에 컨테이너로 함께 띄우는 `docker-compose.prod.yml`을 준비해뒀다. `.env.prod.example`을 복사해 실제 값을 채운 뒤 `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build`로 기동한다. Free Tier의 Ampere A1(ARM) 인스턴스를 쓴다면 `eclipse-temurin`/`mysql`/`redis` 공식 이미지가 모두 arm64를 지원해 `Dockerfile` 수정 없이 그대로 빌드된다.
+
+`local`/`test`는 `spring.datasource.url`을 yml에 고정해두고 계정 정보만 env로 받지만, `dev`/`prod`는 배포 대상마다 호스트가 달라지므로 `DB_URL` 전체를 env로 받는다(예: `jdbc:mysql://<host>:3306/menupick?...`). `dev`는 팀 협업용으로 `/swagger-ui`를 열어두고(`local`과 동일), `prod`는 `application.yml` 기본값(false)을 그대로 물려받아 닫혀 있다([DecisionLog.md D-021](DecisionLog.md#d-021-swagger-ui-노출--기본-off-local-프로파일만-on)).
 
 
 ### 6.2 시크릿 관리 원칙
@@ -1213,7 +1219,8 @@ Spring Boot에서 ${ENV_VAR_NAME} 방식으로 주입
 | 변수명 | 설명 |
 | --- | --- |
 | SPRING_PROFILES_ACTIVE | 활성 프로파일 (미지정 시 local) |
-| DB_USERNAME / DB_PASSWORD | DB 계정 정보 |
+| DB_USERNAME / DB_PASSWORD | DB 계정 정보 (local/test) |
+| DB_URL | DB 전체 접속 URL — dev/prod 전용 (배포 대상마다 호스트가 다르므로 통째로 주입) |
 | JWT_SECRET | JWT 서명 키 (256bit 이상 랜덤 문자열) — 기본값 없음, 미설정 시 앱 기동 실패 (fail-fast) |
 | REDIS_HOST / REDIS_PORT | Redis 접속 정보 |
 | NAVER_MAPS_CLIENT_ID / NAVER_MAPS_CLIENT_SECRET | 네이버 NCP Maps API 키 |
@@ -1222,6 +1229,7 @@ Spring Boot에서 ${ENV_VAR_NAME} 방식으로 주입
 | GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI | 구글 OAuth 앱 키 |
 | RATE_LIMIT_TRUST_PROXY | 리버스 프록시/LB 뒤 배포 시 true — X-Forwarded-For 기반 클라이언트 IP 식별 (기본 false) |
 | AUTH_COOKIE_SECURE | Refresh Token 쿠키의 Secure 속성 (기본 true, 로컬 http 개발만 false) |
+| FRONTEND_ORIGIN | CORS 허용 오리진 (dev/prod 전용, 쉼표로 복수 지정 가능) — local은 `http://localhost:5173` 고정값 사용 |
 
 > ⚠️ JWT_SECRET은 로컬 개발용 기본값도 두지 않는다. 커밋된 기본 시크릿이 운영에 배포되는 사고를 원천 차단하기 위함이며, 로컬에서는 .env 또는 셸 환경 변수로 주입한다.
 
@@ -1269,7 +1277,22 @@ MDC(Mapped Diagnostic Context)로 요청별 traceId 추가
 
 API 호출 로그: 요청 URI, Method, 응답 코드, 처리 시간 기록 (AOP 또는 Filter 활용)
 
+Spring Actuator `health`/`metrics`/`prometheus` 엔드포인트 노출 (관리용 포트 분리 권장) + 장애 알림 채널(디스코드 웹훅 등) 최소 구성 — 상세는 [ImprovementBacklog.md 12번](ImprovementBacklog.md)
+
 추후 APM (예: Sentry, Datadog) 연동 고려
+
+
+### 7.4 백업 및 복구 정책
+
+| 항목 | 정책 |
+| --- | --- |
+| 백업 주기 | 운영 전환 시 MySQL 일일 전체 백업(예: `mysqldump` 또는 관리형 DB의 자동 스냅샷) + Binlog 기반 PITR 활성화 |
+| 보존 기간 | 최소 14일 (탈퇴 유저 하드삭제 배치가 30일 유예 후 실행되므로, 오삭제 인지까지 걸리는 기간을 고려해 최소 보존을 유예기간과 겹치지 않게 확보) |
+| RPO (목표 복구 시점) | ≤ 24시간 (일일 백업 기준). Binlog PITR 적용 시 분 단위로 단축 가능 |
+| RTO (목표 복구 시간) | ≤ 4시간 (개인 프로젝트 규모 기준 — SLA 계약 전까지는 목표치이지 보장치가 아님) |
+| 오삭제 복구 절차 | 하드삭제 배치(`WithdrawnUserCleanupScheduler`)는 삭제 대상 `userId`를 로그로 남긴다 → 오삭제 신고 시 로그에서 대상 시각 확인 → 해당 시점 이전 백업에서 해당 유저 관련 행만 복원 (전체 복구는 다른 사용자 데이터를 되돌리는 부작용이 있어 지양) |
+
+> 실제 운영 DB(관리형 서비스 또는 자체 호스팅)가 정해지기 전까지는 목표치이며, 배포 대상 확정 시(8번 CI/CD 항목과 연동) 실제 백업 도구와 스케줄을 확정해 이 표를 갱신한다.
 
 
 ## 8. 리스크 및 대응 방안
@@ -1282,6 +1305,8 @@ API 호출 로그: 요청 URI, Method, 응답 코드, 처리 시간 기록 (AOP 
 | 초기 저장 데이터 부족으로 추천 품질 저하 | 중간 | 온보딩 단계에서 최소 3개 메뉴 입력 유도 UX + 샘플 데이터 제안 기능 |
 | JWT 토큰 탈취 | 높음 | Access Token 만료 30분, Refresh Rotation, HTTPS 강제, HttpOnly Cookie |
 | MySQL 거리 쿼리 성능 저하 | 낮음 (초기) | 초기 Haversine 앱 레벨 처리 → 데이터 증가 시 Spatial Index 마이그레이션 |
+| Redis 장애 (단일 장애점) | 높음 | Rate Limit은 fail-open으로 흡수하지만, Refresh Token 저장소로서는 Redis 장애 시 로그인·재발급이 전면 불능. 현재 규모에서는 HA(Sentinel) 대신 "장애 시 전 사용자 재로그인 감수 + 신속 재기동"을 명시적으로 채택하고, AOF persistence를 켜 재기동 시 토큰 유실을 최소화한다. 트래픽 증가 시 Sentinel/Cluster 재검토 |
+| 스케줄러 다중 인스턴스 중복 실행 | 낮음 (초기, 단일 인스턴스 전제) | `WithdrawnUserCleanupScheduler`는 단일 인스턴스 배포를 전제로 한다. 로직 자체는 유저별 트랜잭션 분리 + 하드삭제라 중복 실행되어도 두 번째 실행은 대상이 이미 없어 멱등에 가깝지만, 보장된 락은 아니다. 스케일 아웃 시점에 ShedLock(Redis 기반)을 도입해 인스턴스 간 배타 실행을 강제한다 — [ImprovementBacklog.md 11번](ImprovementBacklog.md) |
 
 
 ## 9. 개발 우선순위 (백엔드 기준)
