@@ -13,9 +13,11 @@ public class AuthResponse {
             String accessToken
     ) {}
 
+    /** emailVerified: 제공자가 이메일 소유를 검증했는지 여부 — 미검증 이메일은 계정 통합에 쓰면 안 된다. */
     public record OAuthUserProfile(
             String socialId,
             String email,
-            String nickname
+            String nickname,
+            boolean emailVerified
     ) {}
 }

@@ -58,6 +58,7 @@ class GoogleOAuthProviderTest {
                         {
                           "id": "google_67890",
                           "email": "google@test.com",
+                          "verified_email": true,
                           "name": "구글유저"
                         }
                         """)
@@ -68,5 +69,28 @@ class GoogleOAuthProviderTest {
         assertThat(profile.socialId()).isEqualTo("google_67890");
         assertThat(profile.email()).isEqualTo("google@test.com");
         assertThat(profile.nickname()).isEqualTo("구글유저");
+        assertThat(profile.emailVerified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("verified_email 플래그가 없으면 emailVerified는 false다")
+    void getUserProfile_missingVerifiedFlag() {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("{\"access_token\":\"google_access_token\"}")
+                .addHeader("Content-Type", "application/json"));
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("""
+                        {
+                          "id": "google_67890",
+                          "email": "google@test.com",
+                          "name": "구글유저"
+                        }
+                        """)
+                .addHeader("Content-Type", "application/json"));
+
+        OAuthUserProfile profile = googleOAuthProvider.getUserProfile("auth_code");
+
+        assertThat(profile.emailVerified()).isFalse();
     }
 }

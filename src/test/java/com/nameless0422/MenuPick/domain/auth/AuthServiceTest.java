@@ -63,7 +63,7 @@ class AuthServiceTest {
     void socialLogin_newUser() {
         given(kakaoProvider.getProviderName()).willReturn("KAKAO");
         given(kakaoProvider.getUserProfile("auth_code"))
-                .willReturn(new OAuthUserProfile("kakao_123", "test@email.com", "테스트"));
+                .willReturn(new OAuthUserProfile("kakao_123", "test@email.com", "테스트", true));
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.empty());
 
@@ -93,7 +93,7 @@ class AuthServiceTest {
 
         given(kakaoProvider.getProviderName()).willReturn("KAKAO");
         given(kakaoProvider.getUserProfile("auth_code"))
-                .willReturn(new OAuthUserProfile("kakao_123", "existing@email.com", "기존유저"));
+                .willReturn(new OAuthUserProfile("kakao_123", "existing@email.com", "기존유저", true));
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(existingProvider));
 
@@ -113,7 +113,7 @@ class AuthServiceTest {
 
         given(kakaoProvider.getProviderName()).willReturn("GOOGLE");
         given(kakaoProvider.getUserProfile("auth_code"))
-                .willReturn(new OAuthUserProfile("google_123", "same@email.com", "구글닉네임"));
+                .willReturn(new OAuthUserProfile("google_123", "same@email.com", "구글닉네임", true));
         given(authProviderRepository.findByProviderAndSocialId("GOOGLE", "google_123"))
                 .willReturn(Optional.empty());
         given(userRepository.findByEmail("same@email.com")).willReturn(Optional.of(existingUser));
@@ -136,11 +136,40 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("미검증 이메일은 같은 이메일 유저가 있어도 통합하지 않고, 이메일 없이 새 계정을 생성한다")
+    void socialLogin_unverifiedEmail_neverLinksToExistingUser() {
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("attacker_kakao", "victim@email.com", "공격자", false));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "attacker_kakao"))
+                .willReturn(Optional.empty());
+
+        User savedUser = User.builder().nickname("공격자").build();
+        given(userRepository.save(any(User.class))).willReturn(savedUser);
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willReturn(AuthProvider.builder().user(savedUser).provider("KAKAO").socialId("attacker_kakao").build());
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(redisTemplate.opsForValue()).willReturn(valueOperations);
+
+        authService.socialLogin("KAKAO", "auth_code");
+
+        // 피해자 계정으로의 통합 조회가 아예 일어나지 않아야 한다
+        verify(userRepository, never()).findByEmail(any());
+
+        // 미검증 이메일은 저장하지도 않는다 (uq_users_email 충돌 + 타인 주소 선점 방지)
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isNull();
+    }
+
+    @Test
     @DisplayName("프로필에 이메일이 없으면 통합 조회 없이 새 계정을 생성한다")
     void socialLogin_nullEmail_createsNewUserWithoutIntegration() {
         given(kakaoProvider.getProviderName()).willReturn("KAKAO");
         given(kakaoProvider.getUserProfile("auth_code"))
-                .willReturn(new OAuthUserProfile("kakao_123", null, "테스트"));
+                .willReturn(new OAuthUserProfile("kakao_123", null, "테스트", false));
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.empty());
 
@@ -169,7 +198,7 @@ class AuthServiceTest {
 
         given(kakaoProvider.getProviderName()).willReturn("KAKAO");
         given(kakaoProvider.getUserProfile("auth_code"))
-                .willReturn(new OAuthUserProfile("kakao_123", "deleted@email.com", "탈퇴유저"));
+                .willReturn(new OAuthUserProfile("kakao_123", "deleted@email.com", "탈퇴유저", true));
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(provider));
 
@@ -199,7 +228,7 @@ class AuthServiceTest {
 
         given(kakaoProvider.getProviderName()).willReturn("KAKAO");
         given(kakaoProvider.getUserProfile("auth_code"))
-                .willReturn(new OAuthUserProfile("kakao_123", "deleted@email.com", "탈퇴유저"));
+                .willReturn(new OAuthUserProfile("kakao_123", "deleted@email.com", "탈퇴유저", true));
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(provider));
 

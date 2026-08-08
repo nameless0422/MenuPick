@@ -53,10 +53,15 @@ public class KakaoOAuthProvider implements OAuthProvider {
         Map<String, Object> kakaoAccount = (Map<String, Object>) userInfo.get("kakao_account");
         Map<String, Object> profile = (Map<String, Object>) kakaoAccount.get("profile");
 
+        // 카카오 이메일은 미검증 상태일 수 있다 — is_email_valid와 is_email_verified 모두 true일 때만 신뢰
+        boolean emailVerified = Boolean.TRUE.equals(kakaoAccount.get("is_email_valid"))
+                && Boolean.TRUE.equals(kakaoAccount.get("is_email_verified"));
+
         return new OAuthUserProfile(
                 socialId,
                 (String) kakaoAccount.get("email"),
-                (String) profile.get("nickname")
+                (String) profile.get("nickname"),
+                emailVerified
         );
     }
 }

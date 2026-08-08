@@ -59,6 +59,8 @@ class KakaoOAuthProviderTest {
                           "id": 12345,
                           "kakao_account": {
                             "email": "kakao@test.com",
+                            "is_email_valid": true,
+                            "is_email_verified": true,
                             "profile": {
                               "nickname": "카카오유저"
                             }
@@ -72,5 +74,34 @@ class KakaoOAuthProviderTest {
         assertThat(profile.socialId()).isEqualTo("12345");
         assertThat(profile.email()).isEqualTo("kakao@test.com");
         assertThat(profile.nickname()).isEqualTo("카카오유저");
+        assertThat(profile.emailVerified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("이메일 검증 플래그가 없거나 false면 emailVerified는 false다")
+    void getUserProfile_unverifiedEmail() {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("{\"access_token\":\"kakao_access_token\"}")
+                .addHeader("Content-Type", "application/json"));
+
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("""
+                        {
+                          "id": 12345,
+                          "kakao_account": {
+                            "email": "kakao@test.com",
+                            "is_email_valid": true,
+                            "is_email_verified": false,
+                            "profile": {
+                              "nickname": "카카오유저"
+                            }
+                          }
+                        }
+                        """)
+                .addHeader("Content-Type", "application/json"));
+
+        OAuthUserProfile profile = kakaoOAuthProvider.getUserProfile("auth_code");
+
+        assertThat(profile.emailVerified()).isFalse();
     }
 }

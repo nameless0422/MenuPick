@@ -48,10 +48,16 @@ public class GoogleOAuthProvider implements OAuthProvider {
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .block();
 
+        // v2 userinfo는 verified_email, v3(OpenID)는 email_verified — 플래그 부재 시 미검증으로 간주
+        Object verified = userInfo.containsKey("verified_email")
+                ? userInfo.get("verified_email")
+                : userInfo.get("email_verified");
+
         return new OAuthUserProfile(
                 (String) userInfo.get("id"),
                 (String) userInfo.get("email"),
-                (String) userInfo.get("name")
+                (String) userInfo.get("name"),
+                Boolean.TRUE.equals(verified)
         );
     }
 }

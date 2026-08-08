@@ -46,7 +46,8 @@ public class AuthService {
         User user = authProvider.getUser();
         if (user.isDeleted()) {
             if (user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS)) {
-                user.reactivate(profile.email(), profile.nickname());
+                String email = trustedEmail(profile);
+                user.reactivate(email != null ? email : user.getEmail(), profile.nickname());
             } else {
                 // 유예기간 경과: 기존 데이터를 하드 삭제하고 새 계정으로 가입 처리
                 userHardDeleteService.purge(user.getId());
@@ -105,10 +106,13 @@ public class AuthService {
         try {
             // 같은 이메일로 가입된 유저가 있으면 새 계정을 만들지 않고
             // 해당 유저에 소셜 연동만 추가한다 (이메일 기준 자동 통합).
-            User user = findUserByEmail(profile.email())
+            // 단, 제공자가 소유를 검증한 이메일만 통합·저장에 사용한다 — 미검증 이메일을
+            // 신뢰하면 공격자가 타인 주소를 자기 소셜 계정에 넣어 기존 계정을 탈취할 수 있다.
+            String email = trustedEmail(profile);
+            User user = findUserByEmail(email)
                     .orElseGet(() -> userRepository.save(
                             User.builder()
-                                    .email(profile.email())
+                                    .email(email)
                                     .nickname(profile.nickname())
                                     .build()
                     ));
@@ -125,6 +129,13 @@ public class AuthService {
                     .findByProviderAndSocialId(providerName, profile.socialId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR));
         }
+    }
+
+    private String trustedEmail(OAuthUserProfile profile) {
+        if (!profile.emailVerified() || profile.email() == null || profile.email().isBlank()) {
+            return null;
+        }
+        return profile.email();
     }
 
     private Optional<User> findUserByEmail(String email) {
