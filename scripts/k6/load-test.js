@@ -66,10 +66,16 @@ export function pick() {
     tagIds: [],
     excludeTagIds: [],
   });
-  const res = http.post(`${BASE_URL}/api/v1/menus/pick`, payload, {
+  const res = http.post(`${BASE_URL}/api/v1/pick`, payload, {
     ...authHeaders,
     tags: { name: 'pick' },
+    // 후보 없음(404)은 정상 시나리오이므로 http_req_failed에 집계하지 않는다
+    responseCallback: http.expectedStatuses(200, 404),
   });
-  check(res, { 'pick 200 or 404(후보없음)': (r) => r.status === 200 || r.status === 404 });
+  check(res, {
+    'pick 200 or 404(후보없음)': (r) =>
+      r.status === 200 ||
+      (r.status === 404 && r.json('errorCode') === 'NO_PICK_CANDIDATES'),
+  });
   sleep(1);
 }

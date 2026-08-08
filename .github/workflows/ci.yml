@@ -4,7 +4,9 @@ on:
   pull_request:
     branches: [main, dev]
   push:
-    branches: [main]
+    # dev 직접 push가 실제 작업 방식이므로 dev도 포함 — 없으면 main PR 전까지 테스트가 안 돈다 (#14)
+    # docker-build 잡은 아래 if 조건으로 여전히 main push에서만 실행된다.
+    branches: [main, dev]
 
 jobs:
   frontend:
