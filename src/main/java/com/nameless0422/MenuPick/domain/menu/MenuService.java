@@ -162,7 +162,9 @@ public class MenuService {
                 menu.getName(),
                 menu.getWeight(),
                 menu.isExcluded(),
-                menu.getCategories(),
+                // LAZY 컬렉션을 트랜잭션 안에서 복사해 초기화한다 — 참조를 그대로 넘기면
+                // open-in-view=false라 직렬화 시점에 LazyInitializationException이 발생한다.
+                Set.copyOf(menu.getCategories()),
                 toTagSummaries(menu));
     }
 
@@ -173,7 +175,7 @@ public class MenuService {
                 menu.getMemo(),
                 menu.getWeight(),
                 menu.isExcluded(),
-                menu.getCategories(),
+                Set.copyOf(menu.getCategories()),
                 toTagSummaries(menu),
                 menu.getCreatedAt(),
                 menu.getUpdatedAt());
