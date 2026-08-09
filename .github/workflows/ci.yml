@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    # dev 직접 push가 실제 작업 방식이므로 dev도 포함 — 없으면 main PR 전까지 테스트가 안 돈다 (#14)
+    # docker-build 잡은 아래 if 조건으로 여전히 main push에서만 실행된다.
+    branches: [main, dev]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check and build
+        # 백엔드 실행 없이 정적으로 확인 가능한 것만: tsc + vite build
+        run: npm run build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests
+        # Testcontainers(6번 백로그)가 MySQL 컨테이너를 직접 띄우므로 별도 서비스 컨테이너는 불필요.
+        # ubuntu-latest 러너는 Docker 데몬이 기본 탑재되어 있다.
+        run: ./gradlew test --no-daemon
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/test
+
+  docker-build:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        # ghcr.io는 GITHUB_TOKEN만으로 인증되어 별도 시크릿 설정이 필요 없다.
+        # 실제 배포(어디에 이 이미지를 pull해서 띄울지)는 배포 대상 확정 후 별도 과제
+        # (docs/ImprovementBacklog.md 8번, docs/DecisionLog.md D-019).
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest

@@ -35,3 +35,14 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Environment ###
+.env
+.env.*
+!.env.*.example
+# frontend/.env는 시크릿이 아닌 placeholder 템플릿이라 커밋 대상 (frontend/README.md 참고)
+!frontend/.env
+docker-compose.override.yml
+
+### Plan ###
+PLAN.md

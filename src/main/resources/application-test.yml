@@ -1,0 +1,45 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:menupick-test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false;MODE=MYSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    show-sql: true
+
+  flyway:
+    enabled: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!
+  access-token-expiry: 1800000
+  refresh-token-expiry: 1209600000
+
+kakao:
+  local:
+    rest-api-key: test-kakao-rest-api-key
+    keyword-search-base-url: http://localhost:0/v2/local/search/keyword.json
+    category-search-base-url: http://localhost:0/v2/local/search/category.json
+
+naver:
+  maps:
+    client-id: test-naver-client-id
+    client-secret: test-naver-client-secret
+    geocode-base-url: http://localhost:0/map-geocode/v2/geocode
+    reverse-geocode-base-url: http://localhost:0/map-reversegeocode/v2/gc
+
+logging:
+  level:
+    com.nameless0422.MenuPick: DEBUG

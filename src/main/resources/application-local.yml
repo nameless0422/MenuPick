@@ -1,0 +1,78 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME:menupick}
+    password: ${DB_PASSWORD:menupick}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+    show-sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+rate-limit:
+  trust-proxy: ${RATE_LIMIT_TRUST_PROXY:false}
+
+cors:
+  # Vite 기본 개발 서버 포트
+  allowed-origins:
+    - http://localhost:5173
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+auth:
+  cookie:
+    # 로컬은 http라 secure 쿠키가 전송되지 않으므로 false. 운영 기본값은 true.
+    secure: ${AUTH_COOKIE_SECURE:false}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiry: 1800000
+  refresh-token-expiry: 1209600000
+
+oauth:
+  kakao:
+    client-id: ${KAKAO_CLIENT_ID:}
+    client-secret: ${KAKAO_CLIENT_SECRET:}
+    token-uri: https://kauth.kakao.com/oauth/token
+    user-info-uri: https://kapi.kakao.com/v2/user/me
+    redirect-uri: ${KAKAO_REDIRECT_URI:}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    token-uri: https://oauth2.googleapis.com/token
+    user-info-uri: https://www.googleapis.com/oauth2/v2/userinfo
+    redirect-uri: ${GOOGLE_REDIRECT_URI:}
+
+kakao:
+  local:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+    keyword-search-base-url: https://dapi.kakao.com/v2/local/search/keyword.json
+    category-search-base-url: https://dapi.kakao.com/v2/local/search/category.json
+
+naver:
+  maps:
+    client-id: ${NAVER_MAPS_CLIENT_ID:}
+    client-secret: ${NAVER_MAPS_CLIENT_SECRET:}
+    geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode
+    reverse-geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc
+
+logging:
+  level:
+    com.nameless0422.MenuPick: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

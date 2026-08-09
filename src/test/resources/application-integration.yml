@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # url/username/password는 AbstractIntegrationTest가 Testcontainers MySQL로 동적 주입한다
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+    show-sql: true
+
+  flyway:
+    enabled: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!
+  access-token-expiry: 1800000
+  refresh-token-expiry: 1209600000
+
+kakao:
+  local:
+    rest-api-key: test-kakao-rest-api-key
+    keyword-search-base-url: http://localhost:0/v2/local/search/keyword.json
+    category-search-base-url: http://localhost:0/v2/local/search/category.json
+
+naver:
+  maps:
+    client-id: test-naver-client-id
+    client-secret: test-naver-client-secret
+    geocode-base-url: http://localhost:0/map-geocode/v2/geocode
+    reverse-geocode-base-url: http://localhost:0/map-reversegeocode/v2/gc
+
+logging:
+  level:
+    com.nameless0422.MenuPick: DEBUG

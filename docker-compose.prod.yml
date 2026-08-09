@@ -1,0 +1,68 @@
+# 자체 호스팅 배포용 (예: Oracle Cloud Free Tier VM). 로컬 개발용 docker-compose.yml과는
+# 별개 파일이다 — 로컬은 앱을 IDE/gradle로 직접 띄우고 MySQL/Redis만 컨테이너로 쓰지만,
+# 이 파일은 앱까지 포함한 스택 전체를 한 대의 서버에서 띄우는 용도다.
+#
+# 사용법:
+#   1. .env.prod.example을 .env.prod로 복사하고 실제 값 채우기 (Git에 커밋 금지)
+#   2. docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# docs/DecisionLog.md D-023, docs/Planning.md 6.1 참고.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: menupick-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: menupick
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: menupick-redis
+    restart: unless-stopped
+    # AOF persistence 활성화 — Redis 재기동 시 Refresh Token 유실 최소화 (docs/DecisionLog.md D-015)
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+  app:
+    build: .
+    container_name: menupick-app
+    restart: unless-stopped
+    depends_on:
+      - mysql
+      - redis
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      RATE_LIMIT_TRUST_PROXY: "true"
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
+      KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      NAVER_MAPS_CLIENT_ID: ${NAVER_MAPS_CLIENT_ID}
+      NAVER_MAPS_CLIENT_SECRET: ${NAVER_MAPS_CLIENT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+
+volumes:
+  mysql-data:
+  redis-data:
