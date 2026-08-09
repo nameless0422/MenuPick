@@ -542,12 +542,12 @@ erDiagram
 | --- | --- | --- | --- |
 | id | BIGINT (PK, AI) | N | 고유 ID |
 | history_id | BIGINT (FK) | N | 연결 히스토리 |
-| filter_type | VARCHAR(20) | N | 필터 종류: CATEGORY / TAG_INCLUDE / TAG_EXCLUDE / DISTANCE_METER |
+| filter_type | VARCHAR(20) | N | 필터 종류: CATEGORY / TAG_INCLUDE / TAG_EXCLUDE / MAX_DISTANCE |
 | filter_value | VARCHAR(100) | N | 필터 값 (예: KOREAN, 혼밥가능, 500) |
 
 *INDEX: (history_id)*
 
-*예시 행: (1, 101, 'CATEGORY', 'JAPANESE'), (2, 101, 'TAG_INCLUDE', '혼밥가능'), (3, 101, 'DISTANCE_METER', '500')*
+*예시 행: (1, 101, 'CATEGORY', 'JAPANESE'), (2, 101, 'TAG_INCLUDE', '혼밥가능'), (3, 101, 'MAX_DISTANCE', '500')*
 
 
 ## 3.3 2차 정규화(2NF) 적용 내역
@@ -1337,4 +1337,4 @@ Spring Actuator `health`/`metrics`/`prometheus` 엔드포인트 노출 (관리�
 
 미해결 과제와 정책 결정 대기 항목은 [ImprovementBacklog.md](./ImprovementBacklog.md)에서 관리한다.
 
-최종 수정: 2026-07-05
+최종 수정: 2026-08-10
