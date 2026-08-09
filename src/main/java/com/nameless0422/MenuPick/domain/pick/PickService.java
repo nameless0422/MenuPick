@@ -12,6 +12,7 @@ import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.tag.Tag;
+import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class PickService {
     private final MenuRepository menuRepository;
     private final HistoryRepository historyRepository;
     private final UserRepository userRepository;
+    private final TagRepository tagRepository;
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
@@ -187,13 +189,14 @@ public class PickService {
                 request.categories().forEach(cat ->
                         history.addFilterCondition("CATEGORY", cat));
             }
+            Map<Long, String> tagNames = resolveTagNames(userId, request.tagIds(), request.excludeTagIds());
             if (request.tagIds() != null) {
                 request.tagIds().forEach(tagId ->
-                        history.addFilterCondition("TAG_INCLUDE", String.valueOf(tagId)));
+                        history.addFilterCondition("TAG_INCLUDE", tagNames.getOrDefault(tagId, String.valueOf(tagId))));
             }
             if (request.excludeTagIds() != null) {
                 request.excludeTagIds().forEach(tagId ->
-                        history.addFilterCondition("TAG_EXCLUDE", String.valueOf(tagId)));
+                        history.addFilterCondition("TAG_EXCLUDE", tagNames.getOrDefault(tagId, String.valueOf(tagId))));
             }
             if (request.maxDistance() != null) {
                 history.addFilterCondition("MAX_DISTANCE", String.valueOf(request.maxDistance()));
@@ -201,6 +204,20 @@ public class PickService {
         }
 
         return historyRepository.save(history);
+    }
+
+    /**
+     * 히스토리 필터 조건에는 태그 ID 대신 태그 이름을 남긴다 — 태그 ID를 이름으로 되돌리는
+     * 조회 API가 없어 화면에서 표시할 수 없기 때문. 본인 소유가 아니거나 존재하지 않는
+     * ID는 이름 확인 없이 원값(ID 문자열)을 그대로 남긴다.
+     */
+    private Map<Long, String> resolveTagNames(Long userId, Set<Long> includeTagIds, Set<Long> excludeTagIds) {
+        Set<Long> allIds = new HashSet<>();
+        if (includeTagIds != null) allIds.addAll(includeTagIds);
+        if (excludeTagIds != null) allIds.addAll(excludeTagIds);
+        if (allIds.isEmpty()) return Map.of();
+        return tagRepository.findAllByIdInAndUserId(allIds, userId).stream()
+                .collect(Collectors.toMap(Tag::getId, Tag::getName));
     }
 
     private MenuResponse.MenuDetail toDetail(Menu menu) {

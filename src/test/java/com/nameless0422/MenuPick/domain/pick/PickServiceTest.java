@@ -11,6 +11,7 @@ import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.tag.Tag;
+import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +37,7 @@ class PickServiceTest {
     @Mock private MenuRepository menuRepository;
     @Mock private HistoryRepository historyRepository;
     @Mock private UserRepository userRepository;
+    @Mock private TagRepository tagRepository;
 
     @InjectMocks private PickService pickService;
 
