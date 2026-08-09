@@ -77,3 +77,21 @@ http.interceptors.response.use(
 );
 
 export { refreshAccessToken };
+
+// axios 에러에서 백엔드 공통 응답의 message를 꺼낸다. 화면에서 에러 표시할 때 공용으로 사용.
+export function apiErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const body = error.response?.data as ApiResponse<unknown> | undefined;
+    return body?.message ?? error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+// 백엔드 에러 코드 확인용 (예: NO_PICK_CANDIDATES 분기 처리)
+export function apiErrorCode(error: unknown): string | undefined {
+  if (axios.isAxiosError(error)) {
+    const body = error.response?.data as ApiResponse<unknown> | undefined;
+    return body?.errorCode;
+  }
+  return undefined;
+}

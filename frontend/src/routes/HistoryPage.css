@@ -1,0 +1,34 @@
+.days-filter {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.days-filter button.active {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.history-time {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.history-restaurant {
+  font-size: 14px;
+}
+
+.history-visited-at {
+  font-size: 13px;
+  color: var(--text);
+  align-self: center;
+}
+
+.visit-action,
+.visit-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

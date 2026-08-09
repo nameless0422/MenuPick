@@ -5,7 +5,6 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import axios from "axios";
 import {
   createMenu,
   deleteMenu,
@@ -16,18 +15,10 @@ import {
   type TagSummary,
 } from "../api/menus";
 import { createTag, searchTags } from "../api/tags";
-import type { ApiResponse } from "../api/http";
+import { apiErrorMessage as errorMessage } from "../api/http";
+import { CATEGORY_PRESETS } from "../constants";
 
-const CATEGORY_PRESETS = ["한식", "중식", "일식", "양식", "분식", "아시안", "패스트푸드", "카페·디저트"];
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
-
-function errorMessage(error: unknown) {
-  if (axios.isAxiosError(error)) {
-    const body = error.response?.data as ApiResponse<unknown> | undefined;
-    return body?.message ?? error.message;
-  }
-  return error instanceof Error ? error.message : String(error);
-}
 
 export default function MenusPage() {
   const queryClient = useQueryClient();

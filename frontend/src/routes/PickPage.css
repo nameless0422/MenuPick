@@ -1,0 +1,118 @@
+/* 랜덤 픽 화면 전용 스타일 — 공용 클래스(index.css)에 없는 것만 정의한다 */
+
+.pick-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* .menu-form fieldset 스타일과 톤을 맞춘 필터 그룹 */
+.pick-filters fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pick-filters legend {
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.pick-distance-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.pick-geo-error {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pick-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 20px;
+}
+
+.pick-button {
+  font-size: 22px;
+  font-weight: 600;
+  padding: 18px 40px;
+  border-radius: 14px;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 2px solid var(--accent-border);
+  min-width: 280px;
+  min-height: 74px;
+}
+.pick-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+
+.pick-slot {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.card-muted-hint {
+  font-size: 14px;
+}
+
+.pick-result {
+  border-color: var(--accent-border);
+  align-items: flex-start;
+}
+
+.pick-result-label {
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.pick-result-name {
+  font-size: 30px;
+  line-height: 1.2;
+  color: var(--text-h);
+}
+
+.pick-result-memo {
+  font-size: 15px;
+}
+
+.pick-restaurants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.pick-restaurants li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pick-restaurants strong {
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.pick-restaurant-address {
+  font-size: 13px;
+}
+
+.pick-empty {
+  align-items: flex-start;
+  border-style: dashed;
+}
