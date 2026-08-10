@@ -27,7 +27,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
 	// API 문서 자동화 (docs/ImprovementBacklog.md 7번, /swagger-ui는 local 프로파일 한정 노출)
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
+	// springdoc 2.x는 Spring Boot 3/Framework 6 라인이라 Boot 4에서는 기동 시점에 깨진다.
+	// 3.0.3은 spring-boot-starter-parent 4.0.5(= 이 프로젝트의 Boot 버전)로 빌드된 릴리스다.
+	// 3.1.x는 Boot 4.1 라인이므로 Boot를 올릴 때 함께 올린다. (이슈 #19)
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'

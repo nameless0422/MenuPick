@@ -120,11 +120,49 @@ class NaverMapsClientTest {
     @Test
     @DisplayName("geocode - 업스트림 5xx는 502(NAVER_MAPS_API_ERROR)로 변환")
     void geocode_upstream5xx_throwsBadGateway() {
+        // 5xx는 1회 재시도하므로 응답 2개가 필요하다 (재시도까지 실패해야 최종 예외)
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
         mockWebServer.enqueue(new MockResponse().setResponseCode(500));
 
         assertThatThrownBy(() -> naverMapsClient.geocode("서울시청", null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.NAVER_MAPS_API_ERROR);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    // --- 재시도 (이슈 #15) ---
+
+    @Test
+    @DisplayName("재시도 - 업스트림 5xx는 1회 재시도하고, 재시도가 성공하면 결과를 반환한다")
+    void geocode_retriesOnceOn5xx() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(502));
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("""
+                        {
+                          "status": "OK",
+                          "meta": { "totalCount": 0, "page": 1, "count": 0 },
+                          "addresses": []
+                        }
+                        """)
+                .addHeader("Content-Type", "application/json"));
+
+        NaverMapsResponse.GeocodeResult result = naverMapsClient.geocode("서울시청", null, null);
+
+        assertThat(result.status()).isEqualTo("OK");
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("재시도 - 4xx는 재시도하지 않는다 (429 재시도는 쿼터 소진을 가속한다)")
+    void reverseGeocode_doesNotRetryOn4xx() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(429));
+
+        assertThatThrownBy(() -> naverMapsClient.reverseGeocode("126.978,37.566", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NAVER_MAPS_API_ERROR);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(1);
     }
 
     @Test

@@ -16,6 +16,7 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -225,11 +226,62 @@ class KakaoLocalClientTest {
     @Test
     @DisplayName("searchByCategory - API 오류 시 BusinessException 발생")
     void searchByCategory_apiError_throwsBusinessException() {
+        // 5xx는 1회 재시도하므로 응답 2개가 필요하다 (재시도까지 실패해야 최종 예외)
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
         mockWebServer.enqueue(new MockResponse().setResponseCode(500));
 
         assertThatThrownBy(() -> kakaoLocalClient.searchByCategory("FD6", "126.98", "37.56", 1000, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.KAKAO_LOCAL_API_ERROR);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    // --- 타임아웃 / 재시도 (이슈 #15) ---
+
+    @Test
+    @DisplayName("재시도 - 업스트림 5xx는 1회 재시도하고, 재시도가 성공하면 결과를 반환한다")
+    void searchByKeyword_retriesOnceOn5xx() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(503));
+        mockWebServer.enqueue(new MockResponse()
+                .setBody("""
+                        { "meta": { "total_count": 0, "pageable_count": 0, "is_end": true }, "documents": [] }
+                        """)
+                .addHeader("Content-Type", "application/json"));
+
+        KakaoLocalResponse.PlaceSearchResult result =
+                kakaoLocalClient.searchByKeyword("진주회관", null, null, null, null, null, null, null);
+
+        assertThat(result).isNotNull();
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("재시도 - 4xx는 재시도하지 않는다 (같은 답이 올 뿐이고 429는 상황을 악화시킨다)")
+    void searchByKeyword_doesNotRetryOn4xx() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(400));
+
+        assertThatThrownBy(() -> kakaoLocalClient.searchByKeyword("진주회관", null, null, null, null, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("타임아웃 - 응답이 3초 안에 오지 않으면 끊고 재시도한다 (톰캣 스레드 보호)")
+    void searchByKeyword_responseTimeout() {
+        // 응답 타임아웃(3s)보다 길고, 공용 WebClient 빈의 기본값(10s)보다는 짧은 지연.
+        // 타임아웃이 걸리지 않았다면 5초 뒤 200(빈 본문)을 받고 요청은 1건에 그친다 —
+        // 즉 requestCount == 2가 "3초에 끊고 재시도했다"는 증거다.
+        mockWebServer.enqueue(new MockResponse().setHeadersDelay(5, TimeUnit.SECONDS));
+        mockWebServer.enqueue(new MockResponse().setHeadersDelay(5, TimeUnit.SECONDS));
+
+        assertThatThrownBy(() -> kakaoLocalClient.searchByKeyword("진주회관", null, null, null, null, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.KAKAO_LOCAL_API_ERROR);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
     }
 
     @Test

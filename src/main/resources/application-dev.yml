@@ -6,6 +6,11 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 운영(prod)과 동일 값 — 스테이징에서 풀 고갈/타임아웃 거동을 운영과 같은 조건으로 관찰하기 위함.
+      # 근거는 application-prod.yml 주석 참고 (단일 VM 전제).
+      maximum-pool-size: 10
+      connection-timeout: 5000
 
   jpa:
     hibernate:
@@ -19,6 +24,12 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
+
+server:
+  tomcat:
+    threads:
+      # prod와 동일 (단일 VM 전제). 근거는 application-prod.yml 주석 참고.
+      max: 50
 
 rate-limit:
   # dev는 로드밸런서/리버스 프록시 뒤에 있다고 가정 (local과의 차이점)

@@ -1,3 +1,5 @@
+# 단위/슬라이스 테스트 전용 프로파일. 테스트 클래스패스에만 존재하므로 bootJar에 패키징되지 않는다
+# (이슈 #12 — 예전엔 src/main/resources에 있어 운영 아티팩트에 테스트 시크릿이 같이 실려 나갔다).
 spring:
   datasource:
     url: jdbc:h2:mem:menupick-test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false;MODE=MYSQL
@@ -23,7 +25,8 @@ spring:
       port: 6379
 
 jwt:
-  secret: testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!
+  # 테스트 전용 더미 시크릿(무작위 생성, 512bit). 운영/개발 어디에서도 쓰이지 않는다.
+  secret: DXRGmMVjGW4b1OJtFaEzoaqjGtDElap1fCw30qQgXes3KR3ckr0Th5wZ7ubJTej5
   access-token-expiry: 1800000
   refresh-token-expiry: 1209600000
 
