@@ -1,60 +1,25 @@
 package com.nameless0422.MenuPick.domain.auth;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nameless0422.MenuPick.common.security.CustomAccessDeniedHandler;
-import com.nameless0422.MenuPick.common.security.CustomAuthenticationEntryPoint;
-import com.nameless0422.MenuPick.common.security.JwtAuthenticationFilter;
-import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
-import com.nameless0422.MenuPick.common.security.RateLimitFilter;
-import com.nameless0422.MenuPick.common.security.SecurityConfig;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.OAuthLoginRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
+import com.nameless0422.MenuPick.support.AbstractControllerTest;
 import jakarta.servlet.http.Cookie;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-
-import java.util.List;
-
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, RateLimitFilter.class,
-        CustomAuthenticationEntryPoint.class, CustomAccessDeniedHandler.class})
-@ActiveProfiles("test")
-class AuthControllerTest {
-
-    @Autowired private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+class AuthControllerTest extends AbstractControllerTest {
 
     @MockitoBean private AuthService authService;
-    @MockitoBean private JwtTokenProvider jwtTokenProvider;
-    @MockitoBean private StringRedisTemplate redisTemplate;
-
-    @SuppressWarnings("unchecked")
-    @BeforeEach
-    void setUp() {
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        given(redisTemplate.opsForValue()).willReturn(valueOps);
-        given(valueOps.increment(any())).willReturn(1L);
-    }
 
     @Test
     @DisplayName("POST /api/v1/auth/kakao - 카카오 로그인 성공 (Refresh Token은 HttpOnly 쿠키로만 전달)")
@@ -129,8 +94,7 @@ class AuthControllerTest {
     @DisplayName("DELETE /api/v1/auth/logout - 로그아웃 성공 시 Refresh Token 쿠키가 만료된다")
     void logout_success() throws Exception {
         mockMvc.perform(delete("/api/v1/auth/logout")
-                        .with(authentication(
-                                new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                        .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(cookie().maxAge("refresh_token", 0));
@@ -142,8 +106,7 @@ class AuthControllerTest {
     @DisplayName("DELETE /api/v1/auth/withdraw - 인증된 사용자 탈퇴 성공")
     void withdraw_success() throws Exception {
         mockMvc.perform(delete("/api/v1/auth/withdraw")
-                        .with(authentication(
-                                new UsernamePasswordAuthenticationToken(1L, null, List.of()))))
+                        .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
