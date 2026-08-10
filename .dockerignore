@@ -1,0 +1,12 @@
+# 빌드 컨텍스트를 줄인다. Dockerfile은 gradle 관련 파일과 src만 COPY하지만,
+# 컨텍스트 자체는 통째로 데몬에 전송되므로 frontend/node_modules·.git만으로도 수백 MB가 오간다.
+.git
+.github
+.gradle
+.idea
+build
+frontend
+docs
+*.md
+.env*
+docker-compose*.yml

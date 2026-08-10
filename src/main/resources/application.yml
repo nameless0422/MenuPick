@@ -10,10 +10,28 @@ spring:
     properties:
       hibernate:
         default_batch_fetch_size: 100
+        # 쓰기 배칭. 단, 모든 엔티티가 IDENTITY(AUTO_INCREMENT) 전략이라 Hibernate는
+        # 엔티티 INSERT는 배칭하지 못한다(생성 키를 즉시 받아야 하므로). 실제로 효과가 있는 곳은
+        # 조인/컬렉션 테이블(menu_tags, menu_categories)의 INSERT와 UPDATE/DELETE다.
+        # 엔티티 INSERT까지 배칭하려면 SEQUENCE 전략이 필요한데, MySQL에서는 별도 시퀀스 테이블을
+        # 요구해 이득보다 비용이 커 채택하지 않았다.
+        jdbc:
+          batch_size: 30
+        order_inserts: true
+        order_updates: true
+
+  data:
+    redis:
+      # 인증이 걸린 Redis(운영 compose는 --requirepass 사용)를 위한 공통 자리.
+      # 기본값을 빈 문자열로 둬 로컬/테스트의 무인증 Redis에도 그대로 붙는다.
+      password: ${REDIS_PASSWORD:}
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
+    # 신규 DB 전제이므로 false가 fail-safe다. true면 이미 테이블이 있는(=예상과 다른) DB에
+    # 붙었을 때 조용히 baseline을 찍고 V1을 건너뛰어, 스키마 불일치가 런타임까지 숨는다.
+    # 기존 데이터가 있는 DB에 처음 붙이는 상황에서는 그때만 수동으로 flyway baseline을 수행할 것.
+    baseline-on-migrate: false
 
 # 기본은 비노출. local(또는 향후 dev) 프로파일에서만 true로 덮어써 노출한다.
 springdoc:

@@ -75,4 +75,44 @@ class TagRepositoryTest extends AbstractIntegrationTest {
         assertThat(tags).extracting(Tag::getName)
                 .containsExactlyInAnyOrder("혼밥가능", "혼술가능");
     }
+
+    // --- findAllByIdInAndUserId (MenuService/PickService의 태그 소유권 검증 근거) ---
+
+    @Test
+    @DisplayName("ID 목록으로 조회할 때 타 사용자의 태그는 제외된다")
+    void findAllByIdInAndUserId_excludesOtherUsersTags() {
+        User other = userRepository.save(User.builder()
+                .email("tag-other@example.com")
+                .nickname("다른유저")
+                .build());
+
+        Tag mine = tagRepository.save(Tag.builder().user(user).name("내태그").build());
+        Tag others = tagRepository.save(Tag.builder().user(other).name("남의태그").build());
+
+        List<Tag> found = tagRepository.findAllByIdInAndUserId(
+                List.of(mine.getId(), others.getId()), user.getId());
+
+        // 결과 개수가 요청 개수보다 작아지는 것이 서비스에서 TAG_NOT_FOUND로 걸러지는 근거다.
+        assertThat(found).extracting(Tag::getId).containsExactly(mine.getId());
+        assertThat(found).hasSizeLessThan(2);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 ID가 섞이면 존재하는 태그만 반환한다")
+    void findAllByIdInAndUserId_ignoresUnknownIds() {
+        Tag mine = tagRepository.save(Tag.builder().user(user).name("내태그").build());
+
+        List<Tag> found = tagRepository.findAllByIdInAndUserId(
+                List.of(mine.getId(), mine.getId() + 9999), user.getId());
+
+        assertThat(found).extracting(Tag::getId).containsExactly(mine.getId());
+    }
+
+    @Test
+    @DisplayName("빈 ID 목록으로 조회하면 빈 결과를 반환한다")
+    void findAllByIdInAndUserId_emptyIds() {
+        tagRepository.save(Tag.builder().user(user).name("내태그").build());
+
+        assertThat(tagRepository.findAllByIdInAndUserId(List.of(), user.getId())).isEmpty();
+    }
 }

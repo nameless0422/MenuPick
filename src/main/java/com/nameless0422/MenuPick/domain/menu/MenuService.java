@@ -12,6 +12,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,6 +27,7 @@ public class MenuService {
     private final MenuRepository menuRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     public MenuResponse.MenuListResponse getMenus(Long userId, Long cursor, int size) {
         var pageable = PageRequest.of(0, size + 1);
@@ -42,9 +45,7 @@ public class MenuService {
     }
 
     public MenuResponse.MenuDetail getMenu(Long userId, Long menuId) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyOwnership(menu, userId);
-        return toDetail(menu);
+        return toDetail(findMenuOrThrow(userId, menuId));
     }
 
     @Transactional
@@ -56,9 +57,7 @@ public class MenuService {
                 .weight(request.weight())
                 .build();
 
-        if (request.categories() != null) {
-            request.categories().forEach(menu::addCategory);
-        }
+        normalizeCategories(request.categories()).forEach(menu::addCategory);
         if (request.tagIds() != null && !request.tagIds().isEmpty()) {
             resolveTags(userId, request.tagIds()).forEach(menu::addTag);
         }
@@ -68,25 +67,32 @@ public class MenuService {
 
     @Transactional
     public MenuResponse.MenuDetail updateMenu(Long userId, Long menuId, MenuRequest.Update request) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyOwnership(menu, userId);
+        Menu menu = findMenuOrThrow(userId, menuId);
 
         menu.update(request.name(), request.memo(), request.weight());
 
+        // isExcluded는 @NotNull이라 여기서는 안전하게 언박싱된다 (누락 시 컨트롤러에서 400).
         if (request.isExcluded()) {
             menu.exclude();
         } else {
             menu.include();
         }
 
-        menu.getCategories().clear();
-        if (request.categories() != null) {
-            request.categories().forEach(menu::addCategory);
+        // 내용이 같은데도 clear() 후 재추가하면 컬렉션 테이블 전체 DELETE+INSERT가 발생한다.
+        // 동일하면 건너뛰어 불필요한 쓰기를 없앤다.
+        Set<String> newCategories = normalizeCategories(request.categories());
+        if (!menu.getCategories().equals(newCategories)) {
+            menu.getCategories().clear();
+            newCategories.forEach(menu::addCategory);
         }
 
-        menu.getTags().clear();
-        if (request.tagIds() != null && !request.tagIds().isEmpty()) {
-            resolveTags(userId, request.tagIds()).forEach(menu::addTag);
+        // resolveTags는 동일 여부와 무관하게 먼저 호출해야 존재하지 않는 태그 ID를 검증할 수 있다.
+        Set<Tag> newTags = (request.tagIds() == null || request.tagIds().isEmpty())
+                ? Set.of()
+                : Set.copyOf(resolveTags(userId, request.tagIds()));
+        if (!menu.getTags().equals(newTags)) {
+            menu.getTags().clear();
+            newTags.forEach(menu::addTag);
         }
 
         return toDetail(menu);
@@ -94,9 +100,7 @@ public class MenuService {
 
     @Transactional
     public void deleteMenu(Long userId, Long menuId) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyOwnership(menu, userId);
-        menu.softDelete();
+        findMenuOrThrow(userId, menuId).softDelete(LocalDateTime.now(clock));
     }
 
     @Transactional
@@ -123,8 +127,7 @@ public class MenuService {
 
     @Transactional
     public void toggleExclude(Long userId, Long menuId, boolean exclude) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyOwnership(menu, userId);
+        Menu menu = findMenuOrThrow(userId, menuId);
         if (exclude) {
             menu.exclude();
         } else {
@@ -132,19 +135,23 @@ public class MenuService {
         }
     }
 
-    private Menu findMenuOrThrow(Long menuId) {
-        Menu menu = menuRepository.findById(menuId)
+    /**
+     * 소유자 범위로 한정해 조회한다. 타인의 메뉴·삭제된 메뉴 모두 MENU_NOT_FOUND(404)로
+     * 동일하게 응답해 리소스 존재 여부가 노출되지 않게 한다.
+     */
+    private Menu findMenuOrThrow(Long userId, Long menuId) {
+        return menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));
-        if (menu.isDeleted()) {
-            throw new BusinessException(ErrorCode.MENU_NOT_FOUND);
-        }
-        return menu;
     }
 
-    private void verifyOwnership(Menu menu, Long userId) {
-        if (!menu.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.MENU_ACCESS_DENIED);
+    /** 저장 직전 공백만 제거한다 — 대소문자 정규화는 하지 않는다(한글 위주 도메인, UX 결정 대기). */
+    private Set<String> normalizeCategories(Set<String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return Set.of();
         }
+        return categories.stream()
+                .map(String::trim)
+                .collect(Collectors.toSet());
     }
 
     private List<Tag> resolveTags(Long userId, Set<Long> tagIds) {

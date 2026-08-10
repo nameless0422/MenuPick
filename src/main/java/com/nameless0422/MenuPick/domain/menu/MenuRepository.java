@@ -7,10 +7,17 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface MenuRepository extends JpaRepository<Menu, Long> {
 
     List<Menu> findAllByUserIdAndDeletedAtIsNull(Long userId);
+
+    /**
+     * 조회 자체를 소유자 범위로 한정한다 — 타인의 메뉴는 "권한 없음(403)"이 아니라
+     * "없음(404)"으로 처리해 리소스 존재 여부가 새어 나가지 않게 한다.
+     */
+    Optional<Menu> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
 
     List<Menu> findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(Long userId);
 
@@ -18,9 +25,6 @@ public interface MenuRepository extends JpaRepository<Menu, Long> {
 
     List<Menu> findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(
             Long userId, Long cursor, Pageable pageable);
-
-    @Query("SELECT m FROM Menu m JOIN m.tags t WHERE t.id = :tagId")
-    List<Menu> findAllByTagId(@Param("tagId") Long tagId);
 
     List<Menu> findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(Long userId);
 

@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.auth;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
+import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.common.security.JwtProperties;
 import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.OAuthUserProfile;
@@ -10,6 +11,8 @@ import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserHardDeleteService;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,12 +20,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,12 +44,27 @@ class AuthServiceTest {
     @Mock private AuthProviderRepository authProviderRepository;
     @Mock private UserHardDeleteService userHardDeleteService;
     @Mock private JwtTokenProvider jwtTokenProvider;
-    @Mock private StringRedisTemplate redisTemplate;
-    @Mock private ValueOperations<String, String> valueOperations;
+    @Mock private RefreshTokenStore refreshTokenStore;
     @Mock private OAuthProvider kakaoProvider;
 
     private AuthService authService;
     private JwtProperties jwtProperties;
+
+    /** 트랜잭션 경계만 흉내내는 최소 매니저 — 콜백 실행 여부만 검증하면 되므로 실제 리소스는 없다. */
+    private static final PlatformTransactionManager NO_OP_TX_MANAGER = new PlatformTransactionManager() {
+        @Override
+        public TransactionStatus getTransaction(TransactionDefinition definition) {
+            return new SimpleTransactionStatus();
+        }
+
+        @Override
+        public void commit(TransactionStatus status) {
+        }
+
+        @Override
+        public void rollback(TransactionStatus status) {
+        }
+    };
 
     @BeforeEach
     void setUp() {
@@ -53,7 +74,8 @@ class AuthServiceTest {
         );
         authService = new AuthService(
                 userRepository, authProviderRepository, userHardDeleteService,
-                jwtTokenProvider, redisTemplate, jwtProperties,
+                jwtTokenProvider, refreshTokenStore, jwtProperties,
+                new TransactionTemplate(NO_OP_TX_MANAGER),
                 List.of(kakaoProvider)
         );
     }
@@ -74,7 +96,6 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
@@ -82,6 +103,7 @@ class AuthServiceTest {
         assertThat(result.refreshToken()).isEqualTo("refresh_token");
         verify(userRepository).save(any(User.class));
         verify(authProviderRepository).save(any(AuthProvider.class));
+        verify(refreshTokenStore).save(any(), eq("refresh_token"), eq(jwtProperties.refreshTokenExpiry()));
     }
 
     @Test
@@ -99,7 +121,6 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
@@ -122,7 +143,6 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         TokenResponse result = authService.socialLogin("GOOGLE", "auth_code");
 
@@ -151,7 +171,6 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         authService.socialLogin("KAKAO", "auth_code");
 
@@ -180,12 +199,63 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         authService.socialLogin("KAKAO", "auth_code");
 
         verify(userRepository, never()).findByEmail(any());
         verify(userRepository).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("닉네임 동의를 거부해 nickname이 null이어도 기본 닉네임으로 가입한다 (users.nickname NOT NULL)")
+    void socialLogin_nullNickname_usesDefaultNickname() {
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("kakao_123", null, null, false));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
+                .willReturn(Optional.empty());
+
+        User savedUser = User.builder().nickname("메뉴픽 사용자").build();
+        given(userRepository.save(any(User.class))).willReturn(savedUser);
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willReturn(AuthProvider.builder().user(savedUser).provider("KAKAO").socialId("kakao_123").build());
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+
+        authService.socialLogin("KAKAO", "auth_code");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getNickname()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("동시 가입으로 UNIQUE 충돌이 나면 새 트랜잭션에서 재시도해 로그인을 완료한다")
+    void socialLogin_concurrentSignupConflict_retriesInNewTransaction() {
+        User winner = User.builder().email("race@email.com").nickname("먼저가입").build();
+        AuthProvider winnerProvider = AuthProvider.builder()
+                .user(winner).provider("KAKAO").socialId("kakao_race").build();
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("kakao_race", "race@email.com", "먼저가입", true));
+        // 1회차: 아직 안 보임 → 생성 시도 중 UNIQUE 충돌. 2회차: 상대 트랜잭션이 커밋한 행이 보인다.
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_race"))
+                .willReturn(Optional.empty())
+                .willReturn(Optional.of(winnerProvider));
+        given(userRepository.findByEmail("race@email.com")).willReturn(Optional.empty());
+        given(userRepository.save(any(User.class)))
+                .willThrow(new DataIntegrityViolationException("uq_users_email"));
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+
+        TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
+
+        assertThat(result.accessToken()).isEqualTo("access_token");
+        verify(authProviderRepository, org.mockito.Mockito.times(2))
+                .findByProviderAndSocialId("KAKAO", "kakao_race");
     }
 
     @Test
@@ -204,12 +274,35 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
         assertThat(result.accessToken()).isEqualTo("access_token");
         assertThat(deletedUser.isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("재활성화 시 프로필 닉네임이 없으면 기존 닉네임을 유지한다")
+    void socialLogin_deletedUser_nullNickname_keepsExistingNickname() {
+        User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
+        deletedUser.softDelete();
+        AuthProvider provider = AuthProvider.builder()
+                .user(deletedUser).provider("KAKAO").socialId("kakao_123").build();
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("kakao_123", null, null, false));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
+                .willReturn(Optional.of(provider));
+
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+
+        authService.socialLogin("KAKAO", "auth_code");
+
+        assertThat(deletedUser.isDeleted()).isFalse();
+        assertThat(deletedUser.getNickname()).isEqualTo("탈퇴유저");
+        assertThat(deletedUser.getEmail()).isEqualTo("deleted@email.com");
     }
 
     @Test
@@ -239,7 +332,6 @@ class AuthServiceTest {
 
         given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
         given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
 
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
@@ -250,14 +342,30 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("소셜 프로필 조회는 DB 트랜잭션을 열기 전에 끝난다")
+    void socialLogin_fetchesProfileBeforeOpeningTransaction() {
+        // 프로필 조회가 실패하면 DB 접근이 전혀 없어야 한다 (= 트랜잭션 안에서 외부 호출을 하지 않는다)
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("bad_code"))
+                .willThrow(new BusinessException(ErrorCode.OAUTH_INVALID_CODE));
+
+        assertThatThrownBy(() -> authService.socialLogin("KAKAO", "bad_code"))
+                .isInstanceOf(BusinessException.class);
+
+        verify(authProviderRepository, never()).findByProviderAndSocialId(anyString(), anyString());
+        verify(refreshTokenStore, never()).save(any(), anyString(), anyLong());
+    }
+
+    @Test
     @DisplayName("유효한 Refresh Token으로 토큰을 재발급한다")
     void refresh_validToken() {
-        given(jwtTokenProvider.validateRefreshToken("old_refresh")).willReturn(true);
-        given(jwtTokenProvider.getUserId("old_refresh")).willReturn(1L);
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.get("refresh:1")).willReturn("old_refresh");
+        Claims claims = Jwts.claims().subject("1").build();
+        given(jwtTokenProvider.parseRefreshToken("old_refresh")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
         given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
         given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(refreshTokenStore.rotate(1L, "old_refresh", "new_refresh", jwtProperties.refreshTokenExpiry()))
+                .willReturn(true);
 
         TokenResponse result = authService.refresh("old_refresh");
 
@@ -266,26 +374,47 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Redis에 저장된 것과 다른 Refresh Token이면 예외가 발생한다")
+    @DisplayName("저장된 것과 다른 Refresh Token이면 CAS 회전이 실패하고 예외가 발생한다")
     void refresh_tokenMismatch() {
-        given(jwtTokenProvider.validateRefreshToken("stolen_refresh")).willReturn(true);
-        given(jwtTokenProvider.getUserId("stolen_refresh")).willReturn(1L);
-        given(redisTemplate.opsForValue()).willReturn(valueOperations);
-        given(valueOperations.get("refresh:1")).willReturn("original_refresh");
+        Claims claims = Jwts.claims().subject("1").build();
+        given(jwtTokenProvider.parseRefreshToken("stolen_refresh")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
+        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        // 스크립트가 불일치를 감지하고 키를 삭제한 뒤 false를 돌려준다
+        given(refreshTokenStore.rotate(eq(1L), eq("stolen_refresh"), anyString(), anyLong()))
+                .willReturn(false);
 
         assertThatThrownBy(() -> authService.refresh("stolen_refresh"))
                 .isInstanceOf(BusinessException.class);
-        verify(redisTemplate).delete("refresh:1");
     }
 
     @Test
     @DisplayName("Access Token으로 refresh를 시도하면 저장된 Refresh Token을 건드리지 않고 거부한다")
-    void refresh_withAccessToken_rejectedWithoutDeletingStoredToken() {
-        given(jwtTokenProvider.validateRefreshToken("access_token")).willReturn(false);
+    void refresh_withAccessToken_rejectedWithoutTouchingStore() {
+        given(jwtTokenProvider.parseRefreshToken("access_token")).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.refresh("access_token"))
                 .isInstanceOf(BusinessException.class);
-        verify(redisTemplate, never()).delete(anyString());
+        verify(refreshTokenStore, never()).rotate(any(), anyString(), anyString(), anyLong());
+        verify(refreshTokenStore, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("Redis 장애는 503(REDIS_UNAVAILABLE)으로 전파된다")
+    void refresh_redisUnavailable_propagatesAs503() {
+        Claims claims = Jwts.claims().subject("1").build();
+        given(jwtTokenProvider.parseRefreshToken("old_refresh")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
+        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(refreshTokenStore.rotate(any(), anyString(), anyString(), anyLong()))
+                .willThrow(new BusinessException(ErrorCode.REDIS_UNAVAILABLE));
+
+        assertThatThrownBy(() -> authService.refresh("old_refresh"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REDIS_UNAVAILABLE);
     }
 
     @Test
@@ -293,7 +422,7 @@ class AuthServiceTest {
     void logout() {
         authService.logout(1L);
 
-        verify(redisTemplate).delete("refresh:1");
+        verify(refreshTokenStore).delete(1L);
     }
 
     @Test
@@ -305,6 +434,6 @@ class AuthServiceTest {
         authService.withdraw(1L);
 
         assertThat(user.isDeleted()).isTrue();
-        verify(redisTemplate).delete("refresh:1");
+        verify(refreshTokenStore).delete(1L);
     }
 }

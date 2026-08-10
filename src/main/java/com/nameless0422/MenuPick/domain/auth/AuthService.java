@@ -11,34 +11,110 @@ import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserHardDeleteService;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
+import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class AuthService {
+
+    /** 제공자가 닉네임을 주지 않은 경우(프로필 동의 거부 등) 사용할 기본 닉네임 — users.nickname은 NOT NULL이다. */
+    private static final String DEFAULT_NICKNAME = "메뉴픽 사용자";
 
     private final UserRepository userRepository;
     private final AuthProviderRepository authProviderRepository;
     private final UserHardDeleteService userHardDeleteService;
     private final JwtTokenProvider jwtTokenProvider;
-    private final StringRedisTemplate redisTemplate;
+    private final RefreshTokenStore refreshTokenStore;
     private final JwtProperties jwtProperties;
+    private final TransactionTemplate transactionTemplate;
     private final List<OAuthProvider> oAuthProviders;
 
-    @Transactional
+    /**
+     * 소셜 로그인.
+     *
+     * <p>메서드 전체를 @Transactional로 감싸지 않는다 — 인가 코드 교환·프로필 조회는 외부 HTTP
+     * 블로킹 호출이라, 트랜잭션 안에 두면 응답이 느려지는 만큼 DB 커넥션을 붙잡아 커넥션 풀이
+     * 마른다. 외부 호출을 먼저 끝내고 DB 작업만 TransactionTemplate으로 감싼다.
+     * (같은 빈의 @Transactional 메서드를 내부 호출하면 프록시를 타지 않아 무효이므로
+     * 메서드 분리 대신 TransactionTemplate을 쓴다.)
+     */
     public TokenResponse socialLogin(String providerName, String code) {
         OAuthProvider provider = findProvider(providerName);
         OAuthUserProfile profile = provider.getUserProfile(code);
 
+        Long userId = resolveUserWithConflictRetry(providerName, profile);
+
+        return issueTokens(userId);
+    }
+
+    public TokenResponse refresh(String refreshToken) {
+        Claims claims = jwtTokenProvider.parseRefreshToken(refreshToken)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다."));
+
+        Long userId = jwtTokenProvider.getUserId(claims);
+        if (userId == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다.");
+        }
+
+        String newAccessToken = jwtTokenProvider.createAccessToken(userId);
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+
+        // 비교와 교체를 Lua로 원자 실행 — 동시 요청이 둘 다 통과해 유효 토큰이 두 개 생기는 창을 막는다.
+        boolean rotated = refreshTokenStore.rotate(
+                userId, refreshToken, newRefreshToken, jwtProperties.refreshTokenExpiry());
+
+        if (!rotated) {
+            // 저장값 불일치·부재 = 이미 회전됐거나 탈취된 토큰. 스크립트가 키를 삭제했으므로
+            // 해당 유저의 모든 Refresh Token 체인이 무효화된다.
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Refresh Token이 일치하지 않습니다.");
+        }
+
+        return new TokenResponse(newAccessToken, newRefreshToken);
+    }
+
+    public void logout(Long userId) {
+        refreshTokenStore.delete(userId);
+    }
+
+    @Transactional
+    public void withdraw(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        user.softDelete();
+        refreshTokenStore.delete(userId);
+    }
+
+    /**
+     * 계정 조회·생성을 트랜잭션 안에서 수행한다.
+     *
+     * <p>동시에 같은 소셜 계정으로 첫 로그인이 들어오면 UNIQUE 제약에 걸린다. 제약 위반이 난
+     * 트랜잭션은 rollback-only로 마킹돼 같은 트랜잭션 안에서 재조회해봐야 커밋 시점에
+     * UnexpectedRollbackException이 나므로, 새 트랜잭션에서 한 번 더 시도한다.
+     * (두 번째 시도에서는 상대 트랜잭션이 커밋한 행이 조회되어 정상 종료된다.)
+     */
+    private Long resolveUserWithConflictRetry(String providerName, OAuthUserProfile profile) {
+        try {
+            return inTransaction(() -> resolveUser(providerName, profile));
+        } catch (DataIntegrityViolationException | UnexpectedRollbackException e) {
+            log.info("소셜 로그인 동시 가입 충돌 — 새 트랜잭션에서 재시도합니다: provider={}", providerName);
+            return inTransaction(() -> resolveUser(providerName, profile));
+        }
+    }
+
+    private Long resolveUser(String providerName, OAuthUserProfile profile) {
         AuthProvider authProvider = authProviderRepository
                 .findByProviderAndSocialId(providerName, profile.socialId())
                 .orElseGet(() -> createNewUser(providerName, profile));
@@ -47,7 +123,9 @@ public class AuthService {
         if (user.isDeleted()) {
             if (user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS)) {
                 String email = trustedEmail(profile);
-                user.reactivate(email != null ? email : user.getEmail(), profile.nickname());
+                user.reactivate(
+                        email != null ? email : user.getEmail(),
+                        nickname(profile, user.getNickname()));
             } else {
                 // 유예기간 경과: 기존 데이터를 하드 삭제하고 새 계정으로 가입 처리
                 userHardDeleteService.purge(user.getId());
@@ -56,79 +134,52 @@ public class AuthService {
             }
         }
 
-        return issueTokens(user.getId());
+        return user.getId();
     }
 
-    public TokenResponse refresh(String refreshToken) {
-        if (!jwtTokenProvider.validateRefreshToken(refreshToken)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다.");
-        }
-
-        Long userId = jwtTokenProvider.getUserId(refreshToken);
-        String stored = redisTemplate.opsForValue().get(refreshTokenKey(userId));
-
-        if (stored == null || !stored.equals(refreshToken)) {
-            redisTemplate.delete(refreshTokenKey(userId));
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Refresh Token이 일치하지 않습니다.");
-        }
-
-        return issueTokens(userId);
-    }
-
-    @Transactional
-    public void logout(Long userId) {
-        redisTemplate.delete(refreshTokenKey(userId));
-    }
-
-    @Transactional
-    public void withdraw(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        user.softDelete();
-        redisTemplate.delete(refreshTokenKey(userId));
+    private <T> T inTransaction(Supplier<T> work) {
+        return transactionTemplate.execute(status -> work.get());
     }
 
     private TokenResponse issueTokens(Long userId) {
         String accessToken = jwtTokenProvider.createAccessToken(userId);
         String refreshToken = jwtTokenProvider.createRefreshToken(userId);
 
-        redisTemplate.opsForValue().set(
-                refreshTokenKey(userId),
-                refreshToken,
-                jwtProperties.refreshTokenExpiry(),
-                TimeUnit.MILLISECONDS
-        );
+        refreshTokenStore.save(userId, refreshToken, jwtProperties.refreshTokenExpiry());
 
         return new TokenResponse(accessToken, refreshToken);
     }
 
     private AuthProvider createNewUser(String providerName, OAuthUserProfile profile) {
-        try {
-            // 같은 이메일로 가입된 유저가 있으면 새 계정을 만들지 않고
-            // 해당 유저에 소셜 연동만 추가한다 (이메일 기준 자동 통합).
-            // 단, 제공자가 소유를 검증한 이메일만 통합·저장에 사용한다 — 미검증 이메일을
-            // 신뢰하면 공격자가 타인 주소를 자기 소셜 계정에 넣어 기존 계정을 탈취할 수 있다.
-            String email = trustedEmail(profile);
-            User user = findUserByEmail(email)
-                    .orElseGet(() -> userRepository.save(
-                            User.builder()
-                                    .email(email)
-                                    .nickname(profile.nickname())
-                                    .build()
-                    ));
+        // 같은 이메일로 가입된 유저가 있으면 새 계정을 만들지 않고
+        // 해당 유저에 소셜 연동만 추가한다 (이메일 기준 자동 통합).
+        // 단, 제공자가 소유를 검증한 이메일만 통합·저장에 사용한다 — 미검증 이메일을
+        // 신뢰하면 공격자가 타인 주소를 자기 소셜 계정에 넣어 기존 계정을 탈취할 수 있다.
+        String email = trustedEmail(profile);
+        User user = findUserByEmail(email)
+                .orElseGet(() -> userRepository.save(
+                        User.builder()
+                                .email(email)
+                                .nickname(nickname(profile, DEFAULT_NICKNAME))
+                                .build()
+                ));
 
-            return authProviderRepository.save(
-                    AuthProvider.builder()
-                            .user(user)
-                            .provider(providerName)
-                            .socialId(profile.socialId())
-                            .build()
-            );
-        } catch (DataIntegrityViolationException e) {
-            return authProviderRepository
-                    .findByProviderAndSocialId(providerName, profile.socialId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR));
-        }
+        return authProviderRepository.save(
+                AuthProvider.builder()
+                        .user(user)
+                        .provider(providerName)
+                        .socialId(profile.socialId())
+                        .build()
+        );
+    }
+
+    /**
+     * 제공자가 닉네임 제공에 동의받지 못하면 nickname이 null로 온다.
+     * users.nickname은 NOT NULL이므로 대체값으로 채운다.
+     */
+    private String nickname(OAuthUserProfile profile, String fallback) {
+        String nickname = profile.nickname();
+        return (nickname == null || nickname.isBlank()) ? fallback : nickname;
     }
 
     private String trustedEmail(OAuthUserProfile profile) {
@@ -151,9 +202,5 @@ public class AuthService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.INVALID_INPUT, "지원하지 않는 로그인 제공자입니다: " + name));
-    }
-
-    private String refreshTokenKey(Long userId) {
-        return "refresh:" + userId;
     }
 }

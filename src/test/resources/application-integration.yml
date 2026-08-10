@@ -21,7 +21,8 @@ spring:
       port: 6379
 
 jwt:
-  secret: testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!
+  # 테스트 전용 더미 시크릿(무작위 생성). 운영/개발 어디에서도 쓰이지 않는다.
+  secret: kueW5yj9MMeBUNKudwtsbMWNxEt9ubFf6BUdyghuENq0U85EY3Pcd19oIylxl8
   access-token-expiry: 1800000
   refresh-token-expiry: 1209600000
 

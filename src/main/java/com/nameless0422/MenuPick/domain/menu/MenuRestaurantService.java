@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.menu.dto.MenuRestaurantResponse;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +23,7 @@ public class MenuRestaurantService {
     private final MenuRestaurantRepository menuRestaurantRepository;
 
     public MenuRestaurantResponse.MenuRestaurantListResponse getMenuRestaurants(Long userId, Long menuId) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyMenuOwnership(menu, userId);
+        findMenuOrThrow(userId, menuId);
 
         List<MenuRestaurantResponse.MenuRestaurantDetail> details = menuRestaurantRepository.findAllByMenuId(menuId)
                 .stream()
@@ -37,29 +37,31 @@ public class MenuRestaurantService {
     @Transactional
     public MenuRestaurantResponse.MenuRestaurantDetail createMenuRestaurant(
             Long userId, Long menuId, MenuRestaurantRequest.Create request) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyMenuOwnership(menu, userId);
+        Menu menu = findMenuOrThrow(userId, menuId);
 
-        Restaurant restaurant = restaurantRepository.findById(request.restaurantId())
+        // 타인의 식당·삭제된 식당 모두 RESTAURANT_NOT_FOUND(404)로 동일하게 응답한다.
+        Restaurant restaurant = restaurantRepository
+                .findByIdAndUserIdAndDeletedAtIsNull(request.restaurantId(), userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESTAURANT_NOT_FOUND));
-        if (restaurant.isDeleted()) {
-            throw new BusinessException(ErrorCode.RESTAURANT_NOT_FOUND);
-        }
-        if (!restaurant.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.RESTAURANT_ACCESS_DENIED);
-        }
 
+        // 일반 경로에서 명확한 에러를 주기 위한 사전 검사. 동시 요청 레이스는 아래 catch가 받는다.
         if (menuRestaurantRepository.existsByMenuIdAndRestaurantId(menuId, request.restaurantId())) {
             throw new BusinessException(ErrorCode.MENU_RESTAURANT_DUPLICATE);
         }
 
-        MenuRestaurant menuRestaurant = menuRestaurantRepository.save(
-                MenuRestaurant.builder()
-                        .menu(menu)
-                        .restaurant(restaurant)
-                        .rating(request.rating())
-                        .memo(request.memo())
-                        .build());
+        MenuRestaurant menuRestaurant;
+        try {
+            menuRestaurant = menuRestaurantRepository.save(
+                    MenuRestaurant.builder()
+                            .menu(menu)
+                            .restaurant(restaurant)
+                            .rating(request.rating())
+                            .memo(request.memo())
+                            .build());
+        } catch (DataIntegrityViolationException e) {
+            // uq_menu_restaurant(menu_id, restaurant_id) 위반 — check-then-act 사이에 끼어든 동시 생성
+            throw new BusinessException(ErrorCode.MENU_RESTAURANT_DUPLICATE);
+        }
 
         return toDetail(menuRestaurant);
     }
@@ -67,12 +69,9 @@ public class MenuRestaurantService {
     @Transactional
     public MenuRestaurantResponse.MenuRestaurantDetail updateMenuRestaurant(
             Long userId, Long menuId, Long restaurantId, MenuRestaurantRequest.Update request) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyMenuOwnership(menu, userId);
+        findMenuOrThrow(userId, menuId);
 
-        MenuRestaurant menuRestaurant = menuRestaurantRepository
-                .findByMenuIdAndRestaurantId(menuId, restaurantId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MENU_RESTAURANT_NOT_FOUND));
+        MenuRestaurant menuRestaurant = findLinkOrThrow(menuId, restaurantId);
 
         menuRestaurant.update(request.rating(), request.memo());
         return toDetail(menuRestaurant);
@@ -80,29 +79,25 @@ public class MenuRestaurantService {
 
     @Transactional
     public void deleteMenuRestaurant(Long userId, Long menuId, Long restaurantId) {
-        Menu menu = findMenuOrThrow(menuId);
-        verifyMenuOwnership(menu, userId);
+        findMenuOrThrow(userId, menuId);
 
-        MenuRestaurant menuRestaurant = menuRestaurantRepository
-                .findByMenuIdAndRestaurantId(menuId, restaurantId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MENU_RESTAURANT_NOT_FOUND));
-
-        menuRestaurantRepository.delete(menuRestaurant);
+        menuRestaurantRepository.delete(findLinkOrThrow(menuId, restaurantId));
     }
 
-    private Menu findMenuOrThrow(Long menuId) {
-        Menu menu = menuRepository.findById(menuId)
+    /** 타인의 메뉴·삭제된 메뉴 모두 MENU_NOT_FOUND(404)로 동일하게 응답한다. */
+    private Menu findMenuOrThrow(Long userId, Long menuId) {
+        return menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menuId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));
-        if (menu.isDeleted()) {
-            throw new BusinessException(ErrorCode.MENU_NOT_FOUND);
-        }
-        return menu;
     }
 
-    private void verifyMenuOwnership(Menu menu, Long userId) {
-        if (!menu.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.MENU_ACCESS_DENIED);
-        }
+    /**
+     * 식당이 soft-delete된 링크는 조회(getMenuRestaurants)에서 이미 감춰지므로,
+     * 수정·삭제에서도 존재하지 않는 링크로 취급해 화면과 동작을 일치시킨다.
+     */
+    private MenuRestaurant findLinkOrThrow(Long menuId, Long restaurantId) {
+        return menuRestaurantRepository.findByMenuIdAndRestaurantId(menuId, restaurantId)
+                .filter(mr -> !mr.getRestaurant().isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MENU_RESTAURANT_NOT_FOUND));
     }
 
     private MenuRestaurantResponse.MenuRestaurantDetail toDetail(MenuRestaurant mr) {

@@ -1,27 +1,13 @@
 package com.nameless0422.MenuPick.domain.tag;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nameless0422.MenuPick.common.security.CustomAccessDeniedHandler;
-import com.nameless0422.MenuPick.common.security.CustomAuthenticationEntryPoint;
-import com.nameless0422.MenuPick.common.security.JwtAuthenticationFilter;
-import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
-import com.nameless0422.MenuPick.common.security.RateLimitFilter;
-import com.nameless0422.MenuPick.common.security.SecurityConfig;
 import com.nameless0422.MenuPick.domain.tag.dto.TagRequest;
 import com.nameless0422.MenuPick.domain.tag.dto.TagResponse;
-import org.junit.jupiter.api.BeforeEach;
+import com.nameless0422.MenuPick.support.AbstractControllerTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,35 +15,15 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(TagController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, RateLimitFilter.class,
-        CustomAuthenticationEntryPoint.class, CustomAccessDeniedHandler.class})
-@ActiveProfiles("test")
-class TagControllerTest {
-
-    @Autowired private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+class TagControllerTest extends AbstractControllerTest {
 
     @MockitoBean private TagService tagService;
-    @MockitoBean private JwtTokenProvider jwtTokenProvider;
-    @MockitoBean private StringRedisTemplate redisTemplate;
-
-    private static final UsernamePasswordAuthenticationToken AUTH =
-            new UsernamePasswordAuthenticationToken(1L, null, List.of());
-
-    @SuppressWarnings("unchecked")
-    @BeforeEach
-    void setUp() {
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        given(redisTemplate.opsForValue()).willReturn(valueOps);
-        given(valueOps.increment(any())).willReturn(1L);
-    }
 
     @Test
     @DisplayName("GET /api/v1/tags?keyword=혼 - 태그 자동완성 검색 성공")

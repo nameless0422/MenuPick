@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -35,6 +36,8 @@ public class PickService {
     private final HistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
+    /** 추천 시각을 KST 기준으로 기록한다 — 히스토리 days 필터와 기준 시간대를 맞춘다. */
+    private final Clock clock;
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
@@ -112,6 +115,13 @@ public class PickService {
 
     private Menu weightedRandom(List<Menu> menus) {
         int totalWeight = menus.stream().mapToInt(Menu::getWeight).sum();
+
+        // weight는 1~5로 검증되지만, 과거 데이터·직접 DB 수정 등으로 합이 0 이하가 되면
+        // nextInt(bound)가 IllegalArgumentException을 던진다. 균등 랜덤으로 폴백한다.
+        if (totalWeight <= 0) {
+            return menus.get(ThreadLocalRandom.current().nextInt(menus.size()));
+        }
+
         int random = ThreadLocalRandom.current().nextInt(totalWeight);
         int cumulative = 0;
         for (Menu menu : menus) {
@@ -176,12 +186,19 @@ public class PickService {
                 .orElse(null);
     }
 
+    /**
+     * 픽 결과를 히스토리로 남긴다.
+     *
+     * <p>필터 조건에는 카테고리·태그·최대거리만 기록하고 <b>기준 좌표(latitude/longitude)는
+     * 의도적으로 기록하지 않는다</b> — 위치정보 최소 수집 원칙(docs/PrivacyReview.md).
+     * 좌표는 픽 시점의 후보 필터링에만 쓰이고 저장되지 않는다.
+     */
     private History saveHistory(Long userId, Menu picked, Restaurant restaurant, PickRequest request) {
         History history = History.builder()
                 .user(userRepository.getReferenceById(userId))
                 .menu(picked)
                 .restaurant(restaurant)
-                .recommendedAt(LocalDateTime.now())
+                .recommendedAt(LocalDateTime.now(clock))
                 .build();
 
         if (request != null) {
@@ -227,7 +244,10 @@ public class PickService {
         return new MenuResponse.MenuDetail(
                 menu.getId(), menu.getName(), menu.getMemo(),
                 menu.getWeight(), menu.isExcluded(),
-                menu.getCategories(), tags,
+                // open-in-view=false라 직렬화는 트랜잭션 밖에서 일어난다. LAZY 컬렉션을 그대로
+                // 넘기면 필터 없는 픽(카테고리를 한 번도 건드리지 않는 경로)에서 세션이 닫힌 뒤
+                // 초기화를 시도해 LazyInitializationException으로 500이 난다.
+                Set.copyOf(menu.getCategories()), tags,
                 menu.getCreatedAt(), menu.getUpdatedAt());
     }
 }
