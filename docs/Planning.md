@@ -67,6 +67,8 @@
     - [7.1 성능 목표](#71-성능-목표)
     - [7.2 보안 요구사항](#72-보안-요구사항)
     - [7.3 로깅 및 모니터링](#73-로깅-및-모니터링)
+    - [7.4 시각 처리 정책](#74-시각-처리-정책)
+    - [7.5 백업 및 복구 정책](#75-백업-및-복구-정책)
 - [8. 리스크 및 대응 방안](#8-리스크-및-대응-방안)
 - [9. 개발 우선순위 (백엔드 기준)](#9-개발-우선순위-백엔드-기준)
 
@@ -153,10 +155,16 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | 201 Created | 생성 성공 | 메뉴/식당/태그 등 리소스 생성 |
 | 400 Bad Request | 입력 오류 | 필수값 누락, 형식 불일치 |
 | 401 Unauthorized | 인증 실패 | 토큰 없음 / 만료 |
-| 403 Forbidden | 권한 없음 | 다른 사용자 리소스 접근 |
-| 404 Not Found | 리소스 없음 | 존재하지 않는 ID |
+| 403 Forbidden | 권한 없음 | (현재 미사용 — 아래 참고) |
+| 404 Not Found | 리소스 없음 | 존재하지 않는 ID, **타인 소유 리소스 접근** |
 | 409 Conflict | 중복 충돌 | 이미 존재하는 태그명 등 |
 | 500 Internal Server Error | 서버 오류 | 예상치 못한 서버 오류 |
+| 502 Bad Gateway | 외부 API 오류 | 네이버/카카오/소셜 제공자 장애 |
+| 503 Service Unavailable | 일시적 불가 | Redis 장애 등 |
+
+> **타인 소유 리소스는 403이 아니라 404로 응답한다.** 403을 주면 "그 ID는 존재한다"는 사실이
+> 노출되어 ID를 훑는 것만으로 다른 사용자의 리소스 존재 여부를 확인할 수 있다. 조회 자체를
+> `findByIdAndUserId...` 형태로 소유자 스코프에 가둬 존재 여부를 구분하지 않는다.
 
 
 ### 2.5 주요 API 목록
@@ -542,12 +550,12 @@ erDiagram
 | --- | --- | --- | --- |
 | id | BIGINT (PK, AI) | N | 고유 ID |
 | history_id | BIGINT (FK) | N | 연결 히스토리 |
-| filter_type | VARCHAR(20) | N | 필터 종류: CATEGORY / TAG_INCLUDE / TAG_EXCLUDE / DISTANCE_METER |
+| filter_type | VARCHAR(20) | N | 필터 종류: CATEGORY / TAG_INCLUDE / TAG_EXCLUDE / MAX_DISTANCE |
 | filter_value | VARCHAR(100) | N | 필터 값 (예: KOREAN, 혼밥가능, 500) |
 
 *INDEX: (history_id)*
 
-*예시 행: (1, 101, 'CATEGORY', 'JAPANESE'), (2, 101, 'TAG_INCLUDE', '혼밥가능'), (3, 101, 'DISTANCE_METER', '500')*
+*예시 행: (1, 101, 'CATEGORY', 'JAPANESE'), (2, 101, 'TAG_INCLUDE', '혼밥가능'), (3, 101, 'MAX_DISTANCE', '500')*
 
 
 ## 3.3 2차 정규화(2NF) 적용 내역
@@ -1039,6 +1047,16 @@ tags 테이블 컬럼 구성:
 
 *총 인덱스 수: PK 10개 + UQ 4개 + IDX 11개 + CVR 1개 = 26개*
 
+> **V3 마이그레이션(`V3__performance_indexes.sql`)에서 위 목록을 아래와 같이 조정했다.**
+>
+> | 변경 | 인덱스 | 근거 |
+> | --- | --- | --- |
+> | 추가 | `users(deleted_at)` | 탈퇴 정리 배치의 users 풀스캔 제거 (대부분 NULL이라 인덱스가 매우 작다) |
+> | 추가 | `histories(user_id, id DESC)` | 커서 페이지네이션이 `ORDER BY id DESC`라 기존 `(user_id, recommended_at)`으로는 정렬을 커버하지 못해 filesort가 발생했다 |
+> | 삭제 | `idx_hfc_history_id` | `idx_hfc_type_value(history_id, filter_type)`의 좌측 접두사라 완전 중복 |
+> | 삭제 | `idx_menus_name_search` | 대응하는 쿼리가 없다 (메뉴명 검색 기능 미구현) |
+> | 재생성 | `idx_menus_user_excluded` → `(user_id, is_excluded, deleted_at)` | 실제 픽 후보 쿼리가 `deleted_at IS NULL`을 포함하는데 기존 커버링 구성에는 빠져 있었다 |
+
 
 ### 3.7.5 주요 쿼리별 인덱스 활용 시나리오
 
@@ -1282,7 +1300,22 @@ Spring Actuator `health`/`metrics`/`prometheus` 엔드포인트 노출 (관리�
 추후 APM (예: Sentry, Datadog) 연동 고려
 
 
-### 7.4 백업 및 복구 정책
+### 7.4 시각 처리 정책
+
+서비스 사용자층이 한국으로 고정되어 있어 **애플리케이션 시각은 KST(`Asia/Seoul`)로 고정**한다. `Clock` 빈을 주입해 사용하며, 코드에서 `LocalDateTime.now()`를 인자 없이 호출하지 않는다.
+
+| 항목 | 정책 |
+| --- | --- |
+| 기준 시간대 | `Clock.system(ZoneId.of("Asia/Seoul"))` 빈 (`common/config/TimeConfig`) |
+| 엔티티 | 엔티티 내부에서 현재 시각을 만들지 않는다 (빈 주입 불가) — 서비스가 시각을 인자로 넘긴다 |
+| JPA Auditing | `DateTimeProvider`를 Clock 기반으로 등록해 `createdAt`/`updatedAt`도 동일 기준 |
+| 스케줄러 | `@Scheduled(zone = "Asia/Seoul")` 명시 — 컨테이너가 UTC로 떠도 04:00 KST에 실행 |
+| 테스트 | 시간 의존 테스트는 `Clock.fixed(...)`로 고정 (자정 경계 회귀 포함) |
+
+> 컨테이너 기본 시간대는 보통 UTC다. Clock을 고정하지 않으면 `recommendedAt`이 9시간 어긋나 저장되고, 히스토리 `days` 필터 경계가 새벽 시간대에 하루씩 밀린다. 글로벌 확장 시점에는 저장을 `Instant`(UTC)로 바꾸고 표시 시점에 오프셋을 적용하는 방식으로 재검토한다.
+
+
+### 7.5 백업 및 복구 정책
 
 | 항목 | 정책 |
 | --- | --- |
@@ -1337,4 +1370,4 @@ Spring Actuator `health`/`metrics`/`prometheus` 엔드포인트 노출 (관리�
 
 미해결 과제와 정책 결정 대기 항목은 [ImprovementBacklog.md](./ImprovementBacklog.md)에서 관리한다.
 
-최종 수정: 2026-07-05
+최종 수정: 2026-08-11

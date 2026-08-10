@@ -11,17 +11,22 @@ import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.tag.Tag;
+import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,8 +41,14 @@ class PickServiceTest {
     @Mock private MenuRepository menuRepository;
     @Mock private HistoryRepository historyRepository;
     @Mock private UserRepository userRepository;
+    @Mock private TagRepository tagRepository;
 
-    @InjectMocks private PickService pickService;
+    /** 추천 시각 검증을 위해 KST 고정 시계를 쓴다. */
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            ZonedDateTime.of(2026, 1, 15, 0, 30, 0, 0, KST).toInstant(), KST);
+
+    private PickService pickService;
 
     private User user;
     private Menu koreanMenu;
@@ -48,6 +59,9 @@ class PickServiceTest {
 
     @BeforeEach
     void setUp() {
+        pickService = new PickService(menuRepository, historyRepository, userRepository,
+                tagRepository, FIXED_CLOCK);
+
         user = User.builder().email("test@test.com").nickname("테스터").build();
         setId(user, 1L);
 
@@ -414,6 +428,22 @@ class PickServiceTest {
         PickResponse.PickResult result = pickService.pick(1L, request);
 
         assertThat(result.menu().name()).isEqualTo("초밥");
+    }
+
+    @Test
+    @DisplayName("추천 시각은 주입된 Clock(KST) 기준으로 기록한다")
+    void pick_recordsRecommendedAtFromClock() {
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        pickService.pick(1L, null);
+
+        ArgumentCaptor<History> captor = ArgumentCaptor.forClass(History.class);
+        verify(historyRepository).save(captor.capture());
+        assertThat(captor.getValue().getRecommendedAt())
+                .isEqualTo(LocalDateTime.of(2026, 1, 15, 0, 30));
     }
 
     // --- 리플렉션 헬퍼 ---

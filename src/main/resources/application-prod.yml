@@ -6,6 +6,15 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 단일 VM(앱·MySQL·Redis 한 대) 전제. 커넥션 풀은 "동시에 DB를 때리는 스레드 수"의 상한이지
+      # 처리량 손잡이가 아니다 — MySQL max_connections(기본 151)와 VM 코어 수를 감안해 10으로 고정한다.
+      # 톰캣 스레드 50 > 풀 10 이므로, DB가 느려져도 초과 요청은 커넥션 대기 큐에서 막히고
+      # DB를 커넥션 폭주로 밀어버리지 않는다.
+      maximum-pool-size: 10
+      # 커넥션을 5초 안에 못 받으면 실패시킨다. 무한정 매달려 톰캣 스레드를 전부 잠그는 것보다
+      # 빠르게 503/500을 내고 스레드를 반납하는 편이 전체 가용성에 낫다.
+      connection-timeout: 5000
 
   jpa:
     hibernate:
@@ -20,8 +29,33 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
 
+server:
+  tomcat:
+    threads:
+      # 단일 VM 전제. 기본값 200은 이 규모에서 컨텍스트 스위칭·메모리만 늘리고,
+      # 외부 API가 느려질 때 200개 스레드가 전부 대기하며 힙을 잠식한다.
+      # 외부 API 호출 타임아웃(3s)·풀 크기(10)와 맞춰 50으로 제한한다.
+      max: 50
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # 운영은 health만 노출. metrics/prometheus는 인증 없이 열려 있으면 내부 구조·트래픽 패턴이
+        # 그대로 새어나가므로, 모니터링 도입 시 management.server.port로 관리 포트를 분리하고
+        # 그 포트에서만 재개방한다 (이슈 #18).
+        include: health
+
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:true}
+  # 앱 앞단에 있는 "신뢰할 수 있는" 프록시/LB 개수.
+  # X-Forwarded-For는 각 프록시가 자신이 본 원격 주소를 오른쪽에 덧붙이므로,
+  # 왼쪽 항목은 클라이언트가 위조할 수 있다(첫 항목을 쓰면 헤더 한 줄로 레이트 리밋이 뚫린다).
+  # 오른쪽에서 이 홉 수만큼 들어간 항목만 신뢰한다. 실제 토폴로지와 반드시 일치시킬 것.
+  trusted-proxy-hops: ${RATE_LIMIT_TRUSTED_PROXY_HOPS:1}
+  # 인증 경로(IP 기준) / 외부 API 프록시 경로(사용자 기준) 분당 허용 횟수
+  auth-limit-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
+  proxy-limit-per-minute: ${RATE_LIMIT_PROXY_PER_MINUTE:30}
 
 cors:
   allowed-origins: ${FRONTEND_ORIGIN}

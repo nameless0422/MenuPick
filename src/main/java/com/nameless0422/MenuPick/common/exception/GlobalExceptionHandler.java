@@ -4,7 +4,7 @@ import com.nameless0422.MenuPick.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -72,15 +72,32 @@ public class GlobalExceptionHandler {
     }
 
     /**
-    * 인자 오류 처리
-    * 400 반환
-    */
+     * 인자 오류 처리 — 400 반환.
+     *
+     * <p>원본 메시지는 내부 구현 세부(클래스명, 파싱 대상, enum 상수 목록 등)를 그대로 담고 있어
+     * 클라이언트에 노출하지 않는다. INVALID_INPUT 표준 응답만 내려주고 상세는 로그로만 남긴다.
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
         log.warn("IllegalArgumentException: {}", e.getMessage());
         return ResponseEntity
-                .badRequest()
-                .body(ApiResponse.error(e.getMessage()));
+                .status(ErrorCode.INVALID_INPUT.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.INVALID_INPUT, ErrorCode.INVALID_INPUT.getMessage()));
+    }
+
+    /**
+     * Redis 연결 실패 처리 — 503 반환.
+     *
+     * <p>캐시 경로의 장애는 CacheErrorHandler가 흡수하지만, 캐시를 거치지 않고 Redis를 직접
+     * 사용하는 경로(레이트리밋 카운터, 토큰 저장 등)는 여기까지 예외가 올라온다. 500이 아니라
+     * 재시도 가능함을 알리는 503 + Retry 안내 메시지로 응답한다.
+     */
+    @ExceptionHandler(RedisConnectionFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRedisConnectionFailure(RedisConnectionFailureException e) {
+        log.error("Redis connection failure", e);
+        return ResponseEntity
+                .status(ErrorCode.REDIS_UNAVAILABLE.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.REDIS_UNAVAILABLE, ErrorCode.REDIS_UNAVAILABLE.getMessage()));
     }
 
     /**

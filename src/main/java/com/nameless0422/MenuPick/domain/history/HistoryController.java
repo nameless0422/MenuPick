@@ -23,7 +23,7 @@ public class HistoryController {
     public ResponseEntity<ApiResponse<HistoryResponse.HistoryListResponse>> getHistories(
             @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) Long cursor,
-            @RequestParam(required = false) Integer days,
+            @RequestParam(required = false) @Min(value = 1, message = "days는 1 이상이어야 합니다.") Integer days,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ResponseEntity.ok(ApiResponse.ok(historyService.getHistories(userId, cursor, days, size)));
     }

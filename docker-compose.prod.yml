@@ -24,25 +24,69 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
+    healthcheck:
+      # app이 "DB가 실제로 쿼리를 받는 상태"가 된 뒤에 뜨도록 하는 신호.
+      # 컨테이너가 떠 있는 것과 mysqld가 접속을 받는 것은 다르다(초기화에 수십 초 걸린다).
+      # CMD-SHELL: exec 형식은 셸을 거치지 않아 $MYSQL_ROOT_PASSWORD가 리터럴로 전달된다.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    # 단일 VM(예: 1 OCPU / 6GB) 전제의 메모리 배분. 합계가 호스트 메모리보다 작아야
+    # 한 컨테이너의 누수가 다른 컨테이너를 OOMKill로 끌고 들어가지 않는다.
+    # MySQL은 innodb_buffer_pool(기본 128MB) + 커넥션당 버퍼 기준으로 1g면 충분하다.
+    mem_limit: 1g
 
   redis:
     image: redis:7-alpine
     container_name: menupick-redis
     restart: unless-stopped
     # AOF persistence 활성화 — Redis 재기동 시 Refresh Token 유실 최소화 (docs/DecisionLog.md D-015)
-    command: ["redis-server", "--appendonly", "yes"]
+    # requirepass: Redis는 기본 무인증이라, 네트워크가 한 번이라도 노출되면 Refresh Token 저장소가
+    #   그대로 읽힌다. 포트를 외부에 열지 않더라도 방어선을 하나 더 둔다.
+    # maxmemory-policy noeviction: 이 Redis는 캐시 겸 Refresh Token 저장소다. LRU eviction을 켜면
+    #   메모리가 찼을 때 살아 있는 Refresh Token이 조용히 증발해 사용자가 임의로 로그아웃된다.
+    #   대신 한도에 닿으면 쓰기가 실패하고(= 관측 가능한 장애) 캐시 TTL로 자연 회수된다.
+    #   maxmemory는 mem_limit(256m)보다 낮게 잡아 AOF 버퍼/오버헤드 여유를 남긴다.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      - --maxmemory
+      - 192mb
+      - --maxmemory-policy
+      - noeviction
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      # healthcheck의 redis-cli 인증용 (컨테이너 내부에서만 참조)
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    mem_limit: 256m
 
   app:
     build: .
     container_name: menupick-app
     restart: unless-stopped
     depends_on:
-      - mysql
-      - redis
+      # 단순 depends_on은 "컨테이너가 시작됐다"까지만 보장한다. 앱은 기동 시 Flyway 마이그레이션으로
+      # 곧장 DB에 붙으므로, DB가 아직 초기화 중이면 기동 실패 → restart 루프에 빠진다.
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
-      - "8080:8080"
+      # 리버스 프록시(nginx/caddy)가 TLS를 종단하고 이 포트로 넘기는 구성 전제.
+      # "8080:8080"은 0.0.0.0 바인딩이라 프록시를 우회한 평문 HTTP 접근이 열린다.
+      - "127.0.0.1:8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
@@ -50,6 +94,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       JWT_SECRET: ${JWT_SECRET}
       RATE_LIMIT_TRUST_PROXY: "true"
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
@@ -62,6 +107,9 @@ services:
       NAVER_MAPS_CLIENT_ID: ${NAVER_MAPS_CLIENT_ID}
       NAVER_MAPS_CLIENT_SECRET: ${NAVER_MAPS_CLIENT_SECRET}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+    # JVM 힙은 Dockerfile의 -XX:MaxRAMPercentage=75.0에 따라 이 한도의 75%(≈1.1GB)로 잡힌다.
+    # 나머지 25%는 메타스페이스·스레드 스택(톰캣 50 스레드)·네트워크 버퍼 몫이다.
+    mem_limit: 1536m
 
 volumes:
   mysql-data:

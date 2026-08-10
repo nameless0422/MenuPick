@@ -11,8 +11,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,7 +69,7 @@ class MenuRepositoryTest extends AbstractIntegrationTest {
                 .user(user).name("된장찌개").weight(1).build());
         Menu menu3 = menuRepository.save(Menu.builder()
                 .user(user).name("삭제메뉴").weight(1).build());
-        menu3.softDelete();
+        menu3.softDelete(LocalDateTime.now());
         menuRepository.flush();
 
         List<Menu> menus = menuRepository.findAllByUserIdAndDeletedAtIsNull(user.getId());
@@ -103,5 +105,73 @@ class MenuRepositoryTest extends AbstractIntegrationTest {
                 .findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(user.getId());
         assertThat(candidates).hasSize(1);
         assertThat(candidates.get(0).getName()).isEqualTo("후보메뉴");
+    }
+
+    // --- 커서 페이지네이션 경계 ---
+
+    @Test
+    @DisplayName("커서 없이 조회하면 id 내림차순으로 요청한 개수만 반환한다")
+    void cursorQuery_firstPage_isDescendingAndLimited() {
+        Menu first = save("메뉴1");
+        Menu second = save("메뉴2");
+        Menu third = save("메뉴3");
+
+        List<Menu> page = menuRepository.findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(
+                user.getId(), PageRequest.of(0, 2));
+
+        assertThat(page).extracting(Menu::getId)
+                .containsExactly(third.getId(), second.getId());
+        assertThat(page).extracting(Menu::getId).doesNotContain(first.getId());
+    }
+
+    @Test
+    @DisplayName("커서 조회는 커서 id 자신을 제외하고 그보다 작은 id만 반환한다 (경계: id < cursor)")
+    void cursorQuery_excludesCursorItself() {
+        Menu first = save("메뉴1");
+        Menu second = save("메뉴2");
+        Menu third = save("메뉴3");
+
+        List<Menu> page = menuRepository.findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(
+                user.getId(), third.getId(), PageRequest.of(0, 10));
+
+        assertThat(page).extracting(Menu::getId)
+                .containsExactly(second.getId(), first.getId());
+    }
+
+    @Test
+    @DisplayName("커서가 가장 작은 id면 다음 페이지는 비어 있다")
+    void cursorQuery_atOldestId_returnsEmpty() {
+        Menu first = save("메뉴1");
+        save("메뉴2");
+
+        List<Menu> page = menuRepository.findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(
+                user.getId(), first.getId(), PageRequest.of(0, 10));
+
+        assertThat(page).isEmpty();
+    }
+
+    @Test
+    @DisplayName("커서 조회는 soft-delete된 메뉴와 타 사용자의 메뉴를 건너뛴다")
+    void cursorQuery_skipsDeletedAndOtherUsersMenus() {
+        User other = userRepository.save(User.builder()
+                .email("menu-other@example.com").nickname("다른유저").build());
+
+        Menu mine = save("내메뉴");
+        Menu deleted = save("삭제메뉴");
+        deleted.softDelete(LocalDateTime.now());
+        Menu othersMenu = menuRepository.save(Menu.builder()
+                .user(other).name("남의메뉴").weight(1).build());
+        menuRepository.flush();
+
+        List<Menu> page = menuRepository.findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(
+                user.getId(), othersMenu.getId() + 1, PageRequest.of(0, 10));
+
+        assertThat(page).extracting(Menu::getId).containsExactly(mine.getId());
+        assertThat(page).extracting(Menu::getId)
+                .doesNotContain(deleted.getId(), othersMenu.getId());
+    }
+
+    private Menu save(String name) {
+        return menuRepository.save(Menu.builder().user(user).name(name).weight(1).build());
     }
 }

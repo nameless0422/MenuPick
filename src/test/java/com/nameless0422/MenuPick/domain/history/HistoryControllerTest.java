@@ -2,62 +2,28 @@ package com.nameless0422.MenuPick.domain.history;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
-import com.nameless0422.MenuPick.common.security.CustomAccessDeniedHandler;
-import com.nameless0422.MenuPick.common.security.CustomAuthenticationEntryPoint;
-import com.nameless0422.MenuPick.common.security.JwtAuthenticationFilter;
-import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
-import com.nameless0422.MenuPick.common.security.RateLimitFilter;
-import com.nameless0422.MenuPick.common.security.SecurityConfig;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
-import org.junit.jupiter.api.BeforeEach;
+import com.nameless0422.MenuPick.support.AbstractControllerTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(HistoryController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, RateLimitFilter.class,
-        CustomAuthenticationEntryPoint.class, CustomAccessDeniedHandler.class})
-@ActiveProfiles("test")
-class HistoryControllerTest {
-
-    @Autowired private MockMvc mockMvc;
+class HistoryControllerTest extends AbstractControllerTest {
 
     @MockitoBean private HistoryService historyService;
-    @MockitoBean private JwtTokenProvider jwtTokenProvider;
-    @MockitoBean private StringRedisTemplate redisTemplate;
-
-    private static final UsernamePasswordAuthenticationToken AUTH =
-            new UsernamePasswordAuthenticationToken(1L, null, List.of());
-
-    @SuppressWarnings("unchecked")
-    @BeforeEach
-    void setUp() {
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        given(redisTemplate.opsForValue()).willReturn(valueOps);
-        given(valueOps.increment(any())).willReturn(1L);
-    }
 
     @Test
     @DisplayName("GET /api/v1/history - 히스토리 목록 조회 성공")
@@ -98,6 +64,24 @@ class HistoryControllerTest {
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.histories").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history - days=0이면 400 (@Min(1))")
+    void getHistories_daysZero_badRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/history")
+                        .with(authentication(AUTH))
+                        .param("days", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history - days가 음수면 400 (@Min(1))")
+    void getHistories_daysNegative_badRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/history")
+                        .with(authentication(AUTH))
+                        .param("days", "-1"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

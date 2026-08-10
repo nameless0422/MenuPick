@@ -1,5 +1,7 @@
 package com.nameless0422.MenuPick.common.security;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -10,6 +12,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
@@ -39,8 +43,9 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer valid.token.here");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        given(jwtTokenProvider.validateAccessToken("valid.token.here")).willReturn(true);
-        given(jwtTokenProvider.getUserId("valid.token.here")).willReturn(1L);
+        Claims claims = Jwts.claims().subject("1").build();
+        given(jwtTokenProvider.parseAccessToken("valid.token.here")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -55,6 +60,8 @@ class JwtAuthenticationFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        given(jwtTokenProvider.parseAccessToken(null)).willReturn(Optional.empty());
+
         filter.doFilterInternal(request, response, filterChain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
@@ -62,13 +69,30 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("유효하지 않은 토큰이면 SecurityContext에 인증을 설정하지 않는다")
+    @DisplayName("유효하지 않거나 만료된 토큰이면 예외 없이 인증만 비운 채 체인을 계속 태운다")
     void invalidToken_noAuthentication() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer invalid.token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        given(jwtTokenProvider.validateAccessToken("invalid.token")).willReturn(false);
+        given(jwtTokenProvider.parseAccessToken("invalid.token")).willReturn(Optional.empty());
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("subject가 숫자가 아니면 인증을 설정하지 않는다")
+    void nonNumericSubject_noAuthentication() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer weird.token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        Claims claims = Jwts.claims().subject("not-a-number").build();
+        given(jwtTokenProvider.parseAccessToken("weird.token")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(null);
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -82,6 +106,8 @@ class JwtAuthenticationFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Basic some.credentials");
         MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(jwtTokenProvider.parseAccessToken(null)).willReturn(Optional.empty());
 
         filter.doFilterInternal(request, response, filterChain);
 

@@ -3,7 +3,9 @@ services:
     image: mysql:8.0
     container_name: menupick-mysql
     ports:
-      - "3306:3306"
+      # 루프백에만 바인딩한다. "3306:3306"은 0.0.0.0 바인딩이라 같은 공유기/카페 와이파이의
+      # 다른 기기에서 menupick/menupick 계정으로 그대로 접속할 수 있다.
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: menupick
@@ -20,7 +22,8 @@ services:
     image: redis:7-alpine
     container_name: menupick-redis
     ports:
-      - "6379:6379"
+      # 로컬 Redis는 무인증이므로 외부 노출은 그대로 무단 접근이다. 루프백만 바인딩.
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
 

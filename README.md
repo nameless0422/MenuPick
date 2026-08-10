@@ -34,6 +34,7 @@
 
 ## docs
 
+- [Specification.md](docs/Specification.md) — 전체 스펙 문서 (기능 스펙 단일 진입점, 로드맵)
 - [Planning.md](docs/Planning.md) — 기술 설계 계획서 (스택, API, 데이터 모델, 인증, 리스크)
 - [DecisionLog.md](docs/DecisionLog.md) — 설계·구현 결정 기록 (왜 이렇게 만들었는지, 검토한 대안, 트레이드오프). **진행하면서 계속 갱신**
 - [Requirements.md](docs/Requirements.md) — 유저 스토리, 추천 품질 KPI, Phase 일정 초안

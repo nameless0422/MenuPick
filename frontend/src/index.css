@@ -109,3 +109,198 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ---- 공통 페이지/카드 UI (메뉴·식당·히스토리 화면에서 공유) ---- */
+
+.page {
+  text-align: left;
+  padding: 16px 24px 48px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+button {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text-h);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+}
+
+.card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-muted {
+  opacity: 0.6;
+  background: var(--code-bg);
+}
+
+.card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.card-main strong {
+  color: var(--text-h);
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.weight {
+  color: var(--accent);
+  letter-spacing: 2px;
+  font-size: 14px;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text);
+}
+
+.chip-tag {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: transparent;
+}
+
+.chip-warn {
+  color: var(--text-h);
+  background: transparent;
+  border-style: dashed;
+}
+
+.chip.selectable {
+  cursor: pointer;
+}
+.chip.selectable.on {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.menu-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.menu-form h3 {
+  margin: 0;
+  color: var(--text-h);
+  font-weight: 500;
+}
+.menu-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.menu-form label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.menu-form fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.menu-form legend {
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.weight-picker {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.weight-picker .star {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 22px;
+  color: var(--border);
+}
+.weight-picker .star.on {
+  color: var(--accent);
+}
+.weight-picker small {
+  margin-left: 8px;
+}
+
+.inline-add {
+  display: flex;
+  gap: 8px;
+}
+.inline-add input {
+  flex: 1;
+  max-width: 240px;
+}
+
+.error {
+  color: #d0342c;
+  font-size: 14px;
+}

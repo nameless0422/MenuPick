@@ -1,30 +1,16 @@
 package com.nameless0422.MenuPick.domain.pick;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
-import com.nameless0422.MenuPick.common.security.CustomAccessDeniedHandler;
-import com.nameless0422.MenuPick.common.security.CustomAuthenticationEntryPoint;
-import com.nameless0422.MenuPick.common.security.JwtAuthenticationFilter;
-import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
-import com.nameless0422.MenuPick.common.security.RateLimitFilter;
-import com.nameless0422.MenuPick.common.security.SecurityConfig;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
-import org.junit.jupiter.api.BeforeEach;
+import com.nameless0422.MenuPick.support.AbstractControllerTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,34 +20,14 @@ import java.util.Set;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PickController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, RateLimitFilter.class,
-        CustomAuthenticationEntryPoint.class, CustomAccessDeniedHandler.class})
-@ActiveProfiles("test")
-class PickControllerTest {
-
-    @Autowired private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+class PickControllerTest extends AbstractControllerTest {
 
     @MockitoBean private PickService pickService;
-    @MockitoBean private JwtTokenProvider jwtTokenProvider;
-    @MockitoBean private StringRedisTemplate redisTemplate;
-
-    private static final UsernamePasswordAuthenticationToken AUTH =
-            new UsernamePasswordAuthenticationToken(1L, null, List.of());
-
-    @SuppressWarnings("unchecked")
-    @BeforeEach
-    void setUp() {
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        given(redisTemplate.opsForValue()).willReturn(valueOps);
-        given(valueOps.increment(any())).willReturn(1L);
-    }
 
     @Test
     @DisplayName("POST /api/v1/pick - 랜덤 픽 성공")
@@ -111,7 +77,7 @@ class PickControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/pick - body 없이도 동작 (필터 없이 전체 픽)")
+    @DisplayName("POST /api/v1/pick - body 없이도 동작 (필터 없이 전체 픽, @Valid는 스킵됨)")
     void pick_withoutBody() throws Exception {
         var menuDetail = new MenuResponse.MenuDetail(
                 2L, "돈까스", null, 1, false, Set.of("일식"),
@@ -124,5 +90,41 @@ class PickControllerTest {
                         .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.menu.name").value("돈까스"));
+    }
+
+    // --- 요청 검증 (이슈 #6) ---
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 위도가 범위를 벗어나면 400")
+    void pick_latitudeOutOfRange_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\": 91.0, \"longitude\": 126.9784}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errors[0].field").value("latitude"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 경도가 범위를 벗어나면 400")
+    void pick_longitudeOutOfRange_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\": 37.5666, \"longitude\": -180.5}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("longitude"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - maxDistance가 0 이하면 400")
+    void pick_nonPositiveMaxDistance_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxDistance\": 0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("maxDistance"));
     }
 }

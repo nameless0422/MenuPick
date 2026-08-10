@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDateTime;
@@ -76,7 +77,7 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
                 .recommendedAt(LocalDateTime.now())
                 .build());
 
-        history.markVisited();
+        history.markVisited(LocalDateTime.now());
         historyRepository.flush();
 
         History found = historyRepository.findById(history.getId()).orElseThrow();
@@ -84,22 +85,47 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
         assertThat(found.getVisitedAt()).isNotNull();
     }
 
+    /**
+     * 히스토리 목록은 recommendedAt 필터 + id 역순 커서로만 조회한다(HistoryService).
+     * 정렬 기준이 id DESC이므로 "최근 = id가 큰 것"이 되는지 확인한다.
+     */
     @Test
-    @DisplayName("사용자의 최근 히스토리를 시간 역순으로 조회한다")
-    void findByUserIdOrderByRecommendedAtDesc() {
+    @DisplayName("기간 내 히스토리를 id 역순으로 조회한다")
+    void findByUserIdAndRecommendedAtAfterOrderByIdDesc() {
         LocalDateTime now = LocalDateTime.now();
-        historyRepository.save(History.builder()
+        History old = historyRepository.save(History.builder()
                 .user(user).menu(menu).recommendedAt(now.minusDays(2)).build());
-        historyRepository.save(History.builder()
-                .user(user).menu(menu).recommendedAt(now).build());
-        historyRepository.save(History.builder()
+        History mid = historyRepository.save(History.builder()
                 .user(user).menu(menu).recommendedAt(now.minusDays(1)).build());
+        History recent = historyRepository.save(History.builder()
+                .user(user).menu(menu).recommendedAt(now).build());
+        // 조회 기간(3일) 밖 — 필터로 제외되어야 한다
+        historyRepository.save(History.builder()
+                .user(user).menu(menu).recommendedAt(now.minusDays(10)).build());
+
+        List<History> histories = historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                user.getId(), now.minusDays(3), PageRequest.of(0, 10));
+
+        assertThat(histories).extracting(History::getId)
+                .containsExactly(recent.getId(), mid.getId(), old.getId());
+    }
+
+    @Test
+    @DisplayName("커서(id)보다 작은 히스토리만 id 역순으로 조회한다")
+    void findByUserIdAndRecommendedAtAfterAndIdLessThanOrderByIdDesc() {
+        LocalDateTime now = LocalDateTime.now();
+        History first = historyRepository.save(History.builder()
+                .user(user).menu(menu).recommendedAt(now.minusDays(2)).build());
+        History second = historyRepository.save(History.builder()
+                .user(user).menu(menu).recommendedAt(now.minusDays(1)).build());
+        History third = historyRepository.save(History.builder()
+                .user(user).menu(menu).recommendedAt(now).build());
 
         List<History> histories = historyRepository
-                .findByUserIdOrderByRecommendedAtDesc(user.getId());
+                .findByUserIdAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
+                        user.getId(), now.minusDays(3), third.getId(), PageRequest.of(0, 10));
 
-        assertThat(histories).hasSize(3);
-        assertThat(histories.get(0).getRecommendedAt()).isAfter(histories.get(1).getRecommendedAt());
-        assertThat(histories.get(1).getRecommendedAt()).isAfter(histories.get(2).getRecommendedAt());
+        assertThat(histories).extracting(History::getId)
+                .containsExactly(second.getId(), first.getId());
     }
 }
