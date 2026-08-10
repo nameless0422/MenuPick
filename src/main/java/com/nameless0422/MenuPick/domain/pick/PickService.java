@@ -244,7 +244,10 @@ public class PickService {
         return new MenuResponse.MenuDetail(
                 menu.getId(), menu.getName(), menu.getMemo(),
                 menu.getWeight(), menu.isExcluded(),
-                menu.getCategories(), tags,
+                // open-in-view=false라 직렬화는 트랜잭션 밖에서 일어난다. LAZY 컬렉션을 그대로
+                // 넘기면 필터 없는 픽(카테고리를 한 번도 건드리지 않는 경로)에서 세션이 닫힌 뒤
+                // 초기화를 시도해 LazyInitializationException으로 500이 난다.
+                Set.copyOf(menu.getCategories()), tags,
                 menu.getCreatedAt(), menu.getUpdatedAt());
     }
 }
