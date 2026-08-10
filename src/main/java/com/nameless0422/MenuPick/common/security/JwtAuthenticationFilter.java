@@ -25,14 +25,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String token = resolveToken(request);
-
-        if (token != null && jwtTokenProvider.validateAccessToken(token)) {
-            Long userId = jwtTokenProvider.getUserId(token);
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(userId, null, List.of());
-            SecurityContextHolder.getContext().setAuthentication(auth);
-        }
+        // 토큰은 한 번만 파싱한다 — 검증과 userId 추출이 같은 Claims를 공유한다.
+        // 파싱 실패·만료는 빈 Optional로 돌아오므로 인증만 비워둔 채 체인을 계속 태우고,
+        // 최종 401 응답은 CustomAuthenticationEntryPoint가 만든다 (예외 유출로 인한 500 방지).
+        jwtTokenProvider.parseAccessToken(resolveToken(request))
+                .map(jwtTokenProvider::getUserId)
+                .ifPresent(userId -> {
+                    UsernamePasswordAuthenticationToken auth =
+                            new UsernamePasswordAuthenticationToken(userId, null, List.of());
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                });
 
         filterChain.doFilter(request, response);
     }

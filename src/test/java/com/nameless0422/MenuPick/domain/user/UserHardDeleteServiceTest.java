@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.user;
 
 import com.nameless0422.MenuPick.common.config.JpaConfig;
 import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
+import com.nameless0422.MenuPick.domain.auth.RefreshTokenStore;
 import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.Menu;
@@ -21,11 +22,13 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -42,6 +45,9 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
     @Autowired private RestaurantRepository restaurantRepository;
     @Autowired private HistoryRepository historyRepository;
     @Autowired private EntityManager em;
+
+    /** @DataJpaTest 슬라이스에는 Redis가 없다 — 키 삭제 호출 여부만 검증한다. */
+    @MockitoBean private RefreshTokenStore refreshTokenStore;
 
     private User targetUser;
     private User otherUser;
@@ -65,6 +71,14 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
         assertThat(tagRepository.findByUserIdAndName(targetUser.getId(), "혼밥")).isEmpty();
         assertThat(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(targetUser.getId())).isEmpty();
         assertThat(historyRepository.findByUserIdOrderByRecommendedAtDesc(targetUser.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("purge 시 Redis의 Refresh Token 키도 함께 삭제한다")
+    void purge_deletesRefreshToken() {
+        userHardDeleteService.purge(targetUser.getId());
+
+        verify(refreshTokenStore).delete(targetUser.getId());
     }
 
     @Test

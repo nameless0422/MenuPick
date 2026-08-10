@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.domain.user;
 
+import com.nameless0422.MenuPick.domain.auth.RefreshTokenStore;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
@@ -25,6 +26,7 @@ public class UserHardDeleteService {
     private final RestaurantRepository restaurantRepository;
     private final AuthProviderRepository authProviderRepository;
     private final UserRepository userRepository;
+    private final RefreshTokenStore refreshTokenStore;
     private final EntityManager em;
 
     @Transactional
@@ -46,5 +48,9 @@ public class UserHardDeleteService {
         em.clear();
 
         userRepository.deleteById(userId);
+
+        // DB 행이 사라져도 Redis의 Refresh Token은 TTL(최대 14일)까지 남아
+        // 삭제된 유저 ID로 토큰 재발급이 계속된다. 함께 정리한다.
+        refreshTokenStore.delete(userId);
     }
 }
