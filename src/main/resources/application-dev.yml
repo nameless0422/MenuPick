@@ -23,6 +23,14 @@ spring:
 rate-limit:
   # dev는 로드밸런서/리버스 프록시 뒤에 있다고 가정 (local과의 차이점)
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:true}
+  # 앱 앞단에 있는 "신뢰할 수 있는" 프록시/LB 개수.
+  # X-Forwarded-For는 각 프록시가 자신이 본 원격 주소를 오른쪽에 덧붙이므로,
+  # 왼쪽 항목은 클라이언트가 위조할 수 있다. 오른쪽에서 이 홉 수만큼 들어간 항목만 신뢰한다.
+  # 실제 토폴로지와 반드시 일치시킬 것 — 크게 잡으면 프록시 IP 하나로 전 사용자가 묶인다.
+  trusted-proxy-hops: ${RATE_LIMIT_TRUSTED_PROXY_HOPS:1}
+  # 인증 경로(IP 기준) / 외부 API 프록시 경로(사용자 기준) 분당 허용 횟수
+  auth-limit-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
+  proxy-limit-per-minute: ${RATE_LIMIT_PROXY_PER_MINUTE:30}
 
 cors:
   # 쉼표로 여러 오리진 지정 가능 (예: https://dev.menupick.com,https://admin-dev.menupick.com)

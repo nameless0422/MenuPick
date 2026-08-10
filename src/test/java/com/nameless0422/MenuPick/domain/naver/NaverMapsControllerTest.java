@@ -15,6 +15,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -26,6 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -121,5 +123,50 @@ class NaverMapsControllerTest {
         mockMvc.perform(get("/api/v1/naver/reverse-geocode")
                         .param("coords", "126.978,37.566"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // --- 파라미터 선검증 (이슈 #8) ---
+
+    @Test
+    @DisplayName("GET /api/v1/naver/geocode - query가 100자를 넘으면 업스트림 호출 없이 400")
+    void geocode_queryTooLong_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/naver/geocode")
+                        .param("query", "가".repeat(101))
+                        .with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(naverMapsClient);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/naver/geocode - count가 100을 넘으면 400")
+    void geocode_countOutOfRange_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/naver/geocode")
+                        .param("query", "서울시청")
+                        .param("count", "1000")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(naverMapsClient);
+    }
+
+    // --- 프록시 경로 레이트 리밋 (이슈 #10) ---
+
+    @Test
+    @DisplayName("GET /api/v1/naver/geocode - 분당 한도를 넘으면 429 + Retry-After")
+    @SuppressWarnings("unchecked")
+    void geocode_rateLimited_returns429() throws Exception {
+        // SecurityConfig가 RateLimitFilter를 JwtAuthenticationFilter보다 앞에 등록하므로
+        // 이 필터 시점에는 SecurityContext가 비어 있고, 설계대로 IP 키로 폴백한다.
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:proxy:ip:127.0.0.1")), eq("60")))
+                .willReturn(31L);
+
+        mockMvc.perform(get("/api/v1/naver/geocode")
+                        .param("query", "서울시청")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "60"));
+
+        verifyNoInteractions(naverMapsClient);
     }
 }
