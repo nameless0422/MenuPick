@@ -24,7 +24,8 @@ public class HistoryService {
     private final RestaurantRepository restaurantRepository;
 
     public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, int size) {
-        int effectiveDays = (days != null && days > 0) ? days : DEFAULT_DAYS;
+        // days는 컨트롤러에서 @Min(1)로 검증되므로 여기서는 미지정(null) 여부만 판단한다.
+        int effectiveDays = (days != null) ? days : DEFAULT_DAYS;
         LocalDateTime after = LocalDateTime.now().minusDays(effectiveDays);
         PageRequest pageable = PageRequest.of(0, size + 1);
 

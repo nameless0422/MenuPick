@@ -26,10 +26,14 @@ public enum ErrorCode {
     LOCK_ACQUISITION_FAILED(HttpStatus.TOO_MANY_REQUESTS, "현재 요청이 많습니다. 잠시 후 다시 시도해주세요."),
     TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요."),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."),
+    REDIS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요."),
+
+    // --- Auth ---
+    OAUTH_INVALID_CODE(HttpStatus.UNAUTHORIZED, "소셜 로그인 인가 코드가 유효하지 않습니다. 다시 로그인해주세요."),
+    OAUTH_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "소셜 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
 
     // --- Menu ---
     MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "메뉴를 찾을 수 없습니다."),
-    MENU_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 메뉴에 대한 접근 권한이 없습니다."),
 
     // --- Tag ---
     TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "태그를 찾을 수 없습니다."),
@@ -41,7 +45,6 @@ public enum ErrorCode {
 
     // --- Restaurant ---
     RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "식당을 찾을 수 없습니다."),
-    RESTAURANT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 식당에 대한 접근 권한이 없습니다."),
 
     // --- Naver Maps ---
     NAVER_MAPS_API_ERROR(HttpStatus.BAD_GATEWAY, "네이버 지도 API 호출에 실패했습니다."),
@@ -53,8 +56,7 @@ public enum ErrorCode {
     NO_PICK_CANDIDATES(HttpStatus.NOT_FOUND, "필터 조건에 맞는 메뉴가 없습니다."),
 
     // --- History ---
-    HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다."),
-    HISTORY_ACCESS_DENIED(HttpStatus.FORBIDDEN, "해당 히스토리에 대한 접근 권한이 없습니다.");
+    HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다.");
 
     private final HttpStatus httpStatus;
     /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */

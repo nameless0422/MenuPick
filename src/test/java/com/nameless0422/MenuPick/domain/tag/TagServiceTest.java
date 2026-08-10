@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -122,12 +123,25 @@ class TagServiceTest {
     }
 
     @Test
-    @DisplayName("태그 삭제 - 타 사용자 접근 시 MENU_ACCESS_DENIED 예외")
-    void deleteTag_otherUser_throwsForbidden() {
+    @DisplayName("태그 삭제 - 타 사용자 접근 시 TAG_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void deleteTag_otherUser_throwsNotFound() {
         given(tagRepository.findById(1L)).willReturn(Optional.of(tag));
 
         assertThatThrownBy(() -> tagService.deleteTag(999L, 1L))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.MENU_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.TAG_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("태그 생성 - 사전 검사 통과 후 유니크 제약 위반(동시 생성) 시 TAG_DUPLICATE로 변환")
+    void createTag_concurrentInsert_translatedToDuplicate() {
+        given(tagRepository.findByUserIdAndName(1L, "혼밥")).willReturn(Optional.empty());
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(tagRepository.save(any(Tag.class)))
+                .willThrow(new DataIntegrityViolationException("uq_tags_user_name"));
+
+        assertThatThrownBy(() -> tagService.createTag(1L, new TagRequest.Create("혼밥")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.TAG_DUPLICATE);
     }
 }

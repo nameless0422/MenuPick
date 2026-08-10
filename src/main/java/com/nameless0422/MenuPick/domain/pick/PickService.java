@@ -112,6 +112,13 @@ public class PickService {
 
     private Menu weightedRandom(List<Menu> menus) {
         int totalWeight = menus.stream().mapToInt(Menu::getWeight).sum();
+
+        // weight는 1~5로 검증되지만, 과거 데이터·직접 DB 수정 등으로 합이 0 이하가 되면
+        // nextInt(bound)가 IllegalArgumentException을 던진다. 균등 랜덤으로 폴백한다.
+        if (totalWeight <= 0) {
+            return menus.get(ThreadLocalRandom.current().nextInt(menus.size()));
+        }
+
         int random = ThreadLocalRandom.current().nextInt(totalWeight);
         int cumulative = 0;
         for (Menu menu : menus) {
@@ -176,6 +183,13 @@ public class PickService {
                 .orElse(null);
     }
 
+    /**
+     * 픽 결과를 히스토리로 남긴다.
+     *
+     * <p>필터 조건에는 카테고리·태그·최대거리만 기록하고 <b>기준 좌표(latitude/longitude)는
+     * 의도적으로 기록하지 않는다</b> — 위치정보 최소 수집 원칙(docs/PrivacyReview.md).
+     * 좌표는 픽 시점의 후보 필터링에만 쓰이고 저장되지 않는다.
+     */
     private History saveHistory(Long userId, Menu picked, Restaurant restaurant, PickRequest request) {
         History history = History.builder()
                 .user(userRepository.getReferenceById(userId))

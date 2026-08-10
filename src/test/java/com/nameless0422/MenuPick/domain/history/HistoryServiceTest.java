@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -18,11 +19,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -206,16 +209,35 @@ class HistoryServiceTest {
     // --- 엣지 케이스 ---
 
     @Test
-    @DisplayName("days=0 또는 음수 — 기본 7일로 동작")
-    void getHistories_zeroDays_fallbackToDefault() {
+    @DisplayName("days 미지정(null) — 기본 7일 기준 시각으로 조회한다")
+    void getHistories_nullDays_usesDefault7Days() {
+        var afterCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of());
 
-        // days=0은 조건에 의해 DEFAULT_DAYS(7)로 동작
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, 0, 20);
+        historyService.getHistories(1L, null, null, 20);
 
-        assertThat(result.histories()).isEmpty();
+        verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), afterCaptor.capture(), any(PageRequest.class));
+        assertThat(afterCaptor.getValue())
+                .isCloseTo(LocalDateTime.now().minusDays(7), within(1, ChronoUnit.MINUTES));
+    }
+
+    @Test
+    @DisplayName("days 지정 — 해당 일수만큼 거슬러 올라간 시각으로 조회한다 (0 이하는 컨트롤러 @Min(1)이 차단)")
+    void getHistories_explicitDays_usedAsIs() {
+        var afterCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of());
+
+        historyService.getHistories(1L, null, 30, 20);
+
+        verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), afterCaptor.capture(), any(PageRequest.class));
+        assertThat(afterCaptor.getValue())
+                .isCloseTo(LocalDateTime.now().minusDays(30), within(1, ChronoUnit.MINUTES));
     }
 
     @Test

@@ -101,6 +101,24 @@ class HistoryControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/history - days=0이면 400 (@Min(1))")
+    void getHistories_daysZero_badRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/history")
+                        .with(authentication(AUTH))
+                        .param("days", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history - days가 음수면 400 (@Min(1))")
+    void getHistories_daysNegative_badRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/history")
+                        .with(authentication(AUTH))
+                        .param("days", "-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("PATCH /api/v1/history/{id}/visit - 방문 처리 성공 (바디 없음)")
     void markVisited_success() throws Exception {
         mockMvc.perform(patch("/api/v1/history/1/visit")

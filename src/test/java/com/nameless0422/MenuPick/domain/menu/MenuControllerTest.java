@@ -141,6 +141,75 @@ class MenuControllerTest {
                 .andExpect(jsonPath("$.data.name").value("수정됨"));
     }
 
+    // --- 요청 검증 (이슈 #6, #7) ---
+
+    @Test
+    @DisplayName("PUT /api/v1/menus/{menuId} - isExcluded 누락 시 400 (이슈 #7 — 조용히 false로 풀리지 않는다)")
+    void updateMenu_missingIsExcluded_badRequest() throws Exception {
+        mockMvc.perform(put("/api/v1/menus/1")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"수정됨\",\"memo\":\"메모\",\"weight\":5}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errors[0].field").value("isExcluded"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/menus/{menuId} - isExcluded가 명시적 null이어도 400")
+    void updateMenu_nullIsExcluded_badRequest() throws Exception {
+        mockMvc.perform(put("/api/v1/menus/1")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"수정됨\",\"memo\":\"메모\",\"weight\":5,\"isExcluded\":null}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("isExcluded"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/menus - 공백 카테고리는 400")
+    void createMenu_blankCategory_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/menus")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"된장찌개\",\"weight\":1,\"categories\":[\"   \"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/menus - 20자를 넘는 카테고리는 400")
+    void createMenu_tooLongCategory_badRequest() throws Exception {
+        String longCategory = "가".repeat(21);
+        mockMvc.perform(post("/api/v1/menus")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"된장찌개\",\"weight\":1,\"categories\":[\"" + longCategory + "\"]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/weights - menuId가 null이면 400")
+    void batchUpdateWeight_nullMenuId_badRequest() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/weights")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entries\":[{\"menuId\":null,\"weight\":3}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/weights - 항목의 weight가 범위를 벗어나면 400 (@Valid 캐스케이드)")
+    void batchUpdateWeight_weightOutOfRange_badRequest() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/weights")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entries\":[{\"menuId\":1,\"weight\":9}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
     @Test
     @DisplayName("DELETE /api/v1/menus/{menuId} - 삭제 성공")
     void deleteMenu_success() throws Exception {

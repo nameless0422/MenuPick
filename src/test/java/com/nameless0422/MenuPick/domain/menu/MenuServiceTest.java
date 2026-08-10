@@ -105,7 +105,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 상세 조회 성공")
     void getMenu_success() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.getMenu(1L, 1L);
 
@@ -116,7 +116,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 상세 조회 - 미존재 시 MENU_NOT_FOUND")
     void getMenu_notFound() {
-        given(menuRepository.findById(999L)).willReturn(Optional.empty());
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.getMenu(1L, 999L))
                 .isInstanceOf(BusinessException.class)
@@ -124,20 +124,21 @@ class MenuServiceTest {
     }
 
     @Test
-    @DisplayName("메뉴 상세 조회 - 타 사용자 접근 시 MENU_ACCESS_DENIED")
-    void getMenu_otherUser_forbidden() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+    @DisplayName("메뉴 상세 조회 - 타 사용자 접근 시 MENU_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void getMenu_otherUser_notFound() {
+        // 조회 자체가 소유자 범위로 한정되므로 타인의 메뉴는 '없는 것'으로 보인다.
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.getMenu(2L, 1L))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.MENU_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
     }
 
     @Test
     @DisplayName("메뉴 상세 조회 - 삭제된 메뉴는 MENU_NOT_FOUND")
     void getMenu_deleted_notFound() {
-        menu.softDelete();
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        // deletedAt IS NULL 조건이 쿼리에 포함되어 soft-delete된 메뉴는 조회되지 않는다.
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.getMenu(1L, 1L))
                 .isInstanceOf(BusinessException.class)
@@ -184,7 +185,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 수정 성공")
     void updateMenu_success() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
                 new MenuRequest.Update("수정된 메뉴", "수정 메모", 5, true, Set.of("양식"), null));
@@ -196,14 +197,60 @@ class MenuServiceTest {
     }
 
     @Test
-    @DisplayName("메뉴 수정 - 타 사용자 접근 시 MENU_ACCESS_DENIED")
-    void updateMenu_otherUser_forbidden() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+    @DisplayName("메뉴 수정 - 타 사용자 접근 시 MENU_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void updateMenu_otherUser_notFound() {
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.updateMenu(2L, 1L,
                 new MenuRequest.Update("수정", "", 1, false, null, null)))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.MENU_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("메뉴 수정 - 카테고리/태그가 기존과 같으면 clear+재추가를 건너뛴다")
+    void updateMenu_sameCategoriesAndTags_skipsRewrite() throws Exception {
+        Tag tag = Tag.builder().user(user).name("혼밥").build();
+        setId(tag, 10L);
+        menu.addCategory("한식");
+        menu.addTag(tag);
+
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
+        given(tagRepository.findAllByIdInAndUserId(Set.of(10L), 1L)).willReturn(List.of(tag));
+
+        // 컬렉션 인스턴스가 교체되지 않고 내용도 그대로인지 확인한다.
+        Set<String> categoriesBefore = menu.getCategories();
+        Set<Tag> tagsBefore = menu.getTags();
+
+        MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
+                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("한식"), Set.of(10L)));
+
+        assertThat(result.categories()).containsExactly("한식");
+        assertThat(categoriesBefore).containsExactly("한식");
+        assertThat(tagsBefore).containsExactly(tag);
+    }
+
+    @Test
+    @DisplayName("메뉴 수정 - 카테고리가 달라지면 교체된다")
+    void updateMenu_differentCategories_replaced() {
+        menu.addCategory("한식");
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
+
+        MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
+                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("양식"), null));
+
+        assertThat(result.categories()).containsExactly("양식");
+    }
+
+    @Test
+    @DisplayName("메뉴 수정 - 카테고리는 저장 직전 trim된다 (대소문자는 정규화하지 않음)")
+    void updateMenu_trimsCategories() {
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
+
+        MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
+                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("  한식  "), null));
+
+        assertThat(result.categories()).containsExactly("한식");
     }
 
     // --- 삭제 ---
@@ -211,7 +258,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 삭제 성공")
     void deleteMenu_success() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         menuService.deleteMenu(1L, 1L);
 
@@ -221,7 +268,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 삭제 - 미존재 시 MENU_NOT_FOUND")
     void deleteMenu_notFound() {
-        given(menuRepository.findById(999L)).willReturn(Optional.empty());
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.deleteMenu(1L, 999L))
                 .isInstanceOf(BusinessException.class)
@@ -287,7 +334,7 @@ class MenuServiceTest {
     @Test
     @DisplayName("메뉴 제외 토글 - exclude")
     void toggleExclude_exclude() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         menuService.toggleExclude(1L, 1L, true);
 
@@ -298,7 +345,7 @@ class MenuServiceTest {
     @DisplayName("메뉴 제외 토글 - include")
     void toggleExclude_include() {
         menu.exclude();
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         menuService.toggleExclude(1L, 1L, false);
 
@@ -306,13 +353,13 @@ class MenuServiceTest {
     }
 
     @Test
-    @DisplayName("메뉴 제외 토글 - 타 사용자 접근 시 MENU_ACCESS_DENIED")
-    void toggleExclude_otherUser_forbidden() {
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+    @DisplayName("메뉴 제외 토글 - 타 사용자 접근 시 MENU_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void toggleExclude_otherUser_notFound() {
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.toggleExclude(2L, 1L, true))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.MENU_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
     }
 
     // --- 엣지 케이스 ---
@@ -340,7 +387,7 @@ class MenuServiceTest {
     @DisplayName("메뉴 수정 — 카테고리를 비움")
     void updateMenu_clearCategories() {
         menu.addCategory("한식");
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
                 new MenuRequest.Update("김치찌개", "메모", 3, false, null, null));
@@ -372,12 +419,31 @@ class MenuServiceTest {
     @Test
     @DisplayName("삭제된 메뉴에 제외 토글 시도 — MENU_NOT_FOUND")
     void toggleExclude_deletedMenu_notFound() {
-        menu.softDelete();
-        given(menuRepository.findById(1L)).willReturn(Optional.of(menu));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.toggleExclude(1L, 1L, true))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("메뉴 생성 — 카테고리는 저장 직전 trim된다")
+    void createMenu_trimsCategories() {
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(menuRepository.save(any(Menu.class))).willAnswer(inv -> inv.getArgument(0));
+
+        MenuResponse.MenuDetail result = menuService.createMenu(1L,
+                new MenuRequest.Create("된장찌개", null, 1, Set.of(" 한식 "), null));
+
+        assertThat(result.categories()).containsExactly("한식");
+    }
+
+    @Test
+    @DisplayName("Menu.builder()에서 weight를 지정하지 않으면 기본값 1이 적용된다")
+    void menuBuilder_weightDefaultsToOne() {
+        Menu built = Menu.builder().user(user).name("기본가중치").build();
+
+        assertThat(built.getWeight()).isEqualTo(1);
     }
 
     // --- Helper ---

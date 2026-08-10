@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.restaurant;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
+import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantResponse;
 import com.nameless0422.MenuPick.domain.user.User;
@@ -23,12 +24,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class RestaurantServiceTest {
 
     @Mock private RestaurantRepository restaurantRepository;
     @Mock private UserRepository userRepository;
+    @Mock private MenuRestaurantRepository menuRestaurantRepository;
 
     @InjectMocks private RestaurantService restaurantService;
 
@@ -70,7 +74,7 @@ class RestaurantServiceTest {
     @Test
     @DisplayName("식당 상세 조회 성공")
     void getRestaurant_success() {
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(restaurant));
 
         RestaurantResponse.RestaurantDetail result = restaurantService.getRestaurant(1L, 1L);
 
@@ -81,7 +85,7 @@ class RestaurantServiceTest {
     @Test
     @DisplayName("식당 상세 조회 - 미존재 시 RESTAURANT_NOT_FOUND")
     void getRestaurant_notFound() {
-        given(restaurantRepository.findById(999L)).willReturn(Optional.empty());
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.getRestaurant(1L, 999L))
                 .isInstanceOf(BusinessException.class)
@@ -89,20 +93,21 @@ class RestaurantServiceTest {
     }
 
     @Test
-    @DisplayName("식당 상세 조회 - 타 사용자 접근 시 RESTAURANT_ACCESS_DENIED")
-    void getRestaurant_otherUser_forbidden() {
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+    @DisplayName("식당 상세 조회 - 타 사용자 접근 시 RESTAURANT_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void getRestaurant_otherUser_notFound() {
+        // 조회 자체가 소유자 범위로 한정되므로 타인의 식당은 '없는 것'으로 보인다.
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.getRestaurant(2L, 1L))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }
 
     @Test
     @DisplayName("식당 상세 조회 - 삭제된 식당은 RESTAURANT_NOT_FOUND")
     void getRestaurant_deleted_notFound() {
-        restaurant.softDelete();
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+        // deletedAt IS NULL 조건이 쿼리에 포함되어 soft-delete된 식당은 조회되지 않는다.
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.getRestaurant(1L, 1L))
                 .isInstanceOf(BusinessException.class)
@@ -129,7 +134,7 @@ class RestaurantServiceTest {
     @Test
     @DisplayName("식당 수정 성공")
     void updateRestaurant_success() {
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(restaurant));
 
         RestaurantResponse.RestaurantDetail result = restaurantService.updateRestaurant(1L, 1L,
                 new RestaurantRequest.Update("수정된 식당", "새 주소", "010-9999",
@@ -139,42 +144,44 @@ class RestaurantServiceTest {
     }
 
     @Test
-    @DisplayName("식당 삭제 성공 (soft delete)")
+    @DisplayName("식당 삭제 성공 (soft delete) — 메뉴-식당 링크도 함께 정리된다")
     void deleteRestaurant_success() {
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(restaurant));
 
         restaurantService.deleteRestaurant(1L, 1L);
 
         assertThat(restaurant.isDeleted()).isTrue();
+        verify(menuRestaurantRepository).deleteByRestaurantId(1L);
     }
 
     // --- 엣지 케이스 ---
 
     @Test
-    @DisplayName("식당 수정 — 타 사용자 접근 시 RESTAURANT_ACCESS_DENIED")
-    void updateRestaurant_otherUser_forbidden() {
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+    @DisplayName("식당 수정 — 타 사용자 접근 시 RESTAURANT_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void updateRestaurant_otherUser_notFound() {
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.updateRestaurant(2L, 1L,
                 new RestaurantRequest.Update("수정", "주소", null, null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }
 
     @Test
-    @DisplayName("식당 삭제 — 타 사용자 접근 시 RESTAURANT_ACCESS_DENIED")
-    void deleteRestaurant_otherUser_forbidden() {
-        given(restaurantRepository.findById(1L)).willReturn(Optional.of(restaurant));
+    @DisplayName("식당 삭제 — 타 사용자 접근 시 RESTAURANT_NOT_FOUND (403 아님 — 존재 노출 차단)")
+    void deleteRestaurant_otherUser_notFound() {
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.deleteRestaurant(2L, 1L))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_ACCESS_DENIED);
+                .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
+        verify(menuRestaurantRepository, never()).deleteByRestaurantId(any());
     }
 
     @Test
     @DisplayName("식당 삭제 — 미존재 시 RESTAURANT_NOT_FOUND")
     void deleteRestaurant_notFound() {
-        given(restaurantRepository.findById(999L)).willReturn(Optional.empty());
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.deleteRestaurant(1L, 999L))
                 .isInstanceOf(BusinessException.class)
@@ -184,7 +191,7 @@ class RestaurantServiceTest {
     @Test
     @DisplayName("식당 수정 — 미존재 시 RESTAURANT_NOT_FOUND")
     void updateRestaurant_notFound() {
-        given(restaurantRepository.findById(999L)).willReturn(Optional.empty());
+        given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.updateRestaurant(1L, 999L,
                 new RestaurantRequest.Update("수정", "주소", null, null, null, null, null)))

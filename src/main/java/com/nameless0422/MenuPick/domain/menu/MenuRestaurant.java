@@ -9,7 +9,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "menu_restaurants")
+// DDL은 Flyway가 관리하므로 동작 변화는 없다 — 스키마(V1 uq_menu_restaurant)와 엔티티의
+// 불변식을 코드에서도 드러내기 위한 문서화 목적의 선언이다.
+@Table(name = "menu_restaurants",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_menu_restaurant", columnNames = {"menu_id", "restaurant_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class MenuRestaurant extends BaseTimeEntity {

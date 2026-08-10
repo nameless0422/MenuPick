@@ -111,7 +111,7 @@ class PickControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/pick - body 없이도 동작 (필터 없이 전체 픽)")
+    @DisplayName("POST /api/v1/pick - body 없이도 동작 (필터 없이 전체 픽, @Valid는 스킵됨)")
     void pick_withoutBody() throws Exception {
         var menuDetail = new MenuResponse.MenuDetail(
                 2L, "돈까스", null, 1, false, Set.of("일식"),
@@ -124,5 +124,41 @@ class PickControllerTest {
                         .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.menu.name").value("돈까스"));
+    }
+
+    // --- 요청 검증 (이슈 #6) ---
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 위도가 범위를 벗어나면 400")
+    void pick_latitudeOutOfRange_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\": 91.0, \"longitude\": 126.9784}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errors[0].field").value("latitude"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 경도가 범위를 벗어나면 400")
+    void pick_longitudeOutOfRange_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\": 37.5666, \"longitude\": -180.5}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("longitude"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - maxDistance가 0 이하면 400")
+    void pick_nonPositiveMaxDistance_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxDistance\": 0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("maxDistance"));
     }
 }
