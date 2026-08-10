@@ -96,8 +96,9 @@ public class Menu extends BaseTimeEntity {
         this.isExcluded = false;
     }
 
-    public void softDelete() {
-        this.deletedAt = LocalDateTime.now();
+    /** 삭제 시각은 서비스가 주입한다 — 엔티티는 Clock 빈을 주입받을 수 없다. */
+    public void softDelete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 
     public boolean isDeleted() {

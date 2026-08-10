@@ -35,7 +35,8 @@ public class UserHardDeleteService {
 
         historyRepository.deleteFilterConditionsByUserId(userId);
         historyRepository.deleteAllByUserId(userId);
-        menuRestaurantRepository.deleteAllByUserId(userId);
+        menuRestaurantRepository.deleteAllByMenuOwnerId(userId);
+        menuRestaurantRepository.deleteAllByRestaurantOwnerId(userId);
         menuRepository.deleteMenuTagsByUserId(userId);
         menuRepository.deleteMenuCategoriesByUserId(userId);
         menuRepository.deleteAllByUserId(userId);

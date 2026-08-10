@@ -54,13 +54,17 @@ public class History {
         this.recommendedAt = recommendedAt;
     }
 
-    public void markVisited() {
+    /**
+     * 엔티티는 빈(Clock) 주입이 불가능하므로 현재 시각을 직접 만들지 않고
+     * 서비스에서 주입받는다(시간대 고정·테스트 가능성 확보).
+     */
+    public void markVisited(LocalDateTime visitedAt) {
         this.isVisited = true;
-        this.visitedAt = LocalDateTime.now();
+        this.visitedAt = visitedAt;
     }
 
-    public void markVisited(Restaurant restaurant) {
-        markVisited();
+    public void markVisited(Restaurant restaurant, LocalDateTime visitedAt) {
+        markVisited(visitedAt);
         if (restaurant != null) {
             this.restaurant = restaurant;
         }

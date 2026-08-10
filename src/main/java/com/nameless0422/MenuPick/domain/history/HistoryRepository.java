@@ -12,8 +12,6 @@ import java.util.Optional;
 
 public interface HistoryRepository extends JpaRepository<History, Long> {
 
-    List<History> findByUserIdOrderByRecommendedAtDesc(Long userId);
-
     @Modifying
     @Query("delete from HistoryFilterCondition fc where fc.history.id in " +
             "(select h.id from History h where h.user.id = :userId)")

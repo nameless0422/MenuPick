@@ -12,6 +12,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,6 +27,7 @@ public class MenuService {
     private final MenuRepository menuRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     public MenuResponse.MenuListResponse getMenus(Long userId, Long cursor, int size) {
         var pageable = PageRequest.of(0, size + 1);
@@ -97,7 +100,7 @@ public class MenuService {
 
     @Transactional
     public void deleteMenu(Long userId, Long menuId) {
-        findMenuOrThrow(userId, menuId).softDelete();
+        findMenuOrThrow(userId, menuId).softDelete(LocalDateTime.now(clock));
     }
 
     @Transactional

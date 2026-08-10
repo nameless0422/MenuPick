@@ -12,20 +12,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -34,9 +34,18 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class HistoryServiceTest {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    /** KST 자정 직후로 고정 — UTC 기준으로 계산하면 전날(1/14 15:30)이 되는 시각. */
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            ZonedDateTime.of(2026, 1, 15, 0, 30, 0, 0, KST).toInstant(), KST);
+
+    private static final LocalDateTime NOW = LocalDateTime.now(FIXED_CLOCK);
+
     @Mock private HistoryRepository historyRepository;
     @Mock private RestaurantRepository restaurantRepository;
-    @InjectMocks private HistoryService historyService;
+
+    private HistoryService historyService;
 
     private User user;
     private Menu menu;
@@ -44,6 +53,8 @@ class HistoryServiceTest {
 
     @BeforeEach
     void setUp() {
+        historyService = new HistoryService(historyRepository, restaurantRepository, FIXED_CLOCK);
+
         user = User.builder().email("test@test.com").nickname("tester").build();
         ReflectionTestUtils.setField(user, "id", 1L);
 
@@ -57,7 +68,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("히스토리 목록 조회 — 기본 7일")
     void getHistories_default7Days() {
-        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+        var history = createHistory(1L, menu, restaurant, false, NOW);
 
         given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
@@ -74,7 +85,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("히스토리 목록 조회 — 커서 기반 페이지네이션")
     void getHistories_withCursor() {
-        var history = createHistory(5L, menu, null, false, LocalDateTime.now());
+        var history = createHistory(5L, menu, null, false, NOW);
 
         given(historyRepository.findByUserIdAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
                 eq(1L), any(LocalDateTime.class), eq(10L), any(PageRequest.class)))
@@ -102,8 +113,8 @@ class HistoryServiceTest {
     @Test
     @DisplayName("히스토리 목록 조회 — hasNext 판별")
     void getHistories_hasNext() {
-        var h1 = createHistory(2L, menu, null, false, LocalDateTime.now());
-        var h2 = createHistory(1L, menu, null, false, LocalDateTime.now().minusHours(1));
+        var h1 = createHistory(2L, menu, null, false, NOW);
+        var h2 = createHistory(1L, menu, null, false, NOW.minusHours(1));
 
         given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
@@ -120,14 +131,14 @@ class HistoryServiceTest {
     @Test
     @DisplayName("방문 여부 업데이트 — 성공")
     void markVisited_success() {
-        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+        var history = createHistory(1L, menu, restaurant, false, NOW);
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
 
         historyService.markVisited(1L, 1L, null);
 
         assertThat(history.isVisited()).isTrue();
-        assertThat(history.getVisitedAt()).isNotNull();
+        assertThat(history.getVisitedAt()).isEqualTo(NOW);
     }
 
     @Test
@@ -143,7 +154,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("방문 처리 시 restaurantId 전달 — 히스토리의 식당이 덮어써진다")
     void markVisited_withRestaurantId_overwritesRestaurant() {
-        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+        var history = createHistory(1L, menu, restaurant, false, NOW);
         var visited = Restaurant.builder().user(user).name("실제방문식당").address("서울시 서초구").build();
         ReflectionTestUtils.setField(visited, "id", 2L);
 
@@ -160,7 +171,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("방문 처리 시 restaurantId 미전달 — 기존 식당이 유지된다")
     void markVisited_withoutRestaurantId_keepsExistingRestaurant() {
-        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+        var history = createHistory(1L, menu, restaurant, false, NOW);
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
 
@@ -172,7 +183,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("방문 처리 시 존재하지 않는 restaurantId — 404")
     void markVisited_restaurantNotFound() {
-        var history = createHistory(1L, menu, restaurant, false, LocalDateTime.now());
+        var history = createHistory(1L, menu, restaurant, false, NOW);
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
         given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(99L, 1L))
@@ -187,7 +198,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("히스토리 삭제 — 성공")
     void deleteHistory_success() {
-        var history = createHistory(1L, menu, null, false, LocalDateTime.now());
+        var history = createHistory(1L, menu, null, false, NOW);
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
 
@@ -220,8 +231,7 @@ class HistoryServiceTest {
 
         verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), afterCaptor.capture(), any(PageRequest.class));
-        assertThat(afterCaptor.getValue())
-                .isCloseTo(LocalDateTime.now().minusDays(7), within(1, ChronoUnit.MINUTES));
+        assertThat(afterCaptor.getValue()).isEqualTo(NOW.minusDays(7));
     }
 
     @Test
@@ -236,14 +246,41 @@ class HistoryServiceTest {
 
         verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), afterCaptor.capture(), any(PageRequest.class));
-        assertThat(afterCaptor.getValue())
-                .isCloseTo(LocalDateTime.now().minusDays(30), within(1, ChronoUnit.MINUTES));
+        assertThat(afterCaptor.getValue()).isEqualTo(NOW.minusDays(30));
+    }
+
+    @Test
+    @DisplayName("자정 경계 — days 기준 시각을 KST로 계산한다 (JVM 기본 시간대와 무관)")
+    void getHistories_daysBoundary_isBasedOnKst() {
+        // 고정 시각: 2026-01-15 00:30 KST == 2026-01-14 15:30 UTC.
+        // UTC 기준으로 계산하면 하루 전인 1/13 15:30이 나오지만, KST 기준이면 1/14 00:30이어야 한다.
+        var afterCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of());
+
+        historyService.getHistories(1L, null, 1, 20);
+
+        verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), afterCaptor.capture(), any(PageRequest.class));
+        assertThat(afterCaptor.getValue()).isEqualTo(LocalDateTime.of(2026, 1, 14, 0, 30));
+    }
+
+    @Test
+    @DisplayName("방문 시각도 KST 기준으로 기록한다")
+    void markVisited_recordsKstTime() {
+        var history = createHistory(1L, menu, restaurant, false, NOW);
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+
+        historyService.markVisited(1L, 1L, null);
+
+        assertThat(history.getVisitedAt()).isEqualTo(LocalDateTime.of(2026, 1, 15, 0, 30));
     }
 
     @Test
     @DisplayName("이미 방문 처리된 히스토리를 다시 방문 처리")
     void markVisited_alreadyVisited() {
-        var history = createHistory(1L, menu, restaurant, true, LocalDateTime.now());
+        var history = createHistory(1L, menu, restaurant, true, NOW);
         LocalDateTime firstVisitedAt = history.getVisitedAt();
 
         given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
@@ -258,7 +295,7 @@ class HistoryServiceTest {
     @Test
     @DisplayName("메뉴와 식당이 모두 null인 히스토리 조회")
     void getHistories_nullMenuAndRestaurant() {
-        var history = createHistory(1L, null, null, false, LocalDateTime.now());
+        var history = createHistory(1L, null, null, false, NOW);
 
         given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
@@ -275,7 +312,7 @@ class HistoryServiceTest {
     void getHistories_noFilterConditions() {
         var history = History.builder()
                 .user(user).menu(menu).restaurant(restaurant)
-                .recommendedAt(LocalDateTime.now())
+                .recommendedAt(NOW)
                 .build();
         ReflectionTestUtils.setField(history, "id", 1L);
 
@@ -298,7 +335,7 @@ class HistoryServiceTest {
                 .build();
         ReflectionTestUtils.setField(history, "id", id);
         if (visited) {
-            history.markVisited();
+            history.markVisited(recommendedAt);
         }
         history.addFilterCondition("CATEGORY", "한식");
         return history;

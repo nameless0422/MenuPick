@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -35,6 +36,8 @@ public class PickService {
     private final HistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
+    /** 추천 시각을 KST 기준으로 기록한다 — 히스토리 days 필터와 기준 시간대를 맞춘다. */
+    private final Clock clock;
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
@@ -195,7 +198,7 @@ public class PickService {
                 .user(userRepository.getReferenceById(userId))
                 .menu(picked)
                 .restaurant(restaurant)
-                .recommendedAt(LocalDateTime.now())
+                .recommendedAt(LocalDateTime.now(clock))
                 .build();
 
         if (request != null) {

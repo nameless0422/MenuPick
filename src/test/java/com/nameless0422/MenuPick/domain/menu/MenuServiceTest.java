@@ -12,13 +12,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.lang.reflect.Field;
+import java.time.Clock;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -38,7 +40,11 @@ class MenuServiceTest {
     @Mock private TagRepository tagRepository;
     @Mock private UserRepository userRepository;
 
-    @InjectMocks private MenuService menuService;
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            ZonedDateTime.of(2026, 1, 15, 0, 30, 0, 0, ZoneId.of("Asia/Seoul")).toInstant(),
+            ZoneId.of("Asia/Seoul"));
+
+    private MenuService menuService;
 
     private User user;
     private User otherUser;
@@ -46,6 +52,8 @@ class MenuServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        menuService = new MenuService(menuRepository, tagRepository, userRepository, FIXED_CLOCK);
+
         user = User.builder().email("test@test.com").nickname("tester").build();
         setId(user, 1L);
 

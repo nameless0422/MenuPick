@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,7 +74,7 @@ class RestaurantRepositoryTest extends AbstractIntegrationTest {
                 .latitude(new BigDecimal("37.0000000"))
                 .longitude(new BigDecimal("127.0000000"))
                 .build());
-        deleted.softDelete();
+        deleted.softDelete(LocalDateTime.now());
         restaurantRepository.flush();
 
         List<Restaurant> restaurants = restaurantRepository

@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -20,6 +22,7 @@ public class RestaurantService {
     private final RestaurantRepository restaurantRepository;
     private final UserRepository userRepository;
     private final MenuRestaurantRepository menuRestaurantRepository;
+    private final Clock clock;
 
     public List<RestaurantResponse.RestaurantSummary> getRestaurants(Long userId) {
         return restaurantRepository.findAllByUserIdAndDeletedAtIsNull(userId).stream()
@@ -68,7 +71,7 @@ public class RestaurantService {
         // 충돌한다. 여기서 일괄 정리한다.
         menuRestaurantRepository.deleteByRestaurantId(restaurantId);
 
-        restaurant.softDelete();
+        restaurant.softDelete(LocalDateTime.now(clock));
     }
 
     /**

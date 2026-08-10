@@ -11,12 +11,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,13 +36,20 @@ class RestaurantServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private MenuRestaurantRepository menuRestaurantRepository;
 
-    @InjectMocks private RestaurantService restaurantService;
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            ZonedDateTime.of(2026, 1, 15, 0, 30, 0, 0, ZoneId.of("Asia/Seoul")).toInstant(),
+            ZoneId.of("Asia/Seoul"));
+
+    private RestaurantService restaurantService;
 
     private User user;
     private Restaurant restaurant;
 
     @BeforeEach
     void setUp() throws Exception {
+        restaurantService = new RestaurantService(restaurantRepository, userRepository,
+                menuRestaurantRepository, FIXED_CLOCK);
+
         user = User.builder().email("test@test.com").nickname("tester").build();
         setId(user, 1L);
 
@@ -199,24 +208,10 @@ class RestaurantServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }
 
-    @Test
-    @DisplayName("식당 생성 — optional 필드 null로 생성")
-    void createRestaurant_withNullOptionalFields() {
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(restaurantRepository.save(any(Restaurant.class))).willAnswer(inv -> {
-            Restaurant saved = inv.getArgument(0);
-            try { setId(saved, 100L); } catch (Exception ignored) {}
-            return saved;
-        });
-
-        RestaurantResponse.RestaurantDetail result = restaurantService.createRestaurant(1L,
-                new RestaurantRequest.Create("미니멀 식당", "서울", null, null, null, null, null));
-
-        assertThat(result.name()).isEqualTo("미니멀 식당");
-        assertThat(result.phone()).isNull();
-        assertThat(result.latitude()).isNull();
-        assertThat(result.naverPlaceId()).isNull();
-    }
+    // 좌표(latitude/longitude)가 null인 채 생성이 성공하는 케이스는 존재할 수 없어 테스트를 제거했다.
+    // RestaurantRequest.Create가 두 필드에 @NotNull을 걸어 컨트롤러에서 400으로 막고,
+    // restaurants 테이블도 NOT NULL이라 서비스 계층까지 도달 자체가 불가능하다.
+    // 실제로 통과하지 않는 상태를 "성공"으로 단언하면 스키마 계약이 바뀌어도 아무도 눈치채지 못한다.
 
     @Test
     @DisplayName("식당 목록 — 빈 목록 반환")

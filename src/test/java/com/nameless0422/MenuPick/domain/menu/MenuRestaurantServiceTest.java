@@ -18,6 +18,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -144,7 +145,7 @@ class MenuRestaurantServiceTest {
                 .latitude(new BigDecimal("37.5")).longitude(new BigDecimal("127.0"))
                 .build();
         ReflectionTestUtils.setField(deleted, "id", 9L);
-        deleted.softDelete();
+        deleted.softDelete(LocalDateTime.now());
         MenuRestaurant deletedLink = MenuRestaurant.builder().menu(menu).restaurant(deleted).build();
 
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
@@ -174,7 +175,7 @@ class MenuRestaurantServiceTest {
     @Test
     @DisplayName("메뉴-식당 연결 수정 - 식당이 soft-delete면 MENU_RESTAURANT_NOT_FOUND")
     void updateMenuRestaurant_deletedRestaurant_notFound() {
-        restaurant.softDelete();
+        restaurant.softDelete(LocalDateTime.now());
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
         given(menuRestaurantRepository.findByMenuIdAndRestaurantId(1L, 2L)).willReturn(Optional.of(link));
 
@@ -198,7 +199,7 @@ class MenuRestaurantServiceTest {
     @Test
     @DisplayName("메뉴-식당 연결 삭제 - 식당이 soft-delete면 MENU_RESTAURANT_NOT_FOUND")
     void deleteMenuRestaurant_deletedRestaurant_notFound() {
-        restaurant.softDelete();
+        restaurant.softDelete(LocalDateTime.now());
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
         given(menuRestaurantRepository.findByMenuIdAndRestaurantId(1L, 2L)).willReturn(Optional.of(link));
 

@@ -2,8 +2,6 @@ package com.nameless0422.MenuPick.domain.tag;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
-import com.nameless0422.MenuPick.domain.menu.Menu;
-import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.tag.dto.TagRequest;
 import com.nameless0422.MenuPick.domain.tag.dto.TagResponse;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
@@ -21,7 +19,6 @@ public class TagService {
 
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
-    private final MenuRepository menuRepository;
 
     public List<TagResponse.TagInfo> searchTags(Long userId, String keyword) {
         if (keyword == null || keyword.isBlank()) {
@@ -63,8 +60,9 @@ public class TagService {
             throw new BusinessException(ErrorCode.TAG_NOT_FOUND);
         }
 
-        List<Menu> menusWithTag = menuRepository.findAllByTagId(tagId);
-        menusWithTag.forEach(menu -> menu.removeTag(tag));
+        // 연결된 메뉴를 M건 로드해 컬렉션에서 하나씩 빼면 메뉴 수만큼 쿼리가 늘어난다.
+        // 조인 테이블을 tag_id로 한 번에 지운다.
+        tagRepository.deleteMenuTagsByTagId(tagId);
 
         tagRepository.delete(tag);
     }

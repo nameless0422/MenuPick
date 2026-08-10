@@ -2,8 +2,6 @@ package com.nameless0422.MenuPick.domain.tag;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
-import com.nameless0422.MenuPick.domain.menu.Menu;
-import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.tag.dto.TagRequest;
 import com.nameless0422.MenuPick.domain.tag.dto.TagResponse;
 import com.nameless0422.MenuPick.domain.user.User;
@@ -12,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,7 +33,6 @@ class TagServiceTest {
 
     @Mock private TagRepository tagRepository;
     @Mock private UserRepository userRepository;
-    @Mock private MenuRepository menuRepository;
 
     @InjectMocks private TagService tagService;
 
@@ -99,17 +99,27 @@ class TagServiceTest {
     }
 
     @Test
-    @DisplayName("태그 삭제 성공 - 연결된 메뉴에서 태그 제거")
+    @DisplayName("태그 삭제 성공 - menu_tags 링크를 벌크 DELETE 한 번으로 정리하고 태그를 삭제한다")
     void deleteTag_success() {
         given(tagRepository.findById(1L)).willReturn(Optional.of(tag));
-        Menu menu = Menu.builder().user(user).name("김치찌개").memo("").weight(1).build();
-        menu.addTag(tag);
-        given(menuRepository.findAllByTagId(1L)).willReturn(List.of(menu));
 
         tagService.deleteTag(1L, 1L);
 
-        assertThat(menu.getTags()).doesNotContain(tag);
-        verify(tagRepository).delete(tag);
+        InOrder inOrder = inOrder(tagRepository);
+        // FK 때문에 링크를 먼저 지운 뒤 태그를 지워야 한다
+        inOrder.verify(tagRepository).deleteMenuTagsByTagId(1L);
+        inOrder.verify(tagRepository).delete(tag);
+    }
+
+    @Test
+    @DisplayName("태그 삭제 - 타인 태그·미존재 시 링크 삭제도 하지 않는다")
+    void deleteTag_notOwned_doesNotTouchLinks() {
+        given(tagRepository.findById(1L)).willReturn(Optional.of(tag));
+
+        assertThatThrownBy(() -> tagService.deleteTag(999L, 1L))
+                .isInstanceOf(BusinessException.class);
+
+        verify(tagRepository, never()).deleteMenuTagsByTagId(any());
     }
 
     @Test
