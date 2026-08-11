@@ -266,7 +266,8 @@ function RestaurantEditForm({
       </label>
       <label>
         전화
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={30} />
+        {/* DB가 VARCHAR(20)이라 여기서 막지 않으면 어느 필드가 문제인지 알 수 없는 409가 난다 */}
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />
       </label>
 
       {saveMutation.isError && <p className="error">{errorMessage(saveMutation.error)}</p>}
