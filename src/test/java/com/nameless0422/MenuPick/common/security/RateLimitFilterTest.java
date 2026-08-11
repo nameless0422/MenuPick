@@ -33,9 +33,9 @@ class RateLimitFilterTest {
 
     private RateLimitFilter rateLimitFilter;
 
-    /** trust-proxy=false, 홉 1, auth 10/분, proxy 30/분, 윈도우 60초 */
+    /** trust-proxy=false, 홉 1, auth 10/분, proxy 30/분, demo 10/분, 윈도우 60초 */
     private static RateLimitProperties props(boolean trustProxy, int hops) {
-        return new RateLimitProperties(trustProxy, hops, 10, 30, 60);
+        return new RateLimitProperties(trustProxy, hops, 10, 30, 10, 60);
     }
 
     @BeforeEach
@@ -307,6 +307,51 @@ class RateLimitFilterTest {
     @DisplayName("프록시 경로의 GET 이외 메서드는 제한 대상이 아니다")
     void proxyPath_nonGet_passThrough() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/kakao/search/keyword");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @Test
+    @DisplayName("게스트 데모 픽은 IP 기준 버킷을 쓴다")
+    @SuppressWarnings("unchecked")
+    void demoPick_usesIpBucket() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/pick/demo");
+        request.setRemoteAddr("203.0.113.7");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:demo:203.0.113.7")), eq("60")))
+                .willReturn(1L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("게스트 데모 픽 10회 초과 - 429")
+    @SuppressWarnings("unchecked")
+    void demoPick_exceedsLimit_returns429() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/pick/demo");
+        request.setRemoteAddr("203.0.113.8");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:demo:203.0.113.8")), eq("60")))
+                .willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("인증이 필요한 POST /pick은 데모 버킷에 걸리지 않는다")
+    void authenticatedPick_isNotDemoLimited() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/pick");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         rateLimitFilter.doFilterInternal(request, response, filterChain);

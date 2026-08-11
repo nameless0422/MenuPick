@@ -1,0 +1,50 @@
+/* 로그인 화면 전용 스타일 — 공용 클래스(index.css)에 없는 것만 정의한다 */
+
+.login-page {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 48px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-demo {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.login-demo-desc {
+  font-size: 14px;
+}
+
+.login-demo-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.login-demo-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.login-demo-categories {
+  font-size: 13px;
+}
+
+/* 시연 결과 바로 아래에서 전환을 유도한다 (온보딩 퍼널) */
+.login-demo-cta {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
