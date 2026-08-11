@@ -11,6 +11,7 @@ export default function Layout() {
         <Link to="/menus">메뉴</Link>
         <Link to="/restaurants">식당</Link>
         <Link to="/history">히스토리</Link>
+        <Link to="/settings">설정</Link>
         <button onClick={() => logout()}>로그아웃</button>
       </nav>
       <main>

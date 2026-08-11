@@ -1,0 +1,53 @@
+/* 설정 화면 전용 스타일 — 공용 클래스(index.css)에 없는 것만 정의한다 */
+
+.settings-section {
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.settings-section strong {
+  color: var(--text-h);
+}
+
+.settings-desc {
+  font-size: 14px;
+}
+
+/* 탈퇴 섹션은 실수로 들어오면 안 되는 영역이라 테두리로 다른 카드와 구분한다 */
+.settings-danger {
+  border-style: dashed;
+}
+
+.settings-policy {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.settings-agree {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.settings-withdraw {
+  color: #d0342c;
+  border-color: #d0342c;
+}
+.settings-withdraw:hover:not(:disabled) {
+  border-color: #d0342c;
+  background: rgba(208, 52, 44, 0.1);
+}
