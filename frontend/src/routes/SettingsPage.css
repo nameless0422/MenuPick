@@ -44,10 +44,10 @@
 }
 
 .settings-withdraw {
-  color: #d0342c;
-  border-color: #d0342c;
+  color: var(--danger);
+  border-color: var(--danger);
 }
 .settings-withdraw:hover:not(:disabled) {
-  border-color: #d0342c;
-  background: rgba(208, 52, 44, 0.1);
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }

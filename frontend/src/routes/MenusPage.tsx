@@ -62,6 +62,15 @@ export default function MenusPage() {
 
       {menusQuery.isPending && <p>불러오는 중…</p>}
       {menusQuery.isError && <p className="error">{errorMessage(menusQuery.error)}</p>}
+
+      {/* 삭제·제외 토글은 실패해도 onSettled가 목록을 새로고침해 원래대로 돌아간다.
+          이유를 알리지 않으면 사용자에게는 클릭이 그냥 씹힌 것으로만 보인다. */}
+      {deleteMutation.isError && (
+        <p className="error" role="alert">삭제하지 못했습니다. {errorMessage(deleteMutation.error)}</p>
+      )}
+      {excludeMutation.isError && (
+        <p className="error" role="alert">추천 제외 설정을 바꾸지 못했습니다. {errorMessage(excludeMutation.error)}</p>
+      )}
       {menusQuery.isSuccess && menus.length === 0 && (
         <p>등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요.</p>
       )}

@@ -171,15 +171,19 @@ export default function PickPage() {
         )}
       </div>
 
-      {result && <PickResultCard result={result} onRetry={spin} retrying={spinning || pickMutation.isPending} />}
+      {/* 픽 결과는 화면 일부만 조용히 바뀐다 — 알림이 없으면 스크린리더 사용자는
+          버튼을 눌러도 무엇이 뽑혔는지 알 수 없다. 이 앱의 핵심 동작이라 반드시 필요하다. */}
+      <div role="status" aria-live="polite">
+        {result && <PickResultCard result={result} onRetry={spin} retrying={spinning || pickMutation.isPending} />}
 
-      {noCandidates && (
-        <div className="card pick-empty">
-          <p>조건에 맞는 메뉴가 없어요 — 필터를 풀거나 메뉴를 추가해 보세요.</p>
-          <Link to="/menus">내 메뉴 관리하러 가기 →</Link>
-        </div>
-      )}
-      {error && !noCandidates && <p className="error">{apiErrorMessage(error)}</p>}
+        {noCandidates && (
+          <div className="card pick-empty">
+            <p>조건에 맞는 메뉴가 없어요 — 필터를 풀거나 메뉴를 추가해 보세요.</p>
+            <Link to="/menus">내 메뉴 관리하러 가기 →</Link>
+          </div>
+        )}
+      </div>
+      {error && !noCandidates && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
     </div>
   );
 }

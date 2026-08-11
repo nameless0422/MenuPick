@@ -1,7 +1,9 @@
 import { http, type ApiResponse } from "./http";
+import { fetchMenuRestaurants as fetchMenuRestaurantList } from "./menuRestaurants";
 
 // 백엔드 PickService가 실제로 기록하는 filterType 값 (History.java / PickService.java 참고).
-// CATEGORY: 카테고리명 그대로, TAG_INCLUDE/TAG_EXCLUDE: 태그 ID(문자열), MAX_DISTANCE: 미터(m) 값.
+// CATEGORY: 카테고리명 그대로, TAG_INCLUDE/TAG_EXCLUDE: 태그 "이름"(조회 실패 시에만 ID 문자열
+// 폴백 — PickService.resolveTagNames), MAX_DISTANCE: 미터(m) 값.
 export type HistoryFilterType = "CATEGORY" | "TAG_INCLUDE" | "TAG_EXCLUDE" | "MAX_DISTANCE";
 
 export interface HistoryFilterCondition {
@@ -46,20 +48,12 @@ export async function deleteHistory(historyId: number) {
 }
 
 // 메뉴에 연결된 식당 목록 — 방문 처리 시 실제 방문 식당을 고를 수 있는 후보로 사용.
-export interface MenuRestaurant {
-  menuId: number;
-  restaurantId: number;
-  restaurantName: string;
-  restaurantAddress: string;
-  rating: number | null;
-  memo: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+// 같은 백엔드 DTO를 두 곳에서 각자 선언하면 nullability가 갈린다(실제로 갈려 있었다).
+// 타입 정의는 menuRestaurants.ts 하나로 두고 여기서는 다시 내보내기만 한다.
+export type { MenuRestaurantDetail as MenuRestaurant } from "./menuRestaurants";
 
+// 이 화면은 목록 배열만 쓰므로 래퍼 응답을 벗겨서 돌려준다.
 export async function fetchMenuRestaurants(menuId: number) {
-  const res = await http.get<ApiResponse<{ menuRestaurants: MenuRestaurant[] }>>(
-    `/api/v1/menus/${menuId}/restaurants`,
-  );
-  return res.data.data!.menuRestaurants;
+  const { menuRestaurants } = await fetchMenuRestaurantList(menuId);
+  return menuRestaurants;
 }
