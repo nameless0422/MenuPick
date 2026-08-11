@@ -1,10 +1,12 @@
 package com.nameless0422.MenuPick.common.security;
 
+import com.nameless0422.MenuPick.common.logging.TraceIdFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -34,9 +36,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     UsernamePasswordAuthenticationToken auth =
                             new UsernamePasswordAuthenticationToken(userId, null, List.of());
                     SecurityContextHolder.getContext().setAuthentication(auth);
+                    MDC.put(TraceIdFilter.USER_ID_MDC_KEY, String.valueOf(userId));
                 });
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            // 서블릿 스레드는 재사용되므로 정리를 빠뜨리면 다음 요청 로그에 남의 userId가 붙는다.
+            // 키가 없을 때 remove는 무해하므로 인증 여부와 무관하게 무조건 지운다.
+            MDC.remove(TraceIdFilter.USER_ID_MDC_KEY);
+        }
     }
 
     private String resolveToken(HttpServletRequest request) {
