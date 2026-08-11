@@ -20,6 +20,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * <p>authLimitPerMinute: 로그인/토큰 재발급 등 인증 경로의 IP당 분당 허용 횟수.
  * <p>proxyLimitPerMinute: 외부 API 프록시 경로(kakao/naver)의 사용자당 분당 허용 횟수.
+ * <p>demoLimitPerMinute: 게스트 데모 픽의 IP당 분당 허용 횟수 (docs/Planning.md 4.3).
+ * 미인증 경로라 사용자 단위로 묶을 수단이 없어 IP가 유일한 기준이다.
  * <p>windowSeconds: 카운터 윈도우 길이(초). 429 응답의 Retry-After 값으로도 쓰인다.
  */
 @ConfigurationProperties(prefix = "rate-limit")
@@ -28,5 +30,6 @@ public record RateLimitProperties(
         @DefaultValue("1") int trustedProxyHops,
         @DefaultValue("10") int authLimitPerMinute,
         @DefaultValue("30") int proxyLimitPerMinute,
+        @DefaultValue("10") int demoLimitPerMinute,
         @DefaultValue("60") int windowSeconds
 ) {}
