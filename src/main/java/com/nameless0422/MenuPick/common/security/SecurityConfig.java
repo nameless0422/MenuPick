@@ -79,6 +79,9 @@ public class SecurityConfig {
                                 "/api/v1/auth/kakao",
                                 "/api/v1/auth/google",
                                 "/api/v1/auth/refresh").permitAll()
+                        // 게스트 데모 픽 — 온보딩 퍼널용 시연 (docs/Planning.md 4.3).
+                        // 고정 샘플만 반환하고 DB를 건드리지 않으며, RateLimitFilter가 IP 기준으로 제한한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/pick/demo").permitAll()
                         // springdoc.api-docs/swagger-ui.enabled가 false면 경로 자체가 등록되지 않는다
                         // (기본 false, local 프로파일만 true — docs/ImprovementBacklog.md 7번)
                         .requestMatchers(

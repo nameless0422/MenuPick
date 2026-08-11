@@ -31,3 +31,16 @@ export async function requestPick(request: PickRequest) {
   const res = await http.post<ApiResponse<PickResult>>("/api/v1/pick", request);
   return res.data.data!;
 }
+
+// PickResponse.DemoPickResult — 저장되지 않는 시연 결과라 id도 historyId도 없다
+export interface DemoPickResult {
+  name: string;
+  categories: string[];
+}
+
+// 미인증으로 호출하는 유일한 API. 토큰이 없어도 200이므로 http 인터셉터의
+// 401 재발급 경로를 타지 않는다.
+export async function requestDemoPick() {
+  const res = await http.get<ApiResponse<DemoPickResult>>("/api/v1/pick/demo");
+  return res.data.data!;
+}

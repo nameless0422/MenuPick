@@ -28,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PickControllerTest extends AbstractControllerTest {
 
     @MockitoBean private PickService pickService;
+    @MockitoBean private DemoPickService demoPickService;
 
     @Test
     @DisplayName("POST /api/v1/pick - 랜덤 픽 성공")

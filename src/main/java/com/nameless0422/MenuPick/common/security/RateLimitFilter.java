@@ -30,6 +30,8 @@ import java.util.Set;
  *   <li>외부 API 프록시 경로(GET /api/v1/kakao/**, /api/v1/naver/**) — 인증 사용자 ID 기준.
  *       카카오/네이버 쿼터를 소모하는 경로라 개별 계정의 폭주를 막아야 한다.
  *       SecurityContext가 아직 비어 있으면 IP로 폴백한다.</li>
+ *   <li>게스트 데모 픽(GET /api/v1/pick/demo) — permitAll이라 누구나 호출할 수 있으므로
+ *       IP 기준. 프록시 버킷과 달리 사용자 ID로 묶을 수단이 아예 없다.</li>
  * </ul>
  *
  * <p><b>현재 필터 체인 순서 주의</b>: SecurityConfig가 이 필터와 JwtAuthenticationFilter를 모두
@@ -50,6 +52,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final String AUTH_KEY_PREFIX = "rl:auth:";
     /** 외부 API 프록시 경로 버킷 — 사용자 ID(폴백 시 IP) 기준. */
     private static final String PROXY_KEY_PREFIX = "rl:proxy:";
+    /** 게스트 데모 픽 버킷 — 미인증 경로라 IP 기준밖에 없다. */
+    private static final String DEMO_KEY_PREFIX = "rl:demo:";
+
+    private static final String DEMO_PICK_PATH = "/api/v1/pick/demo";
 
     private static final Set<String> AUTH_RATE_LIMITED_PATHS = Set.of(
             "/api/v1/auth/kakao",
@@ -127,6 +133,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equalsIgnoreCase(request.getMethod()) && AUTH_RATE_LIMITED_PATHS.contains(uri)) {
             return new Bucket(AUTH_KEY_PREFIX + resolveClientIp(request),
                     rateLimitProperties.authLimitPerMinute());
+        }
+
+        if ("GET".equalsIgnoreCase(request.getMethod()) && DEMO_PICK_PATH.equals(uri)) {
+            return new Bucket(DEMO_KEY_PREFIX + resolveClientIp(request),
+                    rateLimitProperties.demoLimitPerMinute());
         }
 
         if ("GET".equalsIgnoreCase(request.getMethod()) && isProxyPath(uri)) {
