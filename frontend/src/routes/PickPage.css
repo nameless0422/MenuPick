@@ -7,19 +7,7 @@
   margin-bottom: 20px;
 }
 
-/* .menu-form fieldset 스타일과 톤을 맞춘 필터 그룹 */
-.pick-filters fieldset {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pick-filters legend {
-  font-size: 14px;
-  padding: 0 4px;
-}
+/* fieldset/legend 스타일은 .menu-form과 동일해 index.css에서 함께 정의한다 */
 
 .pick-distance-toggle {
   display: flex;
@@ -49,7 +37,9 @@
   color: var(--accent);
   background: var(--accent-bg);
   border: 2px solid var(--accent-border);
-  min-width: 280px;
+  /* 320px 기기의 가용 폭은 약 270px이라 고정 280px이면 화면 밖으로 나가고
+     가로 스크롤이 생긴다 — 좁은 화면에서는 폭에 맞춰 줄인다. */
+  min-width: min(280px, 100%);
   min-height: 74px;
 }
 .pick-button:hover:not(:disabled) {

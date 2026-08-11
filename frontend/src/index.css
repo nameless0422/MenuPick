@@ -4,16 +4,19 @@
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
+  /* 이전 #aa3bff는 흰 배경 대비 4.39:1로 소형 텍스트 기준(4.5:1)에 미달했다.
+     선택된 필터 칩처럼 상태를 알리는 유일한 신호에도 쓰여 한 단계 어둡게 잡았다.
+     현재 6.37:1 (흰 배경) / 5.42:1 (--accent-bg 위). 다크 토큰은 이미 통과해 그대로 둔다. */
+  --accent: #8b1fd9;
+  --accent-bg: rgba(139, 31, 217, 0.1);
+  --accent-border: rgba(139, 31, 217, 0.5);
+  /* 에러·위험 동작 색. 하드코딩하면 다크 모드에서 배경에 묻혀 메시지를 못 읽는다. */
+  --danger: #d0342c;
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
@@ -40,13 +43,11 @@
     --accent: #c084fc;
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
+    /* 라이트용 #d0342c는 어두운 배경에서 3.58:1까지 떨어져 읽히지 않는다.
+       이 값은 6.42:1 (--bg 위) / 5.82:1 (--code-bg 버튼 위). */
+    --danger: #ff6b63;
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
   }
 }
 
@@ -67,7 +68,8 @@ body {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   font-family: var(--heading);
   font-weight: 500;
   color: var(--text-h);
@@ -93,21 +95,6 @@ h2 {
 }
 p {
   margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
 }
 
 /* ---- 전역 내비게이션 ---- */
@@ -173,7 +160,8 @@ button:disabled {
 }
 
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   font-size: 15px;
   color: var(--text-h);
@@ -202,13 +190,19 @@ textarea {
   gap: 8px;
 }
 
+/* opacity로 흐리면 배경까지 함께 섞여 카테고리 칩이 2.36:1까지 떨어진다 —
+   "이 메뉴가 왜 제외됐는지" 판단할 정보가 안 보이게 된다. 텍스트 색은 그대로 두고
+   배경과 점선 테두리로만 제외 상태를 표시한다. */
 .card-muted {
-  opacity: 0.6;
   background: var(--code-bg);
+  border-style: dashed;
 }
 
+/* 모바일에서 메뉴명 + 날짜 + 상태 칩이 한 줄을 넘겨 카드 밖으로 삐져나가고
+   body에 가로 스크롤이 생긴다 (flex 아이템은 기본 min-width:auto라 안 줄어든다). */
 .card-main {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -216,8 +210,11 @@ textarea {
   color: var(--text-h);
 }
 
+/* 히스토리 방문 선택 모드는 select + 버튼 3개가 한 줄에 놓여 320px 화면에서 넘친다 */
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
@@ -275,8 +272,6 @@ textarea {
 }
 .menu-form h3 {
   margin: 0;
-  color: var(--text-h);
-  font-weight: 500;
 }
 .menu-form label {
   display: flex;
@@ -289,14 +284,17 @@ textarea {
   align-items: center;
   gap: 8px;
 }
-.menu-form fieldset {
+/* 픽 화면 필터 그룹(.pick-filters)과 선언이 동일해 한쪽만 고치면 갈라진다 — 함께 둔다 */
+.menu-form fieldset,
+.pick-filters fieldset {
   border: 1px solid var(--border);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.menu-form legend {
+.menu-form legend,
+.pick-filters legend {
   font-size: 14px;
   padding: 0 4px;
 }
@@ -322,6 +320,7 @@ textarea {
 
 .inline-add {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .inline-add input {
@@ -330,6 +329,6 @@ textarea {
 }
 
 .error {
-  color: #d0342c;
+  color: var(--danger);
   font-size: 14px;
 }
