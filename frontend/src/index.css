@@ -110,6 +110,35 @@ code {
   background: var(--code-bg);
 }
 
+/* ---- 전역 내비게이션 ---- */
+
+/* JSX는 요소 사이의 개행 공백을 지우므로, gap이 없으면 링크가 전부 붙어서 렌더된다.
+   터치 타깃이 서로 맞닿아 모바일에서 오탭이 나므로 간격은 장식이 아니라 기능이다. */
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+nav a {
+  color: var(--text);
+  text-decoration: none;
+  padding: 4px 0;
+}
+
+nav a:hover {
+  color: var(--text-h);
+  text-decoration: underline;
+}
+
+/* 로그아웃은 목적이 다른 동작이라 링크 무리에서 떼어 오른쪽으로 민다 */
+nav button {
+  margin-left: auto;
+}
+
 /* ---- 공통 페이지/카드 UI (메뉴·식당·히스토리 화면에서 공유) ---- */
 
 .page {

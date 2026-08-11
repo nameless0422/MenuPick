@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { refreshAccessToken, setAccessToken } from "../api/http";
+import { refreshAccessToken, setAccessToken, setSessionExpiredHandler } from "../api/http";
 import { logout as apiLogout, withdraw as apiWithdraw } from "../api/auth";
 
 interface AuthContextValue {
@@ -26,6 +26,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => setIsAuthenticated(false))
       .finally(() => setIsLoading(false));
   }, []);
+
+  // 토큰 갱신이 최종 실패하면(세션 만료·쿠키 삭제·rotation 재사용 감지) 인터셉터가
+  // 여기로 알려준다. 이 통로가 없으면 화면만 로그인 상태로 남아 앱에 갇힌다.
+  // clearSession이 렌더마다 새로 만들어지지만 붙잡는 값(모듈 함수·setState·queryClient)이
+  // 모두 안정적이라 한 번만 등록해도 동작이 같다.
+  useEffect(() => {
+    setSessionExpiredHandler(() => clearSession());
+    return () => setSessionExpiredHandler(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient]);
 
   function login(token: string) {
     setAccessToken(token);

@@ -35,6 +35,15 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
+// refresh가 최종 실패하면(= 세션이 끝났으면) 알려야 할 대상. AuthProvider가 등록해
+// 인증 상태와 캐시를 정리한다. 이게 없으면 화면은 계속 로그인 상태로 남아, 사용자가
+// 로그인 화면으로 나가지도 못하고 실패만 반복하는 상태에 갇힌다.
+let sessionExpiredHandler: (() => void) | null = null;
+
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  sessionExpiredHandler = handler;
+}
+
 // 401을 만나면 /auth/refresh로 한 번 갱신을 시도하고, 성공하면 원래 요청을 재시도한다.
 // refresh 자체가 실패하면(쿠키 만료 등) 더 이상 재시도하지 않고 그대로 에러를 던진다 — 무한 루프 방지.
 let refreshPromise: Promise<string> | null = null;
@@ -67,9 +76,12 @@ http.interceptors.response.use(
         const token = await refreshAccessToken();
         original.headers.Authorization = `Bearer ${token}`;
         return http(original);
-      } catch (refreshError) {
+      } catch {
         setAccessToken(null);
-        return Promise.reject(refreshError);
+        sessionExpiredHandler?.();
+        // refresh 에러가 아니라 원래 요청의 에러를 돌려준다 — 호출부가 기대하는 건
+        // 자기가 보낸 요청의 실패다(errorCode 분기 등). 세션 종료는 위 통지로 처리된다.
+        return Promise.reject(error);
       }
     }
     return Promise.reject(error);
