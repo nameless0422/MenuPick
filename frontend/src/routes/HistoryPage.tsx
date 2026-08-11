@@ -14,8 +14,8 @@ import { fetchMenus } from "../api/menus";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import "./HistoryPage.css";
 
-// "전체" 필터는 백엔드에 별도 옵션이 없어(days가 없거나 0 이하면 기본 7일로 대체됨),
-// 충분히 큰 값을 넘겨 사실상 전체 기간을 조회하도록 한다.
+// "전체" 필터는 백엔드에 별도 옵션이 없어 충분히 큰 값을 넘겨 사실상 전체 기간을 조회한다.
+// days를 아예 생략하면 백엔드가 7일로 대체하고(HistoryService), 0 이하는 @Min(1)에 걸려 400이다.
 const DAYS_OPTIONS: { label: string; value: number }[] = [
   { label: "7일", value: 7 },
   { label: "30일", value: 30 },
@@ -104,6 +104,11 @@ export default function HistoryPage() {
 
       {historyQuery.isPending && <p>불러오는 중…</p>}
       {historyQuery.isError && <p className="error">{errorMessage(historyQuery.error)}</p>}
+
+      {/* 삭제 실패 시 목록만 새로고침되어 항목이 그대로 남는다 — 이유를 알려야 한다 */}
+      {deleteMutation.isError && (
+        <p className="error" role="alert">삭제하지 못했습니다. {errorMessage(deleteMutation.error)}</p>
+      )}
       {historyQuery.isSuccess && histories.length === 0 && (
         <p>
           아직 픽 기록이 없어요. <Link to="/pick">오늘 뭐 먹을지 골라볼까요?</Link>
