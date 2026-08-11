@@ -44,6 +44,14 @@ springdoc:
 cors:
   allowed-origins: []
 
+# 요청 상관관계 식별자를 모든 로그 줄에 찍는다 (TraceIdFilter가 MDC에 채운다).
+# Boot 기본 레벨 패턴(%5p) 자리에만 덧붙여 콘솔/파일 포맷의 나머지는 그대로 둔다.
+# 프로파일별 yml에는 logging.level만 있으므로 이 패턴은 전 프로파일이 그대로 상속받는다.
+# traceId는 항상, userId는 인증된 요청에서만 채워진다(없으면 빈 값).
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-},%X{userId:-}]"
+
 management:
   endpoints:
     web:
