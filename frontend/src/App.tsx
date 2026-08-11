@@ -7,6 +7,7 @@ import PickPage from "./routes/PickPage";
 import MenusPage from "./routes/MenusPage";
 import RestaurantsPage from "./routes/RestaurantsPage";
 import HistoryPage from "./routes/HistoryPage";
+import SettingsPage from "./routes/SettingsPage";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/menus" element={<MenusPage />} />
           <Route path="/restaurants" element={<RestaurantsPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/pick" replace />} />
