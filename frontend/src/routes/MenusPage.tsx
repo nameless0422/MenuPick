@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -32,7 +32,12 @@ export default function MenusPage() {
     getNextPageParam: (last) => (last.hasNext && last.nextCursor != null ? last.nextCursor : undefined),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["menus"] });
+  // 목록(["menus"])과 상세(["menu", id])는 접두가 달라 한 번에 무효화되지 않는다.
+  // 상세를 빼먹으면 수정 폼이 낡은 값으로 열려 방금 바꾼 설정을 되돌린다.
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["menus"] });
+    queryClient.invalidateQueries({ queryKey: ["menu"] });
+  };
 
   const excludeMutation = useMutation({
     mutationFn: ({ menuId, exclude }: { menuId: number; exclude: boolean }) =>
@@ -143,7 +148,15 @@ function MenuForm({
     enabled: menuId != null,
   });
 
-  if (menuId != null && !detailQuery.data) {
+  // 캐시에 남아 있던 낡은 상세로 폼을 초기화하면, 그 사이 목록에서 바꾼 값
+  // (예: 추천 제외 토글)이 저장 시 그대로 되돌아간다. MenuFormFields는 useState로
+  // 한 번만 초기화되므로 뒤늦게 새 값이 도착해도 반영되지 않기 때문이다.
+  // 그래서 "이번에 마운트한 뒤 도착한 응답"이 생긴 다음에야 폼을 만든다.
+  // 이미 만든 뒤의 배경 refetch는 폼을 다시 만들지 않는다 — 편집 중인 입력이 날아간다.
+  const mountedAt = useRef(Date.now());
+  const hasFreshDetail = detailQuery.isSuccess && detailQuery.dataUpdatedAt >= mountedAt.current;
+
+  if (menuId != null && !hasFreshDetail) {
     return detailQuery.isError ? (
       <p className="error">{errorMessage(detailQuery.error)}</p>
     ) : (
