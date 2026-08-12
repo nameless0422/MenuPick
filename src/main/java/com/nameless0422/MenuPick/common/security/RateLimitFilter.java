@@ -60,7 +60,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> AUTH_RATE_LIMITED_PATHS = Set.of(
             "/api/v1/auth/kakao",
             "/api/v1/auth/google",
-            "/api/v1/auth/refresh"
+            "/api/v1/auth/refresh",
+            // 자체 계정 경로. 비밀번호 대입과 메일 폭탄(재발송·재설정 요청)이 모두 여기로 들어온다.
+            // 계정 단위 제한은 LoginAttemptLimiter가 따로 담당한다 — IP 버킷만으로는
+            // 여러 IP에서 한 계정을 노리는 분산 대입을 막지 못한다.
+            "/api/v1/auth/signup",
+            "/api/v1/auth/login",
+            "/api/v1/auth/verify-email",
+            "/api/v1/auth/resend-verification",
+            "/api/v1/auth/password-reset",
+            "/api/v1/auth/password-reset/confirm"
     );
 
     private static final List<String> PROXY_RATE_LIMITED_PREFIXES = List.of(

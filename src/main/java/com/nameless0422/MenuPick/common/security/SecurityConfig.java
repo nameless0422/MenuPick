@@ -12,6 +12,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -36,6 +38,18 @@ public class SecurityConfig {
     private final CustomAuthenticationEntryPoint authEntryPoint;
     private final CustomAccessDeniedHandler accessDeniedHandler;
     private final CorsProperties corsProperties;
+
+    /**
+     * 자체 계정의 비밀번호 인코더.
+     *
+     * <p>{@code createDelegatingPasswordEncoder()}는 결과에 {@code {bcrypt}} 같은 알고리즘 접두사를
+     * 붙이고, 검증 시에는 저장된 접두사를 보고 알고리즘을 고른다. 나중에 argon2 등으로 옮길 때
+     * 기본값만 바꾸면 기존 해시도 계속 검증되므로 단일 인코더를 직접 쓰지 않는다.
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
 
     @Bean
     public WebClient webClient() {
@@ -78,7 +92,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/auth/kakao",
                                 "/api/v1/auth/google",
-                                "/api/v1/auth/refresh").permitAll()
+                                "/api/v1/auth/refresh",
+                                // 자체 계정 — 전부 로그인 전에 호출되는 경로다.
+                                // 비밀번호 변경(PATCH /password)과 계정 조회(GET /me)는
+                                // 로그인 상태에서만 쓰므로 여기 넣지 않는다.
+                                "/api/v1/auth/signup",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/verify-email",
+                                "/api/v1/auth/resend-verification",
+                                "/api/v1/auth/password-reset",
+                                "/api/v1/auth/password-reset/confirm").permitAll()
                         // 게스트 데모 픽 — 온보딩 퍼널용 시연 (docs/Planning.md 4.3).
                         // 고정 샘플만 반환하고 DB를 건드리지 않으며, RateLimitFilter가 IP 기준으로 제한한다.
                         .requestMatchers(HttpMethod.GET, "/api/v1/pick/demo").permitAll()
