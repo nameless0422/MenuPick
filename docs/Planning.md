@@ -178,6 +178,14 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | --- | --- | --- | --- |
 | POST | /auth/kakao | 카카오 OAuth 로그인 / 회원가입 | N |
 | POST | /auth/google | 구글 OAuth 로그인 / 회원가입 | N |
+| POST | /auth/signup | 자체 계정 가입 — 인증 메일을 보내고 토큰은 주지 않는다 (인증 전 로그인 불가) | N |
+| POST | /auth/login | 자체 계정 로그인 (이메일+비밀번호) | N |
+| POST | /auth/verify-email | 메일 링크의 일회용 토큰으로 인증 완료 + 즉시 로그인 | N |
+| POST | /auth/resend-verification | 인증 메일 재발송 — 가입 여부와 무관하게 200 (계정 존재 여부 노출 방지) | N |
+| POST | /auth/password-reset | 재설정 메일 요청 — 위와 같은 이유로 항상 200 | N |
+| POST | /auth/password-reset/confirm | 일회용 토큰으로 비밀번호 재설정 + 즉시 로그인 | N |
+| PATCH | /auth/password | 비밀번호 변경 (현재 비밀번호 확인). 세션을 새로 발급해 다른 기기를 로그아웃시킨다 | Y |
+| GET | /auth/me | 계정 정보 + 자체 자격증명 보유 여부(`hasPassword`) | Y |
 | POST | /auth/refresh | Access Token 재발급 (Refresh Token은 HttpOnly 쿠키로 전달) | N (쿠키) |
 | DELETE | /auth/logout | 로그아웃 (Refresh Token 무효화) | Y |
 | DELETE | /auth/withdraw | 회원 탈퇴 | Y |
