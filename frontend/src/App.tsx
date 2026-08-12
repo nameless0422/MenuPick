@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./routes/LoginPage";
+import SignupPage from "./routes/SignupPage";
+import VerifyEmailPage from "./routes/VerifyEmailPage";
+import ForgotPasswordPage from "./routes/ForgotPasswordPage";
+import ResetPasswordPage from "./routes/ResetPasswordPage";
 import OAuthCallbackPage from "./routes/OAuthCallbackPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Layout from "./routes/Layout";
@@ -14,6 +18,11 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        {/* 메일 링크의 착지점 — 경로가 바뀌면 AuthMailer의 링크도 함께 바꿔야 한다 */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/oauth/kakao/callback" element={<OAuthCallbackPage provider="kakao" />} />
         <Route path="/oauth/google/callback" element={<OAuthCallbackPage provider="google" />} />
 

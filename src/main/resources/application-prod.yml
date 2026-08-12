@@ -29,6 +29,20 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
 
+  # 메일 인증·비밀번호 재설정 발송. 기본값을 두지 않아 설정이 빠지면 기동 시점에 드러난다 —
+  # 조용히 뜨면 가입한 사용자가 인증 메일을 영영 못 받고, 그 사실이 문의로만 알려진다.
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 server:
   tomcat:
     threads:
@@ -59,6 +73,14 @@ rate-limit:
 
 cors:
   allowed-origins: ${FRONTEND_ORIGIN}
+
+app:
+  mail:
+    # SMTP 제공자가 인증한 도메인이어야 한다. 아니면 수신함이 아니라 스팸함으로 간다.
+    from: ${MAIL_FROM}
+    # 메일 링크의 목적지. 요청 Host 헤더로 유추하지 않는다 — 위조 가능해서 인증 링크를
+    # 공격자 도메인으로 돌릴 수 있다.
+    base-url: ${MAIL_BASE_URL}
 
 jwt:
   secret: ${JWT_SECRET}

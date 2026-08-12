@@ -75,6 +75,9 @@ class AuthServiceTest {
         authService = new AuthService(
                 userRepository, authProviderRepository, userHardDeleteService,
                 jwtTokenProvider, refreshTokenStore, jwtProperties,
+                // 토큰 발급은 TokenIssuer로 옮겼지만, 이 테스트가 검증하는 것은
+                // "로그인 성공 시 어떤 토큰이 저장·반환되는가"라 실제 구현을 그대로 넣는다.
+                new TokenIssuer(jwtTokenProvider, refreshTokenStore, jwtProperties),
                 new TransactionTemplate(NO_OP_TX_MANAGER),
                 List.of(kakaoProvider)
         );
