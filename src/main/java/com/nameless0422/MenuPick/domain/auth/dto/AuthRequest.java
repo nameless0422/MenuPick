@@ -7,14 +7,14 @@ import jakarta.validation.constraints.Size;
 public class AuthRequest {
 
     /**
-     * 비밀번호 길이 상한.
+     * 비밀번호 길이 범위.
      *
-     * <p>BCrypt는 72바이트를 넘는 입력을 잘라내므로, 이 값을 넘겨두면 서로 다른 긴 비밀번호가
-     * 같은 해시를 갖는다. 한글은 UTF-8에서 글자당 3바이트라 글자 수만으로는 막을 수 없어
-     * {@code LocalAuthService}가 바이트 길이도 함께 검사한다. 여기서는 명백히 긴 입력을
-     * 컨트롤러 단에서 빠르게 걷어내는 역할만 한다.
+     * <p>상한은 순수한 입력 검증이다. 해싱은 Argon2id로 하는데, BCrypt와 달리 입력을 잘라내지
+     * 않으므로 "이 길이를 넘으면 서로 다른 비밀번호가 같은 해시가 된다"는 제약이 없다.
+     * Argon2의 비용은 메모리·반복 횟수로 정해지고 입력 길이와 무관해서 긴 입력이 부하가 되지도 않는다.
+     * 그래서 알고리즘이 아니라 상식적인 상한으로 128자를 둔다.
      */
-    public static final int PASSWORD_MAX_LENGTH = 72;
+    public static final int PASSWORD_MAX_LENGTH = 128;
     public static final int PASSWORD_MIN_LENGTH = 8;
 
     public record OAuthLoginRequest(

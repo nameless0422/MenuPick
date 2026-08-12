@@ -9,9 +9,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,7 +64,14 @@ class AuthProviderRepositoryTest extends AbstractIntegrationTest {
         // social_id는 V4에서 VARCHAR(100) → VARCHAR(255)로 넓혔다. 마이그레이션이 빠지면
         // users.email과 같은 길이의 주소가 들어가지 못해 가입 자체가 깨진다.
         String longEmail = "a".repeat(243) + "@example.com"; // 255자
-        String encoded = "{bcrypt}$2a$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQR";
+
+        // 운영과 같은 Argon2 파라미터로 실제 해시를 만든다. 리터럴을 쓰면 SecurityConfig에서
+        // 파라미터를 바꿔 인코딩 결과가 길어졌을 때 이 테스트가 알아채지 못한다 —
+        // password_hash 길이가 부족하면 운영에서야 잘린 해시로 드러난다.
+        String encoded = new DelegatingPasswordEncoder("argon2",
+                Map.of("argon2", new Argon2PasswordEncoder(16, 32, 1, 9216, 4)))
+                .encode("test-password");
+        assertThat(encoded).hasSizeGreaterThan(100);
 
         authProviderRepository.save(AuthProvider.builder()
                 .user(user)

@@ -20,7 +20,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -30,6 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,9 +59,19 @@ class LocalAuthServiceTest {
     @Mock private AuthMailer authMailer;
     @Mock private TokenIssuer tokenIssuer;
 
-    /** 해시 검증 동작 자체가 검사 대상이라 인코더만 실물을 쓴다. */
-    private final PasswordEncoder passwordEncoder =
-            PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    /**
+     * 해시 검증 동작 자체가 검사 대상이라 인코더만 실물을 쓴다.
+     *
+     * <p>알고리즘 선택(argon2로 인코딩, bcrypt도 검증)은 운영과 같지만 비용 파라미터는 낮췄다 —
+     * 이 클래스가 수십 번 인코딩하므로 운영 설정(m=9216, t=4)을 그대로 쓰면 테스트가 몇 초씩 느려진다.
+     * 운영 파라미터의 근거와 값은 {@code SecurityConfig#passwordEncoder()}에 있다.
+     */
+    private final PasswordEncoder passwordEncoder = new DelegatingPasswordEncoder(
+            "argon2",
+            Map.of(
+                    "argon2", new Argon2PasswordEncoder(16, 32, 1, 1024, 1),
+                    "bcrypt", new BCryptPasswordEncoder(4)
+            ));
 
     private LocalAuthService localAuthService;
 
@@ -136,10 +149,10 @@ class LocalAuthServiceTest {
             ArgumentCaptor<AuthProvider> providerCaptor = ArgumentCaptor.forClass(AuthProvider.class);
             verify(authProviderRepository).save(providerCaptor.capture());
             assertThat(providerCaptor.getValue().getSocialId()).isEqualTo(EMAIL);
-            // 원문이 아니라 인코딩 결과가 저장돼야 한다
+            // 원문이 아니라 인코딩 결과가 저장돼야 하고, 새 해시는 argon2여야 한다
             assertThat(providerCaptor.getValue().getPasswordHash())
                     .isNotEqualTo(PASSWORD)
-                    .startsWith("{bcrypt}");
+                    .startsWith("{argon2}");
 
             verify(authMailer).sendVerification(eq(EMAIL), eq("verify-token"), any(Duration.class));
         }
@@ -188,14 +201,26 @@ class LocalAuthServiceTest {
         }
 
         @Test
-        @DisplayName("72바이트를 넘는 비밀번호는 거부한다 — BCrypt가 잘라내 서로 다른 값이 같은 해시가 된다")
-        void rejectsPasswordOverBcryptLimit() {
-            // 한글 25자 = 75바이트. 글자 수 제한만으로는 걸러지지 않는 구간이다.
-            String longPassword = "가".repeat(25);
+        @DisplayName("긴 비밀번호도 잘리지 않는다 — BCrypt와 달리 Argon2는 72바이트 절단이 없다")
+        void doesNotTruncateLongPassword() {
+            // 한글 30자 = 90바이트. BCrypt였다면 24자 이후가 잘려 아래 두 비밀번호가 같은 해시를 갖는다.
+            String longPassword = "가".repeat(30);
+            String longerPassword = longPassword + "다르다";
 
-            assertThatThrownBy(() -> localAuthService.signup(EMAIL, longPassword, "테스터"))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.empty());
+            User saved = User.builder().nickname("테스터").build();
+            ReflectionTestUtils.setField(saved, "id", 1L);
+            given(userRepository.save(any(User.class))).willReturn(saved);
+
+            localAuthService.signup(EMAIL, longPassword, "테스터");
+
+            ArgumentCaptor<AuthProvider> captor = ArgumentCaptor.forClass(AuthProvider.class);
+            verify(authProviderRepository).save(captor.capture());
+            String hash = captor.getValue().getPasswordHash();
+
+            assertThat(passwordEncoder.matches(longPassword, hash)).isTrue();
+            assertThat(passwordEncoder.matches(longerPassword, hash)).isFalse();
         }
     }
 
@@ -267,6 +292,20 @@ class LocalAuthServiceTest {
 
             verify(authProviderRepository, never())
                     .findByProviderAndSocialId(any(), any());
+        }
+
+        @Test
+        @DisplayName("bcrypt로 저장된 기존 해시도 계속 검증된다 — 알고리즘 교체가 기존 계정을 잠그지 않는다")
+        void legacyBcryptHashStillVerifies() {
+            AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
+            // DelegatingPasswordEncoder는 접두사를 보고 알고리즘을 고른다.
+            provider.changePassword("{bcrypt}" + new BCryptPasswordEncoder(4).encode(PASSWORD));
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.of(provider));
+
+            TokenResponse result = localAuthService.login(EMAIL, PASSWORD);
+
+            assertThat(result.accessToken()).isEqualTo("access_token");
         }
 
         @Test

@@ -61,7 +61,11 @@
 ### 2.4 사용자 계정 — ✅ 구현 완료
 
 - **로그인 수단 2종**: 카카오/구글 OAuth(Authorization Code 서버사이드 교환)와 이메일+비밀번호 자체 계정.
-- **자체 계정**: 별도 테이블 없이 `auth_providers`의 `provider='LOCAL'` 행으로 표현한다. `UNIQUE (provider, social_id)`가 그대로 이메일 중복 가입 제약이 된다. 비밀번호는 `PasswordEncoderFactories.createDelegatingPasswordEncoder()`(현재 기본 BCrypt)로 인코딩해 `password_hash`에 저장한다 — 접두사 방식이라 이후 알고리즘 교체 시 기존 해시도 계속 검증된다.
+- **자체 계정**: 별도 테이블 없이 `auth_providers`의 `provider='LOCAL'` 행으로 표현한다. `UNIQUE (provider, social_id)`가 그대로 이메일 중복 가입 제약이 된다.
+- **비밀번호 해싱**: **Argon2id** (`m=9216KiB, t=4, p=1`, salt 16B, hash 32B — OWASP 권장 조합 중 하나). `DelegatingPasswordEncoder`로 감싸 `{argon2}` 접두사를 붙이므로, 이후 알고리즘을 또 옮겨도 기존 해시가 계속 검증된다(bcrypt도 검증 경로에 남겨 뒀다).
+  - 메모리를 OWASP의 다른 권장값(`m=19456`) 대신 낮춘 이유는 운영 컨테이너가 1536MB(힙 약 1.1GB)이고 톰캣 스레드가 50개라, 로그인이 몰리면 해싱 메모리가 그대로 힙 점유가 되기 때문이다. 19MiB면 최악의 경우 ≈950MB로 힙이 통째로 잠기지만 9MiB면 ≈450MB로 견딘다. **서버 사양을 올리면 `m`을 19456으로 올릴 것.**
+  - 인코딩 결과는 접두사 포함 **104자**다. `password_hash`를 bcrypt 기준(60자)으로 잡으면 조용히 잘려 모든 로그인이 실패하므로 `VARCHAR(255)`로 둔다.
+  - 검증 1회에 약 42ms가 든다(실측). 계정이 없을 때도 더미 해시로 같은 비용을 치러 응답 시간으로 가입 여부가 드러나지 않게 한다.
 - **메일 인증 필수**: 가입 직후에는 로그인할 수 없고, 24시간 유효한 일회용 링크를 눌러야 활성화된다. 인증 전까지 이메일은 `auth_providers.social_id`에만 있고 `users.email`은 비어 있다.
 - **계정 통합**: 같은 이메일이면 기존 계정에 자동 연동한다. **검증된 이메일만** 병합 기준으로 쓴다 — `users.email`에 미검증 주소가 들어가면 공격자가 남의 주소로 먼저 가입해 피해자의 소셜 로그인을 자기 계정으로 끌어오는 탈취가 성립한다. `users.email_verified`가 이 불변식을 명시한다.
 - **JWT 이중 토큰**: Access 30분(메모리) + Refresh 14일(HttpOnly 쿠키 + Redis, Rotation 정책).

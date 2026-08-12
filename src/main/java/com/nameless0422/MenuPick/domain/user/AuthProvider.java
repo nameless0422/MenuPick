@@ -35,8 +35,11 @@ public class AuthProvider extends BaseTimeEntity {
     @Column(nullable = false, length = 255)
     private String socialId;
 
-    /** 소셜 계정은 비밀번호가 없으므로 null. 알고리즘 접두사를 포함한 인코딩 결과가 그대로 들어간다. */
-    @Column(length = 100)
+    /**
+     * 소셜 계정은 비밀번호가 없으므로 null. 알고리즘 접두사를 포함한 인코딩 결과가 그대로 들어간다.
+     * 길이 근거는 V4 마이그레이션 주석 참고 — Argon2id 결과가 104자라 bcrypt 기준으로 잡으면 잘린다.
+     */
+    @Column(length = 255)
     private String passwordHash;
 
     @Builder

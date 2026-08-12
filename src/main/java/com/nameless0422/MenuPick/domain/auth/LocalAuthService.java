@@ -3,7 +3,6 @@ package com.nameless0422.MenuPick.domain.auth;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.common.security.LoginAttemptLimiter;
-import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.MeResponse;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
@@ -63,8 +61,9 @@ public class LocalAuthService {
     /**
      * 존재하지 않는 계정으로 로그인을 시도해도 실제 계정과 같은 시간이 걸리게 하는 비교 대상.
      *
-     * <p>임의의 상수 문자열을 쓰면 BCrypt 형식이 아니라 인코더가 즉시 false를 반환해 버려
-     * 오히려 응답 시간 차이로 계정 존재 여부가 드러난다. 그래서 기동 시 실제 해시를 만든다.
+     * <p>임의의 상수 문자열을 쓰면 인코더가 형식을 알아보지 못해 즉시 false를 반환해 버리고,
+     * 오히려 응답 시간 차이로 계정 존재 여부가 드러난다. Argon2는 검증 비용이 커서
+     * (설정상 수십 ms) 이 차이가 더 두드러지므로, 기동 시 실제 해시를 만들어 둔다.
      */
     private String dummyHash;
 
@@ -78,7 +77,6 @@ public class LocalAuthService {
     /** 계정을 만들고 인증 메일을 보낸다. 인증 전까지는 로그인할 수 없다. */
     public void signup(String rawEmail, String rawPassword, String nickname) {
         String email = normalize(rawEmail);
-        validatePasswordLength(rawPassword);
 
         String encodedPassword = passwordEncoder.encode(rawPassword);
         Long userId = inTransaction(() -> createOrReplacePendingAccount(email, encodedPassword, nickname));
@@ -278,7 +276,6 @@ public class LocalAuthService {
     }
 
     public TokenResponse confirmPasswordReset(String token, String rawPassword) {
-        validatePasswordLength(rawPassword);
 
         Long userId = authTokenStore.consume(AuthTokenStore.Purpose.PASSWORD_RESET, token)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
@@ -295,7 +292,6 @@ public class LocalAuthService {
     }
 
     public TokenResponse changePassword(Long userId, String currentPassword, String newPassword) {
-        validatePasswordLength(newPassword);
 
         inTransaction(() -> {
             AuthProvider provider = localProvider(userId);
@@ -348,18 +344,6 @@ public class LocalAuthService {
      */
     private String normalize(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
-    }
-
-    /**
-     * BCrypt는 72바이트를 넘는 입력을 잘라내므로, 그 길이를 넘으면 서로 다른 비밀번호가 같은
-     * 해시를 갖는다. 한글은 UTF-8에서 글자당 3바이트라 DTO의 글자 수 제한만으로는 막히지 않아
-     * (24자면 이미 72바이트) 바이트 길이를 따로 검사한다.
-     */
-    private void validatePasswordLength(String rawPassword) {
-        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > AuthRequest.PASSWORD_MAX_LENGTH) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "비밀번호가 너무 깁니다. 한글은 한 글자가 3바이트로 계산됩니다.");
-        }
     }
 
     private <T> T inTransaction(Supplier<T> work) {

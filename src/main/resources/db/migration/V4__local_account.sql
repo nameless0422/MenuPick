@@ -11,10 +11,12 @@ ALTER TABLE auth_providers
     MODIFY COLUMN social_id VARCHAR(255) NOT NULL;
 
 -- 2. 소셜 행은 비밀번호가 없으므로 NULL 허용.
---    길이 100은 DelegatingPasswordEncoder가 붙이는 접두사("{bcrypt}") 8자 +
---    BCrypt 해시 60자를 담고, 이후 argon2 등으로 알고리즘을 옮길 여유까지 둔 값이다.
+--    Argon2id 인코딩 결과는 접두사까지 포함해 104자다:
+--      {argon2}$argon2id$v=19$m=9216,t=4,p=1$<salt 22자>$<hash 43자>
+--    파라미터 문자열과 해시 길이는 설정에 따라 달라지므로(예: m=19456로 올리면 더 길어진다)
+--    255로 여유를 둔다. VARCHAR는 실제 저장 길이만큼만 차지해 넓게 잡는 비용이 사실상 없다.
 ALTER TABLE auth_providers
-    ADD COLUMN password_hash VARCHAR(100) NULL AFTER social_id;
+    ADD COLUMN password_hash VARCHAR(255) NULL AFTER social_id;
 
 -- 3. users.email에는 "제공자가 소유를 검증한 주소"만 들어간다는 불변식이 있다.
 --    AuthService가 이 값을 기준으로 소셜 연동을 기존 계정에 자동 병합하기 때문에,
