@@ -38,6 +38,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final JwtProperties jwtProperties;
+    private final TokenIssuer tokenIssuer;
     private final TransactionTemplate transactionTemplate;
     private final List<OAuthProvider> oAuthProviders;
 
@@ -56,7 +57,7 @@ public class AuthService {
 
         Long userId = resolveUserWithConflictRetry(providerName, profile);
 
-        return issueTokens(userId);
+        return tokenIssuer.issue(userId);
     }
 
     public TokenResponse refresh(String refreshToken) {
@@ -141,25 +142,19 @@ public class AuthService {
         return transactionTemplate.execute(status -> work.get());
     }
 
-    private TokenResponse issueTokens(Long userId) {
-        String accessToken = jwtTokenProvider.createAccessToken(userId);
-        String refreshToken = jwtTokenProvider.createRefreshToken(userId);
-
-        refreshTokenStore.save(userId, refreshToken, jwtProperties.refreshTokenExpiry());
-
-        return new TokenResponse(accessToken, refreshToken);
-    }
-
     private AuthProvider createNewUser(String providerName, OAuthUserProfile profile) {
         // 같은 이메일로 가입된 유저가 있으면 새 계정을 만들지 않고
         // 해당 유저에 소셜 연동만 추가한다 (이메일 기준 자동 통합).
         // 단, 제공자가 소유를 검증한 이메일만 통합·저장에 사용한다 — 미검증 이메일을
         // 신뢰하면 공격자가 타인 주소를 자기 소셜 계정에 넣어 기존 계정을 탈취할 수 있다.
+        // 반대 방향도 같다: users.email에는 검증된 주소만 들어가므로(V4 마이그레이션 주석 참고)
+        // 미인증 자체 계정이 병합 대상으로 잡히는 일은 없다.
         String email = trustedEmail(profile);
         User user = findUserByEmail(email)
                 .orElseGet(() -> userRepository.save(
                         User.builder()
                                 .email(email)
+                                .emailVerified(email != null)
                                 .nickname(nickname(profile, DEFAULT_NICKNAME))
                                 .build()
                 ));

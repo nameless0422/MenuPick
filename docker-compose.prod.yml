@@ -107,6 +107,14 @@ services:
       NAVER_MAPS_CLIENT_ID: ${NAVER_MAPS_CLIENT_ID}
       NAVER_MAPS_CLIENT_SECRET: ${NAVER_MAPS_CLIENT_SECRET}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      # 자체 계정의 메일 인증·비밀번호 재설정 발송. prod 프로파일은 이 값들에 기본값을 두지 않아,
+      # 빠지면 기동 시점에 실패한다 — 조용히 뜨면 가입자가 인증 메일을 영영 못 받는다.
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_BASE_URL: ${MAIL_BASE_URL}
     # JVM 힙은 Dockerfile의 -XX:MaxRAMPercentage=75.0에 따라 이 한도의 75%(≈1.1GB)로 잡힌다.
     # 나머지 25%는 메타스페이스·스레드 스택(톰캣 50 스레드)·네트워크 버퍼 몫이다.
     mem_limit: 1536m

@@ -1,0 +1,130 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { signup, resendVerification, PASSWORD_MIN_LENGTH } from "../api/auth";
+import { apiErrorMessage } from "../api/http";
+import "./AuthPages.css";
+
+export default function SignupPage() {
+  const [email, setEmail] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordCheck, setPasswordCheck] = useState("");
+
+  const signupMutation = useMutation({
+    mutationFn: () => signup(email.trim(), password, nickname.trim()),
+  });
+
+  // 서버에 보내기 전에 잡아야 하는 것만 여기서 본다. 나머지(형식·중복)는 서버 응답을 그대로 보여준다.
+  const tooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
+  const mismatch = passwordCheck.length > 0 && password !== passwordCheck;
+  const canSubmit =
+    email.trim() && nickname.trim() && password.length >= PASSWORD_MIN_LENGTH && !mismatch;
+
+  if (signupMutation.isSuccess) {
+    return <VerificationSent email={email.trim()} />;
+  }
+
+  return (
+    <div className="login-page">
+      <h1>이메일로 가입</h1>
+
+      <form
+        className="menu-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSubmit) signupMutation.mutate();
+        }}
+      >
+        <label>
+          이메일
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            maxLength={255}
+            autoComplete="email"
+            required
+          />
+        </label>
+
+        <label>
+          닉네임
+          <input
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            maxLength={50}
+            autoComplete="nickname"
+            required
+          />
+        </label>
+
+        <label>
+          비밀번호
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        {tooShort && (
+          <p className="error">비밀번호는 {PASSWORD_MIN_LENGTH}자 이상이어야 합니다.</p>
+        )}
+
+        <label>
+          비밀번호 확인
+          <input
+            type="password"
+            value={passwordCheck}
+            onChange={(e) => setPasswordCheck(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        {mismatch && <p className="error">비밀번호가 서로 다릅니다.</p>}
+
+        {signupMutation.isError && <p className="error">{apiErrorMessage(signupMutation.error)}</p>}
+
+        <button type="submit" disabled={signupMutation.isPending || !canSubmit}>
+          {signupMutation.isPending ? "가입 중…" : "가입하기"}
+        </button>
+
+        <div className="auth-links">
+          <Link to="/login">이미 계정이 있어요</Link>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/** 가입 직후 화면. 인증을 마쳐야 로그인되므로 다음 할 일을 분명히 알려준다. */
+function VerificationSent({ email }: { email: string }) {
+  const resendMutation = useMutation({ mutationFn: () => resendVerification(email) });
+
+  return (
+    <div className="login-page">
+      <h1>메일을 확인해주세요</h1>
+      <section className="card login-demo">
+        <p className="login-demo-desc">
+          <strong>{email}</strong> 으로 인증 링크를 보냈습니다. 링크를 눌러야 로그인할 수 있어요.
+        </p>
+        <p className="login-demo-desc">링크는 24시간 동안 유효합니다.</p>
+
+        {resendMutation.isSuccess ? (
+          <p className="auth-notice">인증 메일을 다시 보냈습니다.</p>
+        ) : (
+          <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate()}>
+            {resendMutation.isPending ? "보내는 중…" : "메일이 안 왔어요"}
+          </button>
+        )}
+        {resendMutation.isError && <p className="error">{apiErrorMessage(resendMutation.error)}</p>}
+      </section>
+
+      <div className="auth-links">
+        <Link to="/login">로그인으로 돌아가기</Link>
+      </div>
+    </div>
+  );
+}

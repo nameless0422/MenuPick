@@ -19,6 +19,15 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+# SMTP를 지정하지 않는다. spring.mail.host가 없으면 Boot가 JavaMailSender를 만들지 않고,
+# EmailSender가 인증·재설정 링크를 로그(WARN)로 떨어뜨린다. 로컬에서 메일 계정 없이
+# 가입 → 인증 흐름을 끝까지 확인하기 위한 의도된 설정이다.
+app:
+  mail:
+    from: no-reply@menupick.local
+    # 메일 링크가 향할 프론트엔드 주소 (Vite 개발 서버)
+    base-url: http://localhost:5173
+
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:false}
 

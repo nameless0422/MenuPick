@@ -1,0 +1,94 @@
+/* 로그인 전 화면들(로그인·가입·메일 인증·비밀번호 재설정)의 공용 스타일.
+   이 화면들은 Layout 바깥에 있어 내비게이션이 없고 폭도 좁아, 앱 내부 화면과 레이아웃을 공유하지 않는다.
+   공용 클래스(index.css)에 없는 것만 정의한다. */
+
+.login-page {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 48px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-demo {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.login-demo-desc {
+  font-size: 14px;
+}
+
+.login-demo-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.login-demo-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.login-demo-categories {
+  font-size: 13px;
+}
+
+/* 시연 결과 바로 아래에서 전환을 유도한다 (온보딩 퍼널) */
+.login-demo-cta {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.login-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 소셜 버튼 묶음 위의 구분선. 문구를 선 가운데 얹는다. */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  margin: 4px 0;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* 가입·재설정 등으로 넘어가는 보조 링크 줄. 좁은 화면에서 겹치지 않게 접힌다. */
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+/* 안내 문구. 에러가 아니라 성공/대기 상태를 알린다. */
+.auth-notice {
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+/* 폼 안에서 '인증 메일 재발송'처럼 문장 흐름에 끼는 버튼 — 링크처럼 보이게 한다. */
+.auth-inline-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  min-height: 0;
+}
