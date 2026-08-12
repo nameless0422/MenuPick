@@ -42,6 +42,19 @@ spring:
           auth: true
           starttls:
             enable: true
+          # Jakarta Mail의 타임아웃 기본값은 셋 다 "무한"이다. SMTP 서버가 응답을 멈추면
+          # 발송 스레드가 영원히 돌아오지 않는데, 그 대가가 두 겹이다.
+          #  1) 발송은 전용 풀(MailAsyncConfig, 최대 4스레드)에서 일어난다. 4개가 전부 잠기면
+          #     이후 모든 인증·재설정 메일이 큐에 쌓이다 멈춘다 — 신규 가입이 통째로 막힌다.
+          #  2) 그 큐(100)까지 차면 CallerRunsPolicy가 발송을 요청 스레드로 되돌린다.
+          #     즉 최악의 경우 톰캣 스레드 50개까지 번져 메일과 무관한 요청도 멎는다.
+          # 연결 5초는 SecurityConfig.webClient()의 연결 타임아웃과 같은 값이다.
+          # 응답·쓰기 10초는 외부 JSON 호출(KakaoLocalClient·NaverMapsClient의 3초)보다 넉넉한데,
+          # SMTP는 EHLO·STARTTLS·AUTH·DATA로 왕복이 여러 번인 대화형 프로토콜이라 같은 잣대를 쓰면
+          # 정상 발송이 끊긴다.
+          connectiontimeout: 5000   # TCP 연결 수립까지
+          timeout: 10000            # 각 SMTP 응답 대기
+          writetimeout: 10000       # 본문 쓰기(소켓 write) 대기
 
 server:
   tomcat:

@@ -39,6 +39,8 @@ import java.util.function.Supplier;
  * <p>DB 작업은 {@link TransactionTemplate}으로 감싸고 메일 발송·Redis 접근은 그 밖에서 한다 —
  * {@link AuthService}가 외부 HTTP 호출을 트랜잭션 밖으로 뺀 것과 같은 이유로,
  * 느린 외부 호출이 DB 커넥션을 붙잡으면 커넥션 풀이 마른다.
+ * 메일 발송은 여기서 한 걸음 더 나가 {@link AuthMailer}가 전용 풀로 넘긴다 —
+ * 트랜잭션 밖이어도 요청 스레드에 남아 있으면 SMTP가 느려질 때 톰캣 스레드가 잠긴다.
  */
 @Slf4j
 @Service
@@ -81,8 +83,9 @@ public class LocalAuthService {
         String encodedPassword = passwordEncoder.encode(rawPassword);
         Long userId = inTransaction(() -> createOrReplacePendingAccount(email, encodedPassword, nickname));
 
-        // 메일 발송이 실패하면 502가 나가고 계정은 미인증 상태로 남는다. 같은 주소로 다시
-        // 가입하거나 재발송을 요청하면 이어갈 수 있으므로 계정을 되돌리지 않는다.
+        // 발송은 전용 풀에서 비동기로 일어나고 실패해도 예외가 올라오지 않는다(AuthMailer 참고).
+        // 즉 가입 응답은 SMTP 왕복을 기다리지 않는다. 메일이 끝내 안 나가면 계정은 미인증
+        // 상태로 남고, 사용자는 재발송 버튼이나 같은 주소의 재가입으로 이어갈 수 있다.
         sendVerification(userId, email);
     }
 

@@ -38,6 +38,12 @@ spring:
           auth: true
           starttls:
             enable: true
+          # Jakarta Mail의 타임아웃 기본값은 셋 다 "무한"이다. 근거는 application-prod.yml의
+          # 같은 자리에 적어 뒀다 — 발송 풀이 잠기고, 큐가 차면 요청 스레드까지 번진다.
+          # 값도 운영과 동일하게 둬 스테이징에서 같은 조건으로 거동을 관찰한다.
+          connectiontimeout: 5000   # TCP 연결 수립까지
+          timeout: 10000            # 각 SMTP 응답 대기
+          writetimeout: 10000       # 본문 쓰기(소켓 write) 대기
 
 server:
   tomcat:
