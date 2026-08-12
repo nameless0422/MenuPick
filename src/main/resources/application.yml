@@ -20,6 +20,16 @@ spring:
         order_inserts: true
         order_updates: true
 
+  task:
+    execution:
+      # Boot의 공용 실행기(applicationTaskExecutor) 자동설정은 컨텍스트에 Executor 빈이 하나도
+      # 없을 때만 동작한다. 메일 전용 풀(MailAsyncConfig)이 생기면서 그 조건이 깨졌고, 그대로 두면
+      # 실행기를 지정하지 않은 @Async가 전부 메일 풀(최대 4스레드)로 흘러든다 — 메일과 무관한
+      # 작업이 인증 메일 발송을 굶기는데 코드 어디에도 그렇게 하겠다고 적힌 곳이 없다.
+      # force는 다른 Executor 빈이 있어도 공용 실행기를 만들어 두 풀을 분리한다.
+      # (MailExecutorIsolationTest가 이 설정이 사라지면 알려준다)
+      mode: force
+
   data:
     redis:
       # 인증이 걸린 Redis(운영 compose는 --requirepass 사용)를 위한 공통 자리.

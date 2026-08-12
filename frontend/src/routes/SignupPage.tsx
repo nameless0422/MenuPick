@@ -107,13 +107,15 @@ function VerificationSent({ email }: { email: string }) {
     <div className="login-page">
       <h1>메일을 확인해주세요</h1>
       <section className="card login-demo">
+        {/* 발송은 서버가 별도 스레드로 처리해 응답 시점에는 아직 나가지 않았을 수 있다.
+            실패해도 화면에 뜨지 않으므로 "보냈다"고 단언하지 않고, 재발송 버튼을 항상 함께 둔다. */}
         <p className="login-demo-desc">
-          <strong>{email}</strong> 으로 인증 링크를 보냈습니다. 링크를 눌러야 로그인할 수 있어요.
+          <strong>{email}</strong> 으로 인증 링크를 보내고 있어요. 링크를 눌러야 로그인할 수 있습니다.
         </p>
         <p className="login-demo-desc">링크는 24시간 동안 유효합니다.</p>
 
         {resendMutation.isSuccess ? (
-          <p className="auth-notice">인증 메일을 다시 보냈습니다.</p>
+          <p className="auth-notice">인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요.</p>
         ) : (
           <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate()}>
             {resendMutation.isPending ? "보내는 중…" : "메일이 안 왔어요"}

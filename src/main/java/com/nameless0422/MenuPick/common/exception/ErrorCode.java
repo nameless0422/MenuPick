@@ -39,6 +39,8 @@ public enum ErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다. 받은 메일의 링크를 눌러주세요."),
     INVALID_AUTH_TOKEN(HttpStatus.BAD_REQUEST, "링크가 만료되었거나 이미 사용되었습니다. 다시 요청해주세요."),
     LOCAL_ACCOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "비밀번호로 로그인하는 계정이 아닙니다."),
+    // 인증 흐름에서는 클라이언트에 도달하지 않는다 — 발송이 비동기라 AuthMailer가 잡아 로그로만 남긴다.
+    // EmailSender를 동기로 부르는 곳이 생기면 그때 이 상태 코드가 쓰인다.
     MAIL_SEND_FAILED(HttpStatus.BAD_GATEWAY, "메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요."),
 
     // --- Menu ---

@@ -408,7 +408,8 @@ erDiagram
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
 | id | BIGINT (PK, AI) | N | 사용자 고유 ID |
-| email | VARCHAR(255) | Y | 이메일 (소셜에서 제공 시) |
+| email | VARCHAR(255) | Y | 이메일. **소유가 검증된 주소만 들어간다** — 소셜이 검증해 준 주소이거나, 자체 계정이 메일 인증을 마친 주소다. 인증 전 자체 계정은 NULL이고 주소는 `auth_providers.social_id`에만 있다 |
+| email_verified | TINYINT(1) | N | 위 불변식을 명시하는 플래그. 소셜 연동 자동 병합이 이 값을 기준으로 하므로, 미검증 주소가 섞이면 계정 탈취 경로가 열린다 |
 | nickname | VARCHAR(50) | N | 닉네임 |
 | created_at | DATETIME | N | 생성 시각 |
 | updated_at | DATETIME | N | 수정 시각 |
@@ -425,12 +426,13 @@ erDiagram
 | --- | --- | --- | --- |
 | id | BIGINT (PK, AI) | N | 고유 ID |
 | user_id | BIGINT (FK) | N | 연결 사용자 |
-| provider | VARCHAR(20) | N | 소셜 제공자 (KAKAO, GOOGLE 등) |
-| social_id | VARCHAR(100) | N | 소셜 provider 고유 ID |
+| provider | VARCHAR(20) | N | 인증 수단 (KAKAO, GOOGLE, LOCAL) |
+| social_id | VARCHAR(100→255) | N | 소셜 provider 고유 ID. `LOCAL`이면 소문자로 정규화한 이메일이 들어가므로 users.email과 같은 폭이 필요하다 (V4에서 확장) |
+| password_hash | VARCHAR(255) | Y | 자체 계정의 Argon2id 해시(접두사 포함 104자). 소셜 행은 NULL |
 | created_at | DATETIME | N | 최초 연동 시각 |
 | updated_at | DATETIME | N | 수정 시각 |
 
-*INDEX: UNIQUE(provider, social_id) — 소셜 로그인 중복 가입 방지*
+*INDEX: UNIQUE(provider, social_id) — 중복 가입 방지. `LOCAL`에서는 이 제약이 그대로 이메일 중복 가입 제약이 된다*
 
 *향후 Apple 로그인 등 신규 provider 추가 시 스키마 변경 없이 데이터 행 추가로 대응*
 
@@ -774,7 +776,7 @@ tags 테이블 컬럼 구성:
 
 | 항목 | 내용 |
 | --- | --- |
-| 테이블 컬럼 | id, user_id, provider, social_id, created_at, updated_at |
+| 테이블 컬럼 | id, user_id, provider, social_id, password_hash, created_at, updated_at |
 | MVD 후보 | user_id →→ provider (사용자 한 명이 여러 소셜 로그인 연동 가능) |
 | 두 번째 MVD? | 존재하지 않음. provider와 독립적으로 다중값을 가지는 다른 속성이 없다. |
 | 결론 | 단일 MVD만 존재 → 4NF 위반 조건 미충족 → 충족 |

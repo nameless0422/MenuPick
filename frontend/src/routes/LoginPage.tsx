@@ -115,7 +115,7 @@ function EmailLoginForm() {
       {needsVerification && (
         <p className="auth-notice">
           {resendMutation.isSuccess ? (
-            "인증 메일을 다시 보냈습니다. 받은 편지함을 확인해주세요."
+            "인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요."
           ) : (
             <button
               type="button"
