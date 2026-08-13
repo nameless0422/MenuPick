@@ -27,6 +27,10 @@ app:
     from: no-reply@menupick.local
     # 메일 링크가 향할 프론트엔드 주소 (Vite 개발 서버)
     base-url: http://localhost:5173
+    # 발송하지 못한 메일의 본문을 로그에 남긴다 — 인증 링크를 눌러보기 위한 것.
+    # 본문에는 인증·재설정 토큰이 그대로 들어 있으므로 로컬에서만 켠다.
+    # dev/prod는 기본값 false를 그대로 둔다(설정 자체를 두지 않는다).
+    log-links: true
 
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:false}
