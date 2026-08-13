@@ -71,8 +71,24 @@ export default function PickPage() {
     pickMutation.mutate(buildRequest());
   };
 
-  // 거리 필터 토글: 켤 때 현재 위치를 얻고, 실패하면 비활성 상태로 안내만 남긴다
+  // 거리 필터 토글: 켤 때 현재 위치를 얻고, 실패하면 비활성 상태로 안내만 남긴다.
+  //
+  // getCurrentPosition은 취소할 방법이 없다(최대 10초까지 매달린다). 그래서 요청마다 세대 번호를
+  // 매기고, 콜백이 돌아왔을 때 자기 세대가 아직 최신인지 확인한다. 이 가드가 없으면:
+  //  - 껐는데 뒤늦게 성공 콜백이 도착해 체크박스가 스스로 다시 켜지고, 사용자가 끈 거리 필터가
+  //    다음 픽에 조용히 적용된다.
+  //  - 껐다 켜기를 반복하면 먼저 보낸 요청이 나중에 끝나면서 오래된 좌표가 최신 좌표를 덮어쓴다.
+  //  - 껐는데 뒤늦게 실패 콜백이 도착해, 쓰지도 않는 필터의 권한 오류 안내가 뜬다.
+  const geoGeneration = useRef(0);
+
+  // 언마운트된 뒤 도착하는 콜백도 같은 방식으로 무효화한다.
+  useEffect(() => () => { geoGeneration.current += 1; }, []);
+
   const toggleDistanceFilter = () => {
+    // 끄는 경우에도 세대를 올려야 진행 중이던 요청의 결과가 되살아나지 않는다.
+    const generation = ++geoGeneration.current;
+    const isCurrent = () => geoGeneration.current === generation;
+
     if (geo.status === "ready" || geo.status === "loading") {
       setGeo({ status: "idle" });
       return;
@@ -83,13 +99,18 @@ export default function PickPage() {
     }
     setGeo({ status: "loading" });
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
+      (pos) => {
+        if (!isCurrent()) return;
         setGeo({
           status: "ready",
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
-        }),
-      () => setGeo({ status: "error" }),
+        });
+      },
+      () => {
+        if (!isCurrent()) return;
+        setGeo({ status: "error" });
+      },
       { timeout: 10_000 },
     );
   };
