@@ -8,6 +8,16 @@
 #
 # docs/DecisionLog.md D-023, docs/Planning.md 6.1 참고.
 
+# Docker의 json-file 드라이버는 기본이 무제한이라 로그가 디스크를 채울 때까지 자란다.
+# 이 구성은 앱·MySQL·Redis가 한 VM을 공유하므로, 디스크가 차면 앱만 죽는 게 아니라
+# MySQL이 쓰기를 못 해 서비스 전체가 멎는다. 세 서비스 모두 같은 상한을 쓴다.
+# 서비스당 20MB × 5개 = 최대 100MB, 합계 300MB.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   mysql:
     image: mysql:8.0
@@ -37,6 +47,7 @@ services:
     # 한 컨테이너의 누수가 다른 컨테이너를 OOMKill로 끌고 들어가지 않는다.
     # MySQL은 innodb_buffer_pool(기본 128MB) + 커넥션당 버퍼 기준으로 1g면 충분하다.
     mem_limit: 1g
+    logging: *default-logging
 
   redis:
     image: redis:7-alpine
@@ -71,6 +82,7 @@ services:
       # healthcheck의 redis-cli 인증용 (컨테이너 내부에서만 참조)
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     mem_limit: 256m
+    logging: *default-logging
 
   app:
     build: .
@@ -118,6 +130,7 @@ services:
     # JVM 힙은 Dockerfile의 -XX:MaxRAMPercentage=75.0에 따라 이 한도의 75%(≈1.1GB)로 잡힌다.
     # 나머지 25%는 메타스페이스·스레드 스택(톰캣 50 스레드)·네트워크 버퍼 몫이다.
     mem_limit: 1536m
+    logging: *default-logging
 
 volumes:
   mysql-data:
