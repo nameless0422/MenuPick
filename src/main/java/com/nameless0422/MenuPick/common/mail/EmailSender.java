@@ -42,10 +42,7 @@ public class EmailSender {
         JavaMailSender sender = configuredHost.isBlank() ? null : javaMailSender.getIfAvailable();
 
         if (sender == null) {
-            // 수신자 주소는 개인정보라 로그에 남기지 않는다. 링크가 담긴 본문만 남겨
-            // 로컬에서 인증 흐름을 끝까지 확인할 수 있게 한다.
-            log.warn("SMTP가 설정되지 않아 메일을 발송하지 않습니다 (spring.mail.host 미지정 또는 빈 값). "
-                    + "제목='{}'\n{}", subject, body);
+            logUnsent(subject, body);
             return;
         }
 
@@ -62,6 +59,27 @@ public class EmailSender {
             log.error("메일 발송 실패: subject={}, cause={}", subject, e.getMessage(), e);
             throw new BusinessException(ErrorCode.MAIL_SEND_FAILED);
         }
+    }
+
+    /**
+     * SMTP가 없어 발송을 건너뛴 사실을 남긴다.
+     *
+     * <p>본문은 {@code app.mail.log-links}가 켜져 있을 때만 남긴다. 본문에는 이메일 인증·
+     * 비밀번호 재설정 토큰이 든 링크가 그대로 들어 있어서, 그대로 찍으면 로그 열람 권한이
+     * 곧 계정 탈취 권한이 된다(재설정 링크는 30분 유효하고 한 번 쓰면 흔적도 남지 않는다).
+     * 로컬에서 SMTP 계정 없이 흐름을 확인하려는 용도라 로컬 프로파일에서만 켠다.
+     *
+     * <p>수신자 주소는 어느 경우에도 남기지 않는다 — 개인정보다.
+     */
+    private void logUnsent(String subject, String body) {
+        if (mailProperties.logLinks()) {
+            log.warn("SMTP가 없어 발송하지 않고 본문을 남깁니다 (app.mail.log-links=true). "
+                    + "제목='{}'\n{}", subject, body);
+            return;
+        }
+        log.warn("SMTP가 설정되지 않아 메일을 발송하지 못했습니다 (spring.mail.host 미지정 또는 빈 값). "
+                + "제목='{}'. 본문에 인증 토큰이 들어 있어 로그에 남기지 않습니다 — "
+                + "로컬에서 링크를 확인하려면 app.mail.log-links=true로 켜세요.", subject);
     }
 
     public String baseUrl() {
