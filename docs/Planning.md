@@ -1309,7 +1309,11 @@ MDC(Mapped Diagnostic Context)로 요청별 traceId 추가
 
 에러 발생 시 스택 트레이스 포함 ERROR 로그 출력
 
-API 호출 로그: 요청 URI, Method, 응답 코드, 처리 시간 기록 (AOP 또는 Filter 활용)
+API 호출 로그: 요청 URI, Method, 응답 코드, 처리 시간 기록 — `AccessLogFilter`가 담당한다. `TraceIdFilter` 바로 안쪽·시큐리티 체인 바깥에 등록해 401·429도 기록에 남긴다(등록 순서는 `AccessLogOrderIntegrationTest`가 지킨다).
+
+- **쿼리 값은 남기지 않고 파라미터 이름만 남긴다.** 검색 경로(`/api/v1/kakao/**`)의 쿼리에는 사용자가 입력한 상호명·지역이 들어와, 그대로 찍으면 "누가 무엇을 찾았는지"가 로그에 쌓인다. 이름만 남겨도 페이지네이션 파라미터 유무 같은 것은 확인된다.
+- **클라이언트 IP는 남기지 않는다.** 신뢰할 수 있는 IP 해석(프록시 홉 수)은 `RateLimitFilter`에만 있고, 복제하면 두 곳이 갈라진다.
+- 5xx와 1초 이상 걸린 요청은 WARN으로 올린다. 헬스체크(`/actuator/health`)는 30초마다 들어와 사람이 만든 요청을 묻으므로 제외한다.
 
 Spring Actuator `health`/`metrics`/`prometheus` 엔드포인트 노출 (관리용 포트 분리 권장) + 장애 알림 채널(디스코드 웹훅 등) 최소 구성 — 상세는 [ImprovementBacklog.md 12번](ImprovementBacklog.md)
 
