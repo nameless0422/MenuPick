@@ -8,7 +8,6 @@ import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -74,11 +73,6 @@ public class TraceIdFilter extends OncePerRequestFilter {
         if (inbound != null && SAFE_TRACE_ID.matcher(inbound).matches()) {
             return inbound;
         }
-        return generateTraceId();
-    }
-
-    /** 로그 줄이 길어지지 않도록 UUID 앞 16자리(64비트)만 쓴다 — 상관관계 용도에는 충분하다. */
-    private String generateTraceId() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        return TraceIds.newId();
     }
 }
