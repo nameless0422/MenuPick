@@ -276,7 +276,7 @@
 ### D-020. Actuator 노출 — health만 공개, metrics는 인증 필요
 
 - **날짜**: 2026-08-05
-- **상태**: 채택
+- **상태**: 운영 한정 대체됨 → [D-027](#d-027-운영-actuator-관리-포트-분리--서비스-포트에서-떼어내고-루프백에만-바인딩) (관리 포트를 분리하지 않는 local/dev에서는 이 결정이 그대로 유효)
 - **배경**: 로드밸런서/오케스트레이터가 헬스체크를 하려면 인증 없이 접근 가능한 엔드포인트가 필요하지만, Actuator를 전부 열면 내부 지표가 새어 나갈 수 있다.
 - **검토한 대안**:
   1. Actuator 전체 노출 — 구현 편함 / 내부 정보 과다 노출.
@@ -366,3 +366,23 @@
 - **결정**: ①. `AuthContext`가 앱 부팅 시 `refreshAccessToken()`을 한 번 호출해 쿠키 기반으로 세션을 조용히 복원한다.
 - **트레이드오프**: 매 새로고침마다 API 호출이 하나 더 나간다(레이턴시 미미, 무시 가능한 수준). 여러 탭을 동시에 열면 탭마다 독립적으로 메모리를 갖는다 — 한 탭에서 로그아웃해도 다른 탭은 Access Token이 만료될 때까지(30분) 살아있을 수 있다. 진짜 즉시 전체 탭 로그아웃이 필요해지면 `BroadcastChannel`류로 탭 간 동기화를 추가해야 한다.
 - **관련**: `frontend/src/api/http.ts`, `frontend/src/auth/AuthContext.tsx`
+
+### D-027. 운영 Actuator — 관리 포트 분리 + 루프백 바인딩, 그 포트는 무인증
+
+- **날짜**: 2026-08-14
+- **상태**: 채택
+- **배경**: 운영에서 관측 수단이 사실상 없었다. [D-020](#d-020-actuator-노출--health만-공개-metrics는-인증-필요)이 `metrics`를 "인증 필요"로 열어 뒀지만, 운영 프로파일은 노출 목록을 `health`로 좁혀 놔서 커넥션 풀 고갈·메일 큐 적체·힙을 볼 방법이 아예 없었다. 그렇다고 서비스 포트(8080)에서 `metrics`를 여는 건 다른 문제다 — 그 포트는 리버스 프록시를 거쳐 인터넷에 닿고, `metrics`에는 커넥션 풀 점유·경로별 호출량·힙 사용량이 그대로 들어 있다.
+- **검토한 대안**:
+  1. 서비스 포트에서 `metrics`를 열고 인증으로 막는다 — 설정 한 줄. 하지만 **운영자가 볼 수 없다**: Access Token은 설계상 브라우저 메모리에만 있고([D-026](#d-026-access-token-저장-위치--메모리-localstoragesessionstorage-대신)) 30분이면 만료돼, 셸에서 꺼내 쓸 수단이 없다. 게다가 역할(Role) 모델이 없어 "인증된 일반 사용자면 누구나" 본다.
+  2. **관리 포트를 분리(`management.server.port`)하고, 컨테이너 루프백에만 바인딩(`management.server.address: 127.0.0.1`) + compose에서 publish하지 않는다. 그 포트에 한해 인증을 면제한다.**
+  3. Prometheus + 그라파나 스택 — 지표를 시계열로 보는 제대로 된 답이지만, 단일 VM(앱·MySQL·Redis 공유)에 컨테이너를 더 얹는 비용이 지금 규모에 맞지 않는다.
+- **결정**: ②. 방어를 "누가 인증했나"가 아니라 **"애초에 닿을 수 없게"**로 옮겼다. 관리 포트에 닿을 수 있는 주체는 이미 컨테이너 안에 있는 사람 — 즉 `docker exec`을 칠 수 있는 운영자뿐이고, 그 사람은 이미 앱 전체를 통제한다. 따라서 거기서 인증을 더 요구해봐야 방어력은 늘지 않고 사용성만 죽는다.
+  - 운영자 경로: `docker exec menupick-app curl -s localhost:9090/actuator/metrics`
+  - 노출은 `health, metrics`만 유지한다. 관리 포트가 무인증이므로 이 화이트리스트가 유일한 방어선이다 — `env`·`configprops`에는 DB 비밀번호와 JWT 시크릿이 통째로 들어 있다.
+  - 부수 효과로 D-020의 트레이드오프가 운영에서 사라진다: 서비스 포트에 actuator 자체가 없으니 일반 사용자는 `metrics`에 닿을 수 없다.
+- **트레이드오프**:
+  - **`/actuator/health`가 8080에서 사라진다.** 호스트 리버스 프록시가 이 경로를 업스트림 프로브로 쓰고 있었다면 함께 바꿔야 한다. 현재 실제 헬스 신호는 Dockerfile의 `HEALTHCHECK`(컨테이너 안에서 관리 포트를 친다)와 `docker ps`다.
+  - 앱과 헬스체크가 `MANAGEMENT_SERVER_PORT` 하나를 공유해 갈릴 수 없게 했지만, 한쪽만 바꾸면 컨테이너가 `unhealthy`로 드러난다(조용히 어긋나지는 않는다).
+  - 나중에 같은 compose 망에 Prometheus를 올린다면 `address`를 지워 컨테이너 간 스크레이프를 허용해야 한다. 그때는 무인증 전제가 "같은 망 안"으로 넓어지므로 재검토가 필요하다.
+  - 인증 면제를 포트로 판별하는 위험: Boot의 `local.management.port`는 **포트를 분리하지 않으면 서비스 포트 값으로 채워진다**. 이걸 놓치면 local/dev에서 `/api/v1/**` 전체가 permitAll이 된다(실제로 구현 중 이 상태를 만들어 봤고, `TraceIdFilterOrderIntegrationTest`가 401 대신 200을 받아 잡아냈다). `ManagementPortRequestMatcher`는 두 포트가 같으면 무조건 false를 돌려주고, 그 경계는 단위 테스트로 고정돼 있다.
+- **관련**: `ManagementPortRequestMatcher.java`, `SecurityConfig.java`, `application-prod.yml`, `Dockerfile`, `docker-compose.prod.yml`, `ManagementPortIntegrationTest`, [Planning.md 7.3](Planning.md#73-로깅-및-모니터링)

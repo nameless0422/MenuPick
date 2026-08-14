@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -101,8 +102,19 @@ public class SecurityConfig {
         return source;
     }
 
+    /**
+     * 컴포넌트 스캔 대상(@Component)이 아니라 여기서 만든다. {@code @WebMvcTest} 슬라이스는
+     * 이 설정 클래스를 import하지만 스캔은 하지 않으므로, 스캔에 맡기면 컨트롤러 테스트가
+     * 전부 컨텍스트 로딩 단계에서 죽는다.
+     */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public ManagementPortRequestMatcher managementPortRequestMatcher(Environment environment) {
+        return new ManagementPortRequestMatcher(environment);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http, ManagementPortRequestMatcher managementPort) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
@@ -135,9 +147,18 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**").permitAll()
-                        // 로드밸런서/오케스트레이터의 헬스체크 프로브용. show-details=never라 민감정보 노출 없음
+                        // 분리된 관리 포트로 들어온 요청은 인증을 면제한다. 그 포트는 컨테이너 루프백에만
+                        // 바인딩되고 publish하지 않으므로(application-prod.yml, docker-compose.prod.yml)
+                        // 닿을 수 있는 주체가 이미 컨테이너 안에 있는 운영자뿐이다. 관리 포트를 분리하지
+                        // 않은 구성(local/dev)에서는 이 매처가 절대 매치되지 않는다 —
+                        // 근거는 ManagementPortRequestMatcher javadoc.
+                        .requestMatchers(managementPort).permitAll()
+                        // 로드밸런서/오케스트레이터의 헬스체크 프로브용. show-details=never라 민감정보 노출 없음.
+                        // prod는 actuator를 관리 포트로 옮기므로 이 매처는 분리하지 않은 프로파일에서 쓰인다.
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        // /actuator/metrics는 인증만 요구 (역할 기반 접근 제어가 생기면 관리자 전용으로 좁힐 것)
+                        // metrics는 인증을 요구한다. 관리 포트를 분리하면 서비스 포트에는 actuator 자체가
+                        // 없으므로, "인증된 일반 사용자면 누구나 metrics를 본다"던 D-020의 트레이드오프도
+                        // 운영에서는 사라진다(분리하지 않은 로컬/개발에서만 남는다).
                         .anyRequest().authenticated())
                 .addFilterBefore(rateLimitFilter,
                         UsernamePasswordAuthenticationFilter.class)

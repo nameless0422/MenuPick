@@ -38,5 +38,12 @@ ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
 
 # actuator health는 SecurityConfig에서 permitAll이므로 인증 없이 조회 가능하다.
 # start-period는 Spring Boot 기동 시간(마이그레이션 포함)을 감안한 값.
+#
+# MANAGEMENT_SERVER_PORT가 있으면 actuator는 서비스 포트가 아니라 그 포트에 있다(prod).
+# 앱(application-prod.yml)과 이 헬스체크가 같은 변수를 읽으므로 둘이 갈릴 수 없다.
+# 값이 없으면(dev/local) actuator는 서비스 포트에 그대로 있다.
+# 관리 포트는 컨테이너 루프백에만 바인딩되지만, 이 curl은 컨테이너 안에서 돌아 그대로 닿는다.
+# localhost가 아니라 127.0.0.1을 쓰는 이유: 컨테이너의 /etc/hosts는 localhost를 ::1로도 풀고,
+# 관리 포트는 IPv4 루프백에만 바인딩돼 있어 IPv6를 먼저 시도하면 헛걸음이 한 번 생긴다.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl -fsS http://localhost:8080/actuator/health || exit 1
+    CMD curl -fsS "http://127.0.0.1:${MANAGEMENT_SERVER_PORT:-8080}/actuator/health" || exit 1

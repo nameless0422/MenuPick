@@ -99,8 +99,16 @@ services:
       # 리버스 프록시(nginx/caddy)가 TLS를 종단하고 이 포트로 넘기는 구성 전제.
       # "8080:8080"은 0.0.0.0 바인딩이라 프록시를 우회한 평문 HTTP 접근이 열린다.
       - "127.0.0.1:8080:8080"
+      # 관리 포트(MANAGEMENT_SERVER_PORT)는 일부러 여기 없다. 그 포트는 인증을 요구하지 않으므로
+      # (이유는 application-prod.yml의 management 주석) 닿을 수 있는 곳에 올리는 순간 metrics가
+      # 그대로 읽힌다. 컨테이너 루프백 바인딩이라 publish하지 않으면 밖에서 연결 자체가 안 된다.
+      # 운영자는 컨테이너 안에서 본다:
+      #   docker exec menupick-app curl -s localhost:9090/actuator/metrics
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # actuator를 서비스 포트에서 분리한다. Dockerfile의 HEALTHCHECK가 같은 값을 읽으므로
+      # 여기만 바꿔도 헬스체크가 따라온다.
+      MANAGEMENT_SERVER_PORT: 9090
       DB_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
