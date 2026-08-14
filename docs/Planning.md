@@ -1313,9 +1313,25 @@ API 호출 로그: 요청 URI, Method, 응답 코드, 처리 시간 기록 — `
 
 - **쿼리 값은 남기지 않고 파라미터 이름만 남긴다.** 검색 경로(`/api/v1/kakao/**`)의 쿼리에는 사용자가 입력한 상호명·지역이 들어와, 그대로 찍으면 "누가 무엇을 찾았는지"가 로그에 쌓인다. 이름만 남겨도 페이지네이션 파라미터 유무 같은 것은 확인된다.
 - **클라이언트 IP는 남기지 않는다.** 신뢰할 수 있는 IP 해석(프록시 홉 수)은 `RateLimitFilter`에만 있고, 복제하면 두 곳이 갈라진다.
-- 5xx와 1초 이상 걸린 요청은 WARN으로 올린다. 헬스체크(`/actuator/health`)는 30초마다 들어와 사람이 만든 요청을 묻으므로 제외한다.
+- 5xx와 1초 이상 걸린 요청은 WARN으로 올린다. 헬스체크(`/actuator/health`)는 30초마다 들어와 사람이 만든 요청을 묻으므로 제외한다. (운영은 관리 포트를 분리해 헬스체크가 서비스 포트에 아예 닿지 않지만, 분리하지 않은 local/dev를 위해 필터의 제외 규칙은 그대로 둔다.)
 
-Spring Actuator `health`/`metrics`/`prometheus` 엔드포인트 노출 (관리용 포트 분리 권장) + 장애 알림 채널(디스코드 웹훅 등) 최소 구성 — 상세는 [ImprovementBacklog.md 12번](ImprovementBacklog.md)
+Spring Actuator: **운영은 관리 포트를 분리한다**(`management.server.port`). 서비스 포트(8080)는 리버스 프록시를 거쳐 인터넷에 닿는데, `metrics`에는 커넥션 풀 점유·경로별 호출량·힙 사용량이 그대로 들어 있어 그 포트에 두면 내부 구조가 읽힌다.
+
+- 관리 포트는 **컨테이너 루프백에만 바인딩**(`management.server.address: 127.0.0.1`)하고 **compose에서 publish하지 않는다**. 이 두 겹이 metrics를 지키는 실제 방어선이다.
+- 그 포트는 **인증을 요구하지 않는다**(`ManagementPortRequestMatcher`가 permitAll로 뺀다). 운영자가 Access Token을 들고 다닐 방법이 없기 때문이다 — AT는 설계상 브라우저 메모리에만 있고 30분이면 만료된다([D-026](DecisionLog.md)). 대신 관리 포트를 분리하지 **않은** 구성(local/dev)에서는 이 면제가 절대 적용되지 않는다.
+- 운영자는 컨테이너 안에서 본다: `docker exec menupick-app curl -s localhost:9090/actuator/metrics`
+- 노출 목록은 `health, metrics`만. 관리 포트가 무인증이므로 이 화이트리스트가 유일한 방어선이다(`env`·`configprops`에는 DB 비밀번호와 JWT 시크릿이 통째로 들어 있다).
+- 이 구성이 실제로 그렇게 동작하는지는 `ManagementPortIntegrationTest`가 두 포트를 모두 열어 확인한다.
+
+장애 알림 채널(디스코드 웹훅 등) 최소 구성은 아직 — 상세는 [ImprovementBacklog.md 12번](ImprovementBacklog.md)
+
+**운영에서 실제로 보게 될 지표**
+
+| 지표 | 무엇을 알려주나 |
+| --- | --- |
+| `hikaricp.connections.pending` | 커넥션 풀(10) 고갈. 톰캣 스레드가 DB 대기로 잠기기 시작하는 신호 |
+| `executor.queued{name=mailTaskExecutor}` | 메일 큐(100) 적체. 차면 `CallerRunsPolicy`가 발송을 요청 스레드로 되돌려 메일과 무관한 요청까지 느려진다 |
+| `jvm.memory.used{area=heap}` | `mem_limit`(1536m)의 75%가 힙 상한 |
 
 추후 APM (예: Sentry, Datadog) 연동 고려
 

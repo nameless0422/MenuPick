@@ -148,7 +148,13 @@
 
 **해결 방향**: 당장은 "단일 인스턴스 전제"를 문서에 명시. 스케일 아웃 시점에 ShedLock(Redis 기반) 도입.
 
-### 12. 성능 목표 검증·모니터링 최소선 ✅ (2026-08-05 최소선 구축)
+### 12. 성능 목표 검증·모니터링 최소선 ✅ (2026-08-05 최소선 구축, 2026-08-14 운영 노출 경로 확보)
+
+> **2026-08-14 보완**: 운영에서 지표를 **볼 수 있게** 만들었다. 그동안 `application-prod.yml`이 노출을 `health`로 좁혀 놔서, 커넥션 풀이 마르든 메일 큐가 차든 확인할 방법이 없었다. `management.server.port`로 관리 포트를 분리하고(서비스 포트에서 actuator가 통째로 사라진다) 컨테이너 루프백에만 바인딩 + compose에서 publish하지 않는 방식으로 열었다. 그 포트는 인증을 요구하지 않는다 — 운영자가 Access Token을 들고 다닐 수 없기 때문이고(D-026), 대신 닿을 수 있는 주체를 `docker exec` 가능한 사람으로 제한했다. 상세와 트레이드오프는 [DecisionLog D-027](DecisionLog.md).
+>
+> 부수 효과로 "메일 큐 깊이를 볼 수 없다"는 별도 항목도 함께 해소됐다 — Boot가 `ThreadPoolTaskExecutor` 빈을 자동 계측하므로 `executor.queued{name=mailTaskExecutor}`로 바로 조회된다.
+>
+> **남은 것**: 지표를 *시계열로* 보는 수단(Prometheus/Grafana)과 장애 알림 채널은 여전히 없다. 지금은 사람이 `docker exec`으로 그 순간 값을 볼 수 있을 뿐이다.
 
 > **구현**: `spring-boot-starter-actuator` 추가, `/actuator/health`(SecurityConfig permitAll, `show-details: never`로 비인증 호출자에게 상세 정보 비노출)와 `/actuator/metrics`(인증 필요)만 노출(`management.endpoints.web.exposure.include`). `scripts/k6/load-test.js`에 Planning.md 7.1 성능 목표(조회 P95<300ms, 픽 P95<500ms)를 threshold로 반영한 부하 테스트 스크립트를 작성했다 — 메뉴 목록 조회와 랜덤 픽 시나리오를 20 VU로 1분간 구동한다.
 >
