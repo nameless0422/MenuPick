@@ -227,13 +227,47 @@ docker exec menupick-app curl -s localhost:9090/actuator/metrics/<name>
 
 이 설계를 코드로 옮길 때 만들 것들.
 
-| 산출물 | 내용 |
-| --- | --- |
-| `scripts/k6/seed.sql` | 3.1 볼륨 프로파일 생성. `loadtest-` 접두어, 파라미터로 프로파일 선택 |
-| `scripts/k6/teardown.sql` | 시드 사용자와 그 데이터·히스토리 삭제 |
-| `scripts/k6/jwt.js` | HS256 토큰 조립 (k6 모듈). 만료 전 재발급 포함 |
-| `scripts/k6/load-test.js` (개편) | 5절 시나리오 4종. 환경변수로 선택 |
-| `scripts/k6/metrics-poll.sh` | 회차 동안 관리 포트 지표를 주기 수집해 CSV로 |
-| `docs/LoadTestResults.md` | 회차별 결과. 무릎 지점·병목·설정 변경 사항 기록 |
+| 산출물 | 내용 | 상태 |
+| --- | --- | --- |
+| `scripts/k6/seed.sql` | 3.1 볼륨 프로파일 생성. `loadtest-` 접두어, `@profile`로 선택 | ✅ |
+| `scripts/k6/teardown.sql` | 시드 사용자와 그 데이터·히스토리 삭제 | ✅ |
+| `scripts/k6/jwt.js` | HS256 토큰 조립 (k6 모듈). 만료 전 재발급 포함 | ✅ |
+| `scripts/k6/load-test.js` | 5절 시나리오. `SCENARIO` 환경변수로 선택 | ✅ |
+| `scripts/k6/metrics-poll.sh` | 회차 동안 관리 포트 지표를 주기 수집해 CSV로 | ✅ |
+| `docs/LoadTestResults.md` | 회차별 결과 기록 (템플릿) | ✅ |
+
+### 실행 순서
+
+```bash
+# 1. 시드 — 출력 마지막 줄의 user_ids_range 를 받아 적는다
+mysql -u<user> -p <db> < scripts/k6/seed.sql          # heavy 는 SET @profile='heavy'; 를 먼저
+
+# 2. 배선 확인 — 여기가 통과하기 전에는 아래를 돌릴 이유가 없다
+SCENARIO=smoke BASE_URL=... JWT_SECRET=... USER_IDS=65-114 k6 run scripts/k6/load-test.js
+
+# 3. 지표 폴러를 백그라운드로 띄우고
+bash scripts/k6/metrics-poll.sh &
+
+# 4. 본 회차
+SCENARIO=stress ... k6 run scripts/k6/load-test.js
+
+# 5. 정리 — 회차가 남긴 히스토리까지 함께 지운다
+mysql -u<user> -p <db> < scripts/k6/teardown.sql
+```
+
+**`USER_IDS` 인계**: 사용자 id는 AUTO_INCREMENT라 미리 알 수 없다. `seed.sql`이 마지막에
+`user_ids_range`(예: `65-114`)와 `user_ids_list`를 출력하므로 그 값을 그대로 넘긴다.
+`load-test.js`는 범위형·나열형을 모두 받는다.
+
+### 구현하며 실제로 밟은 함정
+
+- **한글 카테고리가 이중 인코딩되어 들어갔다.** mysql 클라이언트 기본 문자셋이 utf8mb4가
+  아니면 `한식`이 mojibake로 저장되고, 그러면 행은 멀쩡히 쌓이는데 **카테고리 필터만
+  영원히 아무것도 못 맞춘다.** 겉으로는 "픽이 404"로만 보여 원인을 앱에서 찾게 된다.
+  `seed.sql`이 첫 줄에서 `SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci`로 스스로를 지킨다
+  (콜레이션까지 지정하는 이유는 MySQL 8 기본값 `utf8mb4_0900_ai_ci`가 스키마의
+  `utf8mb4_unicode_ci`와 LIKE 비교에서 충돌하기 때문).
+- **k6가 만든 서명을 서버가 받는지**는 눈으로 확인할 수 없다. `K6MintedTokenTest`가 실제
+  k6 산출물을 서버 파서로 검증해 고정한다 — 두 구현이 갈라지면 거기서 먼저 깨진다.
 
 **우선순위**: `seed.sql` → `jwt.js` → `smoke` → `stress`. smoke가 통과하기 전에 나머지를 만들면, 무엇이 깨졌는지 구분되지 않는다.
