@@ -86,7 +86,7 @@ export default function HistoryPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h2>픽 히스토리</h2>
+        <h1>픽 히스토리</h1>
       </header>
 
       <div className="days-filter">
@@ -95,6 +95,9 @@ export default function HistoryPage() {
             key={option.value}
             type="button"
             className={days === option.value ? "active" : ""}
+            // 선택된 기간을 색으로만 알리면 스크린리더에는 "7일, 버튼"으로만 읽혀
+            // 지금 어느 기간을 보고 있는지 알 수 없다.
+            aria-pressed={days === option.value}
             onClick={() => setDays(option.value)}
           >
             {option.label}

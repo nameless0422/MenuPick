@@ -5,8 +5,12 @@ import { kakaoAuthorizeUrl, googleAuthorizeUrl } from "../auth/oauthUrls";
 import { requestDemoPick } from "../api/pick";
 import { login as apiLogin, resendVerification } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
+import { consumeReturnTo } from "../auth/returnTo";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import "./AuthPages.css";
+
+/** 막힌 화면 없이 그냥 로그인한 경우의 착지점 — 메뉴가 없으면 픽 자체가 안 되므로 메뉴부터 보여준다. */
+const DEFAULT_LANDING = "/menus";
 
 export default function LoginPage() {
   // 가입 전에 픽을 한 번 보여주는 온보딩 퍼널 (docs/Planning.md 4.3).
@@ -68,7 +72,7 @@ function EmailLoginForm() {
     mutationFn: () => apiLogin(email.trim(), password),
     onSuccess: (accessToken) => {
       login(accessToken);
-      navigate("/menus", { replace: true });
+      navigate(consumeReturnTo(DEFAULT_LANDING), { replace: true });
     },
   });
 

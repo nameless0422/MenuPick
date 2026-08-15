@@ -5,6 +5,7 @@ import { requestPick, type PickRequest, type PickResult } from "../api/pick";
 import { searchTags } from "../api/tags";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
+import { chipToggle } from "../a11y/chipToggle";
 import { CATEGORY_PRESETS } from "../constants";
 import "./PickPage.css";
 
@@ -123,7 +124,7 @@ export default function PickPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h2>오늘 뭐 먹지</h2>
+        <h1>오늘 뭐 먹지</h1>
       </header>
 
       <section className="pick-filters">
@@ -165,7 +166,7 @@ export default function PickPage() {
                 <button
                   key={meters}
                   type="button"
-                  className={maxDistance === meters ? "chip selectable on" : "chip selectable"}
+                  {...chipToggle(maxDistance === meters)}
                   onClick={() => setMaxDistance(meters)}
                 >
                   {formatDistance(meters)} 이내
@@ -288,7 +289,7 @@ function CategoryFilter({
           <button
             key={category}
             type="button"
-            className={selected.includes(category) ? "chip selectable on" : "chip selectable"}
+            {...chipToggle(selected.includes(category))}
             onClick={() => toggle(category)}
           >
             {category}
@@ -352,7 +353,7 @@ function TagFilter({
             <button
               key={tag.id}
               type="button"
-              className="chip chip-tag selectable on"
+              {...chipToggle(true, "chip-tag")}
               title="클릭하면 해제"
               onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
             >
@@ -376,7 +377,7 @@ function TagFilter({
             <button
               key={tag.id}
               type="button"
-              className="chip chip-tag selectable"
+              {...chipToggle(false, "chip-tag")}
               onClick={() => onChange([...selected, { id: tag.id, name: tag.name }])}
             >
               #{tag.name}
