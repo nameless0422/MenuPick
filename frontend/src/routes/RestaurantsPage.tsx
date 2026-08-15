@@ -75,6 +75,7 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
         latitude: Number(place.y),
         longitude: Number(place.x),
         naverUrl: place.place_url || null,
+        kakaoPlaceId: place.id,
       }),
     onSuccess: onSaved,
   });
@@ -110,8 +111,8 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 
       {places.length > 0 && (
         <ul className="card-list">
-          {places.map((place, index) => (
-            <li key={`${place.place_name}-${place.x}-${place.y}-${index}`} className="card">
+          {places.map((place) => (
+            <li key={place.id} className="card">
               <div className="card-main">
                 <strong>{place.place_name}</strong>
                 {place.category_name && <span className="chip">{place.category_name}</span>}
@@ -126,6 +127,12 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
                     ? "저장 중…"
                     : "저장"}
                 </button>
+                {/* 이미 갖고 있는 장소면 서버가 새로 만들지 않고 갖고 있던 식당을 준다.
+                    아무 말도 안 하면 목록이 그대로라 저장이 씹힌 것처럼 보인다. */}
+                {saveMutation.variables === place && saveMutation.isSuccess
+                  && !saveMutation.data.created && (
+                    <span role="status">이미 저장한 식당이에요.</span>
+                  )}
               </div>
             </li>
           ))}
@@ -260,7 +267,6 @@ function RestaurantEditForm({
         latitude: detail.latitude,
         longitude: detail.longitude,
         naverUrl: detail.naverUrl,
-        naverPlaceId: detail.naverPlaceId,
       }),
     onSuccess: onSaved,
   });

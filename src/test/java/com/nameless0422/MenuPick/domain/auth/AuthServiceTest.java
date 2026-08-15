@@ -8,6 +8,7 @@ import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.OAuthUserProfile;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
+import com.nameless0422.MenuPick.domain.user.NicknameAllocator;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserHardDeleteService;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
@@ -73,7 +74,9 @@ class AuthServiceTest {
                 1800000L, 1209600000L
         );
         authService = new AuthService(
-                userRepository, authProviderRepository, userHardDeleteService,
+                userRepository, authProviderRepository,
+                new NicknameAllocator(userRepository),
+                userHardDeleteService,
                 jwtTokenProvider, refreshTokenStore, jwtProperties,
                 // 토큰 발급은 TokenIssuer로 옮겼지만, 이 테스트가 검증하는 것은
                 // "로그인 성공 시 어떤 토큰이 저장·반환되는가"라 실제 구현을 그대로 넣는다.
@@ -107,6 +110,33 @@ class AuthServiceTest {
         verify(userRepository).save(any(User.class));
         verify(authProviderRepository).save(any(AuthProvider.class));
         verify(refreshTokenStore).save(any(), eq("refresh_token"), eq(jwtProperties.refreshTokenExpiry()));
+    }
+
+    @Test
+    @DisplayName("닉네임이 이미 쓰이고 있어도 소셜 로그인은 통과한다 — 번호를 붙여 가입시킨다")
+    void socialLogin_duplicateNickname_getsSuffix() {
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code"))
+                .willReturn(new OAuthUserProfile("kakao_999", "new@email.com", "홍길동", true));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_999"))
+                .willReturn(Optional.empty());
+        given(userRepository.findByEmail("new@email.com")).willReturn(Optional.empty());
+        given(userRepository.existsByNickname("홍길동")).willReturn(true);
+        given(userRepository.existsByNickname("홍길동2")).willReturn(false);
+
+        given(userRepository.save(any(User.class))).willAnswer(inv -> inv.getArgument(0));
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+
+        authService.socialLogin("KAKAO", "auth_code");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        // 닉네임은 카카오가 준 값이라 사용자가 고른 적이 없다. 흔한 이름이라는 이유로
+        // 거절하면 그 사람은 로그인 자체를 못 한다.
+        assertThat(captor.getValue().getNickname()).isEqualTo("홍길동2");
     }
 
     @Test

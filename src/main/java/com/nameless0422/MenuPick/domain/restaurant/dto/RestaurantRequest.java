@@ -27,10 +27,15 @@ public class RestaurantRequest {
             BigDecimal longitude,
             @Size(max = 500)
             String naverUrl,
+            /**
+             * 카카오 장소 id. 이 값이 있으면 같은 장소를 이미 저장했는지 판정에 쓰인다.
+             * 없으면(장소 검색을 거치지 않은 저장) 중복 판정 없이 그대로 새로 만든다.
+             */
             @Size(max = 100)
-            String naverPlaceId
+            String kakaoPlaceId
     ) {}
 
+    /** {@code kakaoPlaceId}는 받지 않는다 — 이름을 고친다고 다른 장소가 되지는 않는다. */
     public record Update(
             @NotBlank(message = "식당 이름은 필수입니다.")
             @Size(max = 200)
@@ -44,8 +49,6 @@ public class RestaurantRequest {
             @NotNull(message = "경도는 필수입니다.")
             BigDecimal longitude,
             @Size(max = 500)
-            String naverUrl,
-            @Size(max = 100)
-            String naverPlaceId
+            String naverUrl
     ) {}
 }
