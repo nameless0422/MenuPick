@@ -77,8 +77,9 @@ public class LocalAuthService {
     // ---- 가입 ----
 
     /** 계정을 만들고 인증 메일을 보낸다. 인증 전까지는 로그인할 수 없다. */
-    public void signup(String rawEmail, String rawPassword, String nickname) {
+    public void signup(String rawEmail, String rawPassword, String rawNickname) {
         String email = normalize(rawEmail);
+        String nickname = rawNickname.trim();
 
         String encodedPassword = passwordEncoder.encode(rawPassword);
         Long userId = inTransaction(() -> createOrReplacePendingAccount(email, encodedPassword, nickname));
@@ -104,10 +105,17 @@ public class LocalAuthService {
             // 인증을 마치지 않은 계정은 로그인이 불가능해 딸린 데이터가 없다. 같은 주소의 새
             // 가입이 덮어쓰게 두지 않으면, 남의 주소로 먼저 가입해 두는 것만으로 그 사람의
             // 가입을 영구히 막을 수 있다(주소 선점).
+            // 자기가 이미 쓰던 이름을 그대로 다시 보낸 경우는 중복이 아니다 — 자기 행이
+            // 인덱스를 점유하고 있어 그대로 검사하면 자기 이름에 자기가 걸린다.
+            if (!nickname.equals(user.getNickname())) {
+                checkNicknameAvailable(nickname);
+            }
             provider.changePassword(encodedPassword);
             user.updateNickname(nickname);
             return user.getId();
         }
+
+        checkNicknameAvailable(nickname);
 
         // 인증 전이므로 email은 비워 둔다 — 위 클래스 주석의 불변식.
         User user = userRepository.save(User.builder()
@@ -123,6 +131,23 @@ public class LocalAuthService {
                 .build());
 
         return user.getId();
+    }
+
+    /**
+     * 닉네임은 유일해야 한다(V5 마이그레이션).
+     *
+     * <p>여기서 미리 보는 이유는 오직 메시지 때문이다. 검사를 건너뛰어도 DB의 UNIQUE 제약이
+     * 막지만, 그때 사용자가 받는 응답은 "데이터 무결성 제약 조건을 위반했습니다"라 어느 칸을
+     * 고쳐야 하는지 알 수 없다. 이메일 중복을 미리 보는 것과 같은 이유다.
+     *
+     * <p>검사와 저장 사이의 경쟁은 남는다. 그 창으로 들어온 요청은 제약 위반 → 409로 끝나며,
+     * 자체 가입은 사용자가 직접 다시 시도하면 되는 경로라 재시도를 따로 넣지 않는다
+     * (소셜 로그인은 사용자가 개입할 수 없어 {@link AuthService}가 재시도한다).
+     */
+    private void checkNicknameAvailable(String nickname) {
+        if (userRepository.existsByNickname(nickname)) {
+            throw new BusinessException(ErrorCode.NICKNAME_ALREADY_REGISTERED);
+        }
     }
 
     // ---- 로그인 ----

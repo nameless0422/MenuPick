@@ -13,7 +13,7 @@ public class RestaurantResponse {
             BigDecimal latitude,
             BigDecimal longitude,
             String naverUrl,
-            String naverPlaceId,
+            String kakaoPlaceId,
             LocalDateTime createdAt,
             LocalDateTime updatedAt
     ) {}

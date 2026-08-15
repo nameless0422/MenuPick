@@ -8,6 +8,7 @@ import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.OAuthUserProfile;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
+import com.nameless0422.MenuPick.domain.user.NicknameAllocator;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserHardDeleteService;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
@@ -34,6 +35,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final AuthProviderRepository authProviderRepository;
+    private final NicknameAllocator nicknameAllocator;
     private final UserHardDeleteService userHardDeleteService;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
@@ -126,7 +128,7 @@ public class AuthService {
                 String email = trustedEmail(profile);
                 user.reactivate(
                         email != null ? email : user.getEmail(),
-                        nickname(profile, user.getNickname()));
+                        keptOrFreeNickname(user, nickname(profile, user.getNickname())));
             } else {
                 // 유예기간 경과: 기존 데이터를 하드 삭제하고 새 계정으로 가입 처리
                 userHardDeleteService.purge(user.getId());
@@ -155,7 +157,7 @@ public class AuthService {
                         User.builder()
                                 .email(email)
                                 .emailVerified(email != null)
-                                .nickname(nickname(profile, DEFAULT_NICKNAME))
+                                .nickname(nicknameAllocator.allocate(nickname(profile, DEFAULT_NICKNAME)))
                                 .build()
                 ));
 
@@ -166,6 +168,17 @@ public class AuthService {
                         .socialId(profile.socialId())
                         .build()
         );
+    }
+
+    /**
+     * 복구되는 계정이 쓸 닉네임.
+     *
+     * <p>자기가 쓰던 이름 그대로면 비어 있는지 볼 필요가 없다 — 탈퇴 중에도 그 행이 인덱스에
+     * 남아 이름을 붙잡고 있었으므로, 확인하면 "이미 쓰임"으로 나와 자기 이름을 자기가 빼앗긴다.
+     * 제공자가 그 사이 바꾼 이름을 준 경우에만 빈자리를 찾는다.
+     */
+    private String keptOrFreeNickname(User user, String desired) {
+        return desired.equals(user.getNickname()) ? desired : nicknameAllocator.allocate(desired);
     }
 
     /**

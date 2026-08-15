@@ -29,6 +29,7 @@ class KakaoLocalControllerTest extends AbstractControllerTest {
         var result = new KakaoLocalResponse.PlaceSearchResult(
                 new KakaoLocalResponse.PlaceSearchResult.Meta(1, 1, true),
                 List.of(new KakaoLocalResponse.PlaceSearchResult.Place(
+                        "8005012",
                         "진주회관", "서울 중구 충무로1가 24-11", "서울 중구 명동9길 12",
                         "126.985302", "37.561251", "02-776-3525",
                         "http://place.map.kakao.com/8005012",

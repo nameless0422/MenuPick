@@ -51,7 +51,7 @@ class RestaurantRepositoryTest extends AbstractIntegrationTest {
                 .phone("02-1234-5678")
                 .latitude(new BigDecimal("37.5665350"))
                 .longitude(new BigDecimal("126.9779690"))
-                .naverPlaceId("naver_123")
+                .kakaoPlaceId("kakao_123")
                 .build();
 
         Restaurant saved = restaurantRepository.save(restaurant);
