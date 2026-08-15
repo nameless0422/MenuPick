@@ -93,6 +93,21 @@ h2 {
     font-size: 20px;
   }
 }
+
+/* 로그인·가입 화면의 h1은 서비스 이름을 크게 세우는 자리라 56px가 맞지만, 앱 안쪽
+   페이지의 h1은 "내 메뉴" 같은 화면 제목이라 그 크기가 어울리지 않는다.
+   크기 때문에 제목을 h2로 낮추면 h1이 하나도 없는 문서가 되어, 스크린리더가 제목만
+   훑을 때 지금 어느 화면인지 알 방법이 사라진다. 구조는 h1으로 두고 크기만 여기서 내린다.
+   h2(24px)보다는 커야 아래 소제목과 단계가 구분된다. */
+.page h1 {
+  font-size: 28px;
+  line-height: 118%;
+  letter-spacing: -0.28px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 22px;
+  }
+}
 p {
   margin: 0;
 }
@@ -270,7 +285,7 @@ select {
   padding: 16px;
   margin-bottom: 16px;
 }
-.menu-form h3 {
+.menu-form h2 {
   margin: 0;
 }
 .menu-form label {

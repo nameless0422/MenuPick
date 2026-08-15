@@ -3,9 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { loginWithOAuth, type Provider } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { consumeState } from "../auth/oauthUrls";
+import { consumeReturnTo } from "../auth/returnTo";
 
 const INVALID_REQUEST_MESSAGE =
   "로그인 요청이 유효하지 않습니다. 다시 시도해주세요.";
+
+/** 이메일 로그인과 같은 기본 착지점 — 로그인 수단에 따라 도착지가 달라지지 않게 맞춘다. */
+const DEFAULT_LANDING = "/menus";
 
 export default function OAuthCallbackPage({ provider }: { provider: Provider }) {
   const [searchParams] = useSearchParams();
@@ -36,7 +40,7 @@ export default function OAuthCallbackPage({ provider }: { provider: Provider }) 
     loginWithOAuth(provider, code)
       .then((accessToken) => {
         login(accessToken);
-        navigate("/menus", { replace: true });
+        navigate(consumeReturnTo(DEFAULT_LANDING), { replace: true });
       })
       .catch(() => setError("로그인에 실패했습니다."));
   }, [searchParams, provider, login, navigate]);

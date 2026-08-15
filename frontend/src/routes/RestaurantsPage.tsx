@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRestaurant,
@@ -13,6 +13,8 @@ import { searchPlacesByKeyword, type KakaoPlace } from "../api/places";
 import { createMenuRestaurant } from "../api/menuRestaurants";
 import { fetchMenus } from "../api/menus";
 import { apiErrorMessage as errorMessage } from "../api/http";
+import { chipToggle } from "../a11y/chipToggle";
+import { useFocusOnMount } from "../a11y/useFocusOnMount";
 
 export default function RestaurantsPage() {
   const queryClient = useQueryClient();
@@ -29,12 +31,12 @@ export default function RestaurantsPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h2>내 식당</h2>
+        <h1>내 식당</h1>
       </header>
 
       <PlaceSearch onSaved={invalidate} />
 
-      <h3>저장한 식당</h3>
+      <h2>저장한 식당</h2>
       {restaurantsQuery.isPending && <p>불러오는 중…</p>}
       {restaurantsQuery.isError && <p className="error">{errorMessage(restaurantsQuery.error)}</p>}
       {restaurantsQuery.isSuccess && restaurants.length === 0 && (
@@ -81,7 +83,7 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 
   return (
     <section className="menu-form">
-      <h3>장소 검색으로 식당 추가</h3>
+      <h2>장소 검색으로 식당 추가</h2>
       <form
         className="inline-add"
         onSubmit={(e) => {
@@ -145,6 +147,23 @@ function RestaurantCard({
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"edit" | "link" | null>(null);
 
+  // 수정 폼은 카드 전체를 대체하므로 폼을 닫으면 눌렀던 버튼이 새로 마운트된다 —
+  // 초점이 <body>로 떨어지지 않도록 다시 그려진 버튼을 찾아 돌려준다. (MenusPage와 같은 처리)
+  const editButton = useRef<HTMLButtonElement>(null);
+  const linkButton = useRef<HTMLButtonElement>(null);
+  const [focusAfterClose, setFocusAfterClose] = useState<"edit" | "link" | null>(null);
+
+  useEffect(() => {
+    if (focusAfterClose == null) return;
+    (focusAfterClose === "edit" ? editButton : linkButton).current?.focus();
+    setFocusAfterClose(null);
+  }, [focusAfterClose]);
+
+  const closeForm = () => {
+    setFocusAfterClose(mode);
+    setMode(null);
+  };
+
   // 목록(RestaurantSummary)에는 전화·네이버 링크가 없어 상세를 카드별로 조회한다 (react-query가 캐시)
   const detailQuery = useQuery({
     queryKey: ["restaurant", summary.id],
@@ -165,9 +184,9 @@ function RestaurantCard({
       <li className="card">
         <RestaurantEditForm
           detail={detail}
-          onClose={() => setMode(null)}
+          onClose={closeForm}
           onSaved={() => {
-            setMode(null);
+            closeForm();
             queryClient.invalidateQueries({ queryKey: ["restaurant", summary.id] });
             onChanged();
           }}
@@ -190,8 +209,11 @@ function RestaurantCard({
       {detail?.phone && <span>{detail.phone}</span>}
       {deleteMutation.isError && <p className="error">{errorMessage(deleteMutation.error)}</p>}
       <div className="card-actions">
-        <button disabled={!detail} onClick={() => setMode("edit")}>수정</button>
-        <button onClick={() => setMode(mode === "link" ? null : "link")}>
+        <button ref={editButton} disabled={!detail} onClick={() => setMode("edit")}>수정</button>
+        <button
+          ref={linkButton}
+          onClick={() => (mode === "link" ? closeForm() : setMode("link"))}
+        >
           {mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}
         </button>
         <button
@@ -206,7 +228,7 @@ function RestaurantCard({
         </button>
       </div>
       {mode === "link" && (
-        <MenuLinkForm restaurantId={summary.id} onClose={() => setMode(null)} />
+        <MenuLinkForm restaurantId={summary.id} onClose={closeForm} />
       )}
     </li>
   );
@@ -226,6 +248,7 @@ function RestaurantEditForm({
   const [name, setName] = useState(detail.name);
   const [address, setAddress] = useState(detail.address ?? "");
   const [phone, setPhone] = useState(detail.phone ?? "");
+  const headingRef = useFocusOnMount<HTMLHeadingElement>();
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -250,7 +273,7 @@ function RestaurantEditForm({
         if (name.trim()) saveMutation.mutate();
       }}
     >
-      <h3>식당 수정</h3>
+      <h2 ref={headingRef} tabIndex={-1}>식당 수정</h2>
       <label>
         식당 이름
         <input
@@ -294,6 +317,7 @@ function MenuLinkForm({
   const [menuId, setMenuId] = useState<number | null>(null);
   const [rating, setRating] = useState(3);
   const [memo, setMemo] = useState("");
+  const headingRef = useFocusOnMount<HTMLHeadingElement>();
 
   // 첫 페이지 20개면 충분 — MenusPage의 무한 스크롤 키(["menus"])와 겹치지 않게 별도 키 사용
   const menusQuery = useQuery({
@@ -315,7 +339,7 @@ function MenuLinkForm({
         if (menuId != null) linkMutation.mutate();
       }}
     >
-      <h3>메뉴 연결</h3>
+      <h2 ref={headingRef} tabIndex={-1}>메뉴 연결</h2>
 
       <fieldset>
         <legend>메뉴 선택</legend>
@@ -329,7 +353,7 @@ function MenuLinkForm({
             <button
               key={menu.id}
               type="button"
-              className={menu.id === menuId ? "chip selectable on" : "chip selectable"}
+              {...chipToggle(menu.id === menuId)}
               onClick={() => setMenuId(menu.id === menuId ? null : menu.id)}
             >
               {menu.name}

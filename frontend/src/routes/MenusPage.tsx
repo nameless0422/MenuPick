@@ -1,4 +1,4 @@
-import { useDeferredValue, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -16,14 +16,37 @@ import {
 } from "../api/menus";
 import { createTag, searchTags } from "../api/tags";
 import { apiErrorMessage as errorMessage } from "../api/http";
+import { chipToggle } from "../a11y/chipToggle";
+import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import { CATEGORY_PRESETS } from "../constants";
 
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
 
+/** 편집 중인 대상. "new"면 신규 등록 폼, 숫자면 해당 메뉴 수정 폼. */
+type Editing = "new" | number;
+
 export default function MenusPage() {
   const queryClient = useQueryClient();
-  // "new"면 신규 등록 폼, 숫자면 해당 메뉴 수정 폼
-  const [editing, setEditing] = useState<"new" | number | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
+
+  // 폼을 닫을 때 초점을 돌려줄 버튼들. 수정 폼은 카드를 통째로 대체하므로, 폼이 닫히면
+  // "수정" 버튼이 새로 마운트된다 — 닫기 전에 잡아 둔 DOM 참조로는 돌아갈 수 없어
+  // "무엇으로 돌아갈지"를 키로 기억했다가 다시 그려진 뒤에 찾는다.
+  const openers = useRef(new Map<Editing, HTMLButtonElement | null>());
+  const [focusAfterClose, setFocusAfterClose] = useState<Editing | null>(null);
+
+  useEffect(() => {
+    if (focusAfterClose == null) return;
+    openers.current.get(focusAfterClose)?.focus();
+    setFocusAfterClose(null);
+  }, [focusAfterClose]);
+
+  // 폼을 닫으면 초점이 사라진 폼과 함께 <body>로 떨어진다. 방금 편집한 항목으로 돌려놓지
+  // 않으면 키보드 사용자는 Tab을 눌러 목록 처음부터 다시 내려와야 한다.
+  const closeForm = () => {
+    setFocusAfterClose(editing);
+    setEditing(null);
+  };
 
   const menusQuery = useInfiniteQuery({
     queryKey: ["menus"],
@@ -52,12 +75,17 @@ export default function MenusPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h2>내 메뉴</h2>
-        <button onClick={() => setEditing("new")}>+ 새 메뉴</button>
+        <h1>내 메뉴</h1>
+        <button
+          ref={(node) => { openers.current.set("new", node); }}
+          onClick={() => setEditing("new")}
+        >
+          + 새 메뉴
+        </button>
       </header>
 
       {editing === "new" && (
-        <MenuForm onClose={() => setEditing(null)} onSaved={() => { setEditing(null); invalidate(); }} />
+        <MenuForm onClose={closeForm} onSaved={() => { closeForm(); invalidate(); }} />
       )}
 
       {menusQuery.isPending && <p>불러오는 중…</p>}
@@ -81,8 +109,8 @@ export default function MenusPage() {
             <li key={menu.id} className="card">
               <MenuForm
                 menuId={menu.id}
-                onClose={() => setEditing(null)}
-                onSaved={() => { setEditing(null); invalidate(); }}
+                onClose={closeForm}
+                onSaved={() => { closeForm(); invalidate(); }}
               />
             </li>
           ) : (
@@ -106,7 +134,12 @@ export default function MenusPage() {
                 </div>
               )}
               <div className="card-actions">
-                <button onClick={() => setEditing(menu.id)}>수정</button>
+                <button
+                  ref={(node) => { openers.current.set(menu.id, node); }}
+                  onClick={() => setEditing(menu.id)}
+                >
+                  수정
+                </button>
                 <button
                   disabled={excludeMutation.isPending}
                   onClick={() => excludeMutation.mutate({ menuId: menu.id, exclude: !menu.isExcluded })}
@@ -199,6 +232,7 @@ function MenuFormFields({
   const [isExcluded, setIsExcluded] = useState(initial?.isExcluded ?? false);
   const [categories, setCategories] = useState<string[]>(initial?.categories ?? []);
   const [tags, setTags] = useState<TagSummary[]>(initial?.tags ?? []);
+  const headingRef = useFocusOnMount<HTMLHeadingElement>();
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -218,7 +252,7 @@ function MenuFormFields({
         if (name.trim()) saveMutation.mutate();
       }}
     >
-      <h3>{menuId != null ? "메뉴 수정" : "새 메뉴"}</h3>
+      <h2 ref={headingRef} tabIndex={-1}>{menuId != null ? "메뉴 수정" : "새 메뉴"}</h2>
 
       <label>
         메뉴 이름
@@ -315,7 +349,7 @@ function CategoryPicker({
           <button
             key={category}
             type="button"
-            className={selected.includes(category) ? "chip selectable on" : "chip selectable"}
+            {...chipToggle(selected.includes(category))}
             onClick={() => toggle(category)}
           >
             {category}
@@ -380,7 +414,7 @@ function TagPicker({
             <button
               key={tag.id}
               type="button"
-              className="chip chip-tag selectable on"
+              {...chipToggle(true, "chip-tag")}
               title="클릭하면 해제"
               onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
             >
@@ -413,7 +447,7 @@ function TagPicker({
             <button
               key={tag.id}
               type="button"
-              className="chip chip-tag selectable"
+              {...chipToggle(false, "chip-tag")}
               onClick={() => onChange([...selected, { id: tag.id, name: tag.name }])}
             >
               #{tag.name}

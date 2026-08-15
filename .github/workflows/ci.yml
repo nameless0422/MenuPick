@@ -27,6 +27,14 @@ jobs:
       - name: Install
         run: npm ci
 
+      # tsc가 잡지 못하는 종류(닿지 않는 코드, 빠뜨린 훅 의존성, 잘못 쓴 훅 규칙)를 본다.
+      # 빌드보다 먼저 두는 건 훨씬 빨라서 — 이 잡이 깨질 때 4초 만에 알 수 있다.
+      # 경고로 실패시키지는 않는다. oxlint의 기본 경고에는 스타일 취향(예: Fast Refresh
+      # 권고)이 섞여 있어, 이대로 --deny-warnings를 켜면 지금 있는 경고 하나 때문에
+      # 무관한 PR이 전부 빨갛게 뜬다. 오류 등급 규칙만 CI를 막는다.
+      - name: Lint
+        run: npm run lint
+
       - name: Type-check and build
         # 백엔드 실행 없이 정적으로 확인 가능한 것만: tsc + vite build
         run: npm run build
