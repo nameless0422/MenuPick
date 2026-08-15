@@ -27,6 +27,27 @@ services:
     volumes:
       - redis-data:/data
 
+  # 로컬 개발용 메일 서버. 받은 메일을 밖으로 내보내지 않고 붙잡아 웹 UI로 보여준다.
+  #
+  # 이게 없으면 로컬에서는 spring.mail.host를 비워 두고 인증 링크를 로그(WARN)로 떨어뜨려
+  # 확인해야 하는데, 그 경로는 JavaMailSender를 아예 만들지 않아 "메일 발송"이라는 동작
+  # 자체가 한 번도 실행되지 않는다. 제목이 깨지거나 링크가 잘못 조립돼도 로그에서는 멀쩡해 보인다.
+  #
+  # 쓰려면 앱에 아래를 준다 (application-local.yml의 기본값은 여전히 '발송 안 함'이다):
+  #   SPRING_MAIL_HOST=localhost SPRING_MAIL_PORT=1025
+  # 받은 메일은 http://localhost:8025 에서 본다.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: menupick-mailpit
+    ports:
+      # 1025=SMTP, 8025=웹 UI. 둘 다 인증이 없으므로 루프백만 바인딩한다 —
+      # 열어두면 같은 망의 누구나 이 서버로 메일을 보내고 받은 메일함을 들여다볼 수 있다.
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    environment:
+      # 개발용이라 보관 상한만 두고 영속화하지 않는다. 컨테이너를 지우면 메일함도 비워진다.
+      MP_MAX_MESSAGES: 500
+
 volumes:
   mysql-data:
   redis-data:

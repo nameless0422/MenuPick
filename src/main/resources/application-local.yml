@@ -22,6 +22,14 @@ spring:
 # SMTP를 지정하지 않는다. spring.mail.host가 없으면 Boot가 JavaMailSender를 만들지 않고,
 # EmailSender가 인증·재설정 링크를 로그(WARN)로 떨어뜨린다. 로컬에서 메일 계정 없이
 # 가입 → 인증 흐름을 끝까지 확인하기 위한 의도된 설정이다.
+#
+# 다만 이 경로는 메일을 "만들지도 보내지도" 않는다는 점에 주의할 것. 제목이 깨지거나 링크가
+# 잘못 조립돼도 로그에서는 멀쩡해 보인다. 실제 발송까지 눈으로 보려면 docker-compose.yml의
+# mailpit을 띄우고 아래를 주면 된다 — 받은 메일은 http://localhost:8025 에서 확인한다.
+#
+#   SPRING_MAIL_HOST=localhost SPRING_MAIL_PORT=1025 ./gradlew bootRun
+#
+# 발송 경로 자체의 회귀는 SmtpDeliveryIntegrationTest가 실제 SMTP 소켓으로 고정한다.
 app:
   mail:
     from: no-reply@menupick.local
