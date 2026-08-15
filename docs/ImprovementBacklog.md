@@ -158,6 +158,8 @@
 
 > **구현**: `spring-boot-starter-actuator` 추가, `/actuator/health`(SecurityConfig permitAll, `show-details: never`로 비인증 호출자에게 상세 정보 비노출)와 `/actuator/metrics`(인증 필요)만 노출(`management.endpoints.web.exposure.include`). `scripts/k6/load-test.js`에 Planning.md 7.1 성능 목표(조회 P95<300ms, 픽 P95<500ms)를 threshold로 반영한 부하 테스트 스크립트를 작성했다 — 메뉴 목록 조회와 랜덤 픽 시나리오를 20 VU로 1분간 구동한다.
 >
+> **2026-08-16 후속**: 부하 테스트 설계를 [LoadTestPlan.md](LoadTestPlan.md)로 분리했다. 아래 "자동화할 수 없다"는 판단은 **틀린 것으로 확인됐다** — Access Token 검증은 서명·만료·token_type만 보고 요청마다 DB/Redis를 조회하지 않으므로(`JwtAuthenticationFilter`), 시크릿을 아는 스크립트가 토큰을 오프라인으로 만들 수 있다. OAuth 왕복이 필요 없다. 시드 데이터 부재·레이트 리밋·픽의 인메모리 필터링이 실제 장애물이며 그 대응은 설계 문서에 있다.
+>
 > **보류 항목**: 로그인 API는 OAuth 인가 코드가 실제 카카오/구글 리다이렉트를 거쳐야 해 스크립트로 자동화할 수 없다 — 스크립트는 사전에 수동으로 발급한 `ACCESS_TOKEN`을 받아 인증 API(픽, 메뉴 목록)만 부하 테스트한다. 부하 테스트 실행 자체(k6가 실제 대상 서버에 트래픽을 쏘는 행위)는 배포 전 사람이 판단해 실행할 운영 작업이라 이번 세션에서 실행하지 않았다. 장애 알림 채널(디스코드 웹훅 등)은 실제 웹훅 URL 발급이 필요한 외부 인프라 설정이라 대상 확정 후 진행.
 
 **문제**: P95 300ms 등 목표 수치는 있으나 검증 수단(부하 테스트)이 없고, 모니터링은 "APM 고려" 수준이다.
