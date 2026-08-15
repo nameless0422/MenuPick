@@ -153,6 +153,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | --- | --- | --- |
 | 200 OK | 성공 | 조회, 수정, 삭제 성공 |
 | 201 Created | 생성 성공 | 메뉴/식당/태그 등 리소스 생성 |
+| 200 OK (생성 요청) | 이미 있는 리소스 | 식당 저장에 한함 — 같은 장소를 이미 저장해 뒀으면 새로 만들지 않고 갖고 있던 것을 준다 ([D-028](DecisionLog.md#d-028-유일성-규칙--닉네임은-중복-불가-식당은-카카오-place-id-기준으로-하나)) |
 | 400 Bad Request | 입력 오류 | 필수값 누락, 형식 불일치 |
 | 401 Unauthorized | 인증 실패 | 토큰 없음 / 만료 |
 | 403 Forbidden | 권한 없음 | (현재 미사용 — 아래 참고) |
@@ -230,7 +231,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | GET | /restaurants | 저장한 식당 목록 조회 | Y |
-| POST | /restaurants | 식당 저장 (좌표 포함) | Y |
+| POST | /restaurants | 식당 저장 (좌표 포함). 같은 카카오 장소를 이미 저장했으면 새로 만들지 않고 200으로 그것을 준다 | Y |
 | GET | /restaurants/{restaurantId} | 식당 상세 조회 | Y |
 | PUT | /restaurants/{restaurantId} | 식당 정보 수정 | Y |
 | DELETE | /restaurants/{restaurantId} | 식당 삭제 (Soft delete) | Y |
@@ -641,7 +642,7 @@ tags 테이블 컬럼 구성:
 
 | 테이블 | 검토 포인트 |
 | --- | --- |
-| restaurants | naver_place_id → naver_url 이행적 종속 가능성 |
+| restaurants | `kakao_place_id` → `naver_url` 이행적 종속 가능성 (아래 분석은 컬럼명이 `naver_place_id`이던 시점에 쓰였다) |
 | auth_providers | provider(소셜 로그인 유형) → 관련 정책 속성이 추가될 경우 별도 테이블 필요 |
 | menu_restaurants | rating/memo가 menu_id 또는 restaurant_id에 단독 종속될 가능성 없음 — 충족 예상 |
 | history_filter_conditions | filter_type → filter_value 유효 범위 등 메타 정보 이행 종속 가능성 |
@@ -667,13 +668,15 @@ tags 테이블 컬럼 구성:
 | menu_categories | 없음 | ✓ 충족 |
 | tags | 없음 | ✓ 충족 |
 | menu_tags | 없음 | ✓ 충족 |
-| restaurants | naver_place_id → naver_url 이행 종속 의심 | ⚠ 검토 필요 → 실용적 판단으로 유지 |
+| restaurants | `kakao_place_id` → `naver_url` 이행 종속 의심 | ⚠ 검토 필요 → 실용적 판단으로 유지 |
 | menu_restaurants | 없음 | ✓ 충족 |
 | histories | 없음 | ✓ 충족 |
 | history_filter_conditions | filter_type → filter_value 유효 범위 가능성 | ✓ 충족 — 메타 정보 미저장 |
 
 
 ### 3.4.3 restaurants — 이행적 종속 상세 분석
+
+> **읽기 전에**: 아래 분석은 컬럼명이 `naver_place_id`이던 시점에 쓰였다. 현재 이름은 `kakao_place_id`이며([V5](../src/main/resources/db/migration/V5__nickname_and_place_uniqueness.sql), [D-028](DecisionLog.md#d-028-유일성-규칙--닉네임은-중복-불가-식당은-카카오-place-id-기준으로-하나)), 담기는 값은 처음부터 카카오 장소 id였다. **종속 관계(`place_id → url`)와 아래 결론은 그대로 유효하다** — 이름만 다르게 읽으면 된다.
 
 > ⚠️ 이행적 종속 의심 대상: id → naver_place_id → naver_url
 
@@ -736,7 +739,7 @@ tags 테이블 컬럼 구성:
 | menu_categories | ✓ | ✓ | ✓ | 1NF에서 신설 |
 | tags | ✓ | ✓ | ✓ | 변경 없음 |
 | menu_tags | ✓ | ✓ | ✓ | 변경 없음 |
-| restaurants | ✓ | ✓ | △ 의도적 비정규화 | naver_place_id→naver_url 이행 종속 허용 |
+| restaurants | ✓ | ✓ | △ 의도적 비정규화 | `kakao_place_id`→`naver_url` 이행 종속 허용 (3.4.3 참고 — 초안의 `naver_place_id`가 현재 이름이다) |
 | menu_restaurants | ✓ | ✓ | ✓ | 변경 없음 |
 | histories | ✓ | ✓ | ✓ | 1NF에서 history_filter_conditions 분리 |
 | history_filter_conditions | ✓ | ✓ | ✓ | 1NF에서 신설 |
@@ -878,7 +881,7 @@ tags 테이블 컬럼 구성:
 | --- | --- | --- | --- |
 | 1NF | 원자값, 반복 그룹 없음, PK 존재 | 위반 3건 발견 | auth_providers, menu_categories, history_filter_conditions 신설 (총 +3 테이블) |
 | 2NF | 비키 컬럼의 완전 함수 종속 | 전체 충족 | 스키마 변경 없음 |
-| 3NF | 이행적 함수 종속 없음 | 충족 (비정규화 1건 허용) | restaurants의 naver_place_id→naver_url 이행 종속을 실용적 이유로 유지 |
+| 3NF | 이행적 함수 종속 없음 | 충족 (비정규화 1건 허용) | restaurants의 `kakao_place_id`→`naver_url` 이행 종속을 실용적 이유로 유지 (컬럼명은 V5에서 변경) |
 | 4NF | 독립적 다치 종속 2개 이상 공존 없음 | 전체 충족 | 스키마 변경 없음 |
 | 5NF | 조인 종속이 후보키에 의해서만 성립 | 해당 없음 — 적용 불필요 | 삼각 독립 관계 구조 자체가 도메인에 없음 |
 
@@ -945,10 +948,9 @@ tags 테이블 컬럼 구성:
 | --- | --- | --- | --- |
 | PRIMARY | PK | id | 자동 생성 |
 | idx_menus_user_deleted | IDX | (user_id, deleted_at) | 사용자 메뉴 목록 조회 — user_id 선두, deleted_at IS NULL 조건 함께 처리 |
-| idx_menus_user_excluded | CVR | (user_id, is_excluded, id, name) | 랜덤 픽 후보 쿼리 — 커버링: user_id + is_excluded=0 필터링 후 id/name 반환까지 테이블 접근 없음 |
-| idx_menus_name_search | IDX | (user_id, name) | 메뉴명 키워드 검색 (LIKE '검색어%' 패턴 지원) |
+| idx_menus_user_excluded | IDX | (user_id, is_excluded, deleted_at) | 랜덤 픽 후보 쿼리 — 실제 쿼리가 `deleted_at IS NULL`까지 포함한다 (V3에서 재정의) |
 
-> 🔶 주의: LIKE '%검색어%' 패턴(앞에 % 포함)은 인덱스를 사용하지 못한다. 검색 기능이 중요하다면 Full-Text Index 또는 별도 검색 엔진 도입을 고려할 것.
+> 설계 초안에는 `idx_menus_name_search(user_id, name)`와, `(user_id, is_excluded, id, name)` 커버링 구성이 있었다. V3에서 전자는 **대응하는 쿼리가 없어**(메뉴명 검색 미구현) 삭제했고, 후자는 실제 픽 쿼리의 `deleted_at IS NULL`이 빠져 있어 재정의했다 — 그 대가로 커버링은 아니게 됐다.
 
 *idx_menus_user_deleted: 선두 컬럼 user_id(높은 카디널리티) → deleted_at(IS NULL 조건) 순서가 최적*
 
@@ -1012,6 +1014,7 @@ tags 테이블 컬럼 구성:
 | PRIMARY | PK | id | 자동 생성 |
 | idx_histories_user_time | IDX | (user_id, recommended_at DESC) | 최근 히스토리 조회 — 가장 빈번한 쿼리 패턴: WHERE user_id=? ORDER BY recommended_at DESC LIMIT N |
 | idx_histories_visited | IDX | (user_id, is_visited, recommended_at DESC) | 방문 여부 필터 조회 — 미방문 목록, 방문 완료 목록 분리 조회 시 활용 |
+| idx_histories_user_id | IDX | (user_id, id DESC) | 커서 페이지네이션 (V3 추가). 커서가 `ORDER BY id DESC`라 위 `recommended_at` 인덱스로는 정렬을 커버하지 못해 filesort가 났다 |
 
 *idx_histories_user_time: DESC 정렬 인덱스 — MySQL 8.0 이상에서 내림차순 인덱스 직접 지원. 7일 제한 조건(recommended_at >= NOW() - INTERVAL 7 DAY)도 이 인덱스로 커버 가능*
 
@@ -1021,8 +1024,9 @@ tags 테이블 컬럼 구성:
 | 인덱스명 | 종류 | 컬럼 | 목적 및 근거 |
 | --- | --- | --- | --- |
 | PRIMARY | PK | id | 자동 생성 |
-| idx_hfc_history_id | IDX | history_id | 특정 히스토리의 필터 조건 전체 조회 — JOIN 또는 서브쿼리 시 필수 |
-| idx_hfc_type_value | IDX | (history_id, filter_type) | 필터 타입별 조회 — CATEGORY 조건만 꺼내거나, TAG_INCLUDE 조건만 꺼낼 때 최적화 |
+| idx_hfc_type_value | IDX | (history_id, filter_type) | 히스토리별 필터 조건 조회. 선두 컬럼이 history_id라 "이 히스토리의 조건 전부"도 이 인덱스로 처리된다 |
+
+> 초안의 `idx_hfc_history_id(history_id)`는 위 인덱스의 좌측 접두사라 완전 중복이어서 V3에서 삭제했다.
 
 
 ### 3.7.4 전체 인덱스 목록 요약
@@ -1057,11 +1061,11 @@ tags 테이블 컬럼 구성:
 | histories | PRIMARY | PK | id |
 | histories | idx_histories_user_time | IDX | (user_id, recommended_at DESC) |
 | histories | idx_histories_visited | IDX | (user_id, is_visited, recommended_at DESC) |
+| histories | idx_histories_user_id | IDX | (user_id, id DESC) |
 | history_filter_conditions | PRIMARY | PK | id |
-| history_filter_conditions | idx_hfc_history_id | IDX | history_id |
 | history_filter_conditions | idx_hfc_type_value | IDX | (history_id, filter_type) |
 
-*총 인덱스 수: PK 10개 + UQ 4개 + IDX 11개 + CVR 1개 = 26개*
+*총 인덱스 수: PK 10개 + UQ 6개 + IDX 13개 = **29개** (V1 기준 28개 → V3 증감 없음 → V5에서 +1)*
 
 > **V3 마이그레이션(`V3__performance_indexes.sql`)에서 위 목록을 아래와 같이 조정했다.**
 >
@@ -1079,8 +1083,8 @@ tags 테이블 컬럼 구성:
 | 쿼리 시나리오 | 사용 인덱스 | 예상 실행 계획 |
 | --- | --- | --- |
 | 사용자 메뉴 목록 조회 (삭제 제외) | idx_menus_user_deleted | ref(user_id) + range(deleted_at IS NULL) |
-| 랜덤 픽 후보 추출 (제외 메뉴 필터) | idx_menus_user_excluded (CVR) | ref(user_id, is_excluded=0) → 테이블 접근 없이 id/name 반환 |
-| 메뉴명 자동완성 검색 | idx_menus_name_search | ref(user_id) + range(name LIKE '돈%') |
+| 랜덤 픽 후보 추출 (제외 메뉴 필터) | idx_menus_user_excluded | ref(user_id, is_excluded=0, deleted_at IS NULL) |
+| 히스토리 커서 페이지네이션 | idx_histories_user_id | ref(user_id) + range(id < 커서) — filesort 없음 |
 | 태그 자동완성 검색 | uq_tags_user_name | ref(user_id) + range(name LIKE '혼%') |
 | 태그 포함 필터 (특정 태그 메뉴 조회) | idx_menu_tags_tag_id → PK(menus) | ref(tag_id) → JOIN menus PK |
 | 거리 기반 식당 후보 추출 | idx_restaurants_location | ref(user_id) + range(lat BETWEEN, lng BETWEEN) → App 레벨 Haversine |
@@ -1118,6 +1122,8 @@ tags 테이블 컬럼 구성:
 *동일 소셜 계정의 동시 최초 로그인 시 UNIQUE(provider, social_id) 제약 위반이 발생할 수 있다 — 위반 예외를 잡아 재조회로 흡수해 양쪽 요청 모두 정상 처리한다.*
 
 **계정 통합 정책 (이메일 기준 자동 통합)**: 처음 보는 (provider, social_id)라도 같은 이메일로 가입된 유저가 이미 있으면 새 계정을 만들지 않고 해당 유저에 소셜 연동(auth_providers 행)만 추가한다. 같은 사람이 카카오·구글로 각각 로그인해도 계정이 하나로 유지되고, `uq_users_email` UNIQUE 제약과도 충돌하지 않는다. OAuth 프로필에 이메일이 없으면 통합 없이 새 계정을 생성한다.
+
+**닉네임 충돌 처리**: `users.nickname`은 UNIQUE다(V5). 그런데 **소셜 로그인은 중복을 거절할 수 없다** — 닉네임은 제공자가 주는 값이고 사용자가 고른 적이 없어, 흔한 이름이라는 이유로 예외를 던지면 그 사람은 로그인 자체를 못 한다. 게다가 프로필 제공에 동의하지 않은 사용자는 전원 같은 기본값(`메뉴픽 사용자`)을 받으므로 충돌은 두 번째 사용자부터 곧바로 생긴다. 그래서 소셜 경로는 `NicknameAllocator`가 번호를 붙이고(`홍길동` → `홍길동2`), 사용자가 직접 입력하는 자체 가입만 409(`NICKNAME_ALREADY_REGISTERED`)로 거절한다. 근거는 [D-028](DecisionLog.md#d-028-유일성-규칙--닉네임은-중복-불가-식당은-카카오-place-id-기준으로-하나).
 
 
 ### 4.2 JWT 토큰 정책
@@ -1194,7 +1200,7 @@ Refresh Token은 Redis에 userId를 키로 저장하여 강제 로그아웃(블�
 | --- | --- |
 | 사용 API | 네이버 NCP Maps — Geocoding / Reverse Geocoding, 카카오 로컬 — 키워드/카테고리 장소 검색 |
 | 호출 주체 | Spring Boot 백엔드 (WebClient 사용) |
-| 타임아웃 | connect 5초 / response 10초 — 외부 API 지연 시 요청 스레드 무한 대기 방지 |
+| 타임아웃 | connect 2초 / response 3초 + 1회 재시도(200ms) — 최악 ≈6.2초. 지도 API는 사용자가 기다리는 경로라 짧게 잡는다. (연결 5초/응답 10초는 OAuth 토큰 교환용 공용 WebClient 값이다 — `SecurityConfig`) |
 | 예외 처리 | 실패 시 상태코드·응답 본문·원인 예외를 로깅한 뒤 502(BAD_GATEWAY) 계열 에러로 변환 |
 | API 키 관리 | 환경 변수 (NAVER_MAPS_CLIENT_ID/SECRET, KAKAO_REST_API_KEY) — 코드에 하드코딩 금지 |
 | 응답 저장 | 선택된 장소의 상호명, 주소, 좌표(WGS84)를 restaurants에 저장 |
@@ -1284,6 +1290,10 @@ Spring Boot에서 ${ENV_VAR_NAME} 방식으로 주입
 | 네이버 API 프록시 응답 | < 1,000ms | 외부 API 포함 기준 |
 | 동시 사용자 | 100명 (초기) | 트래픽 증가 시 스케일 업 검토 |
 | DB 커넥션 풀 | HikariCP 기본 (10) | 초기 설정값 |
+
+> **이 목표치는 아직 실측된 적이 없다.** 검증 수단은 갖췄다 — 시나리오·시드·판정 기준은 [LoadTestPlan.md](LoadTestPlan.md)에, 스크립트는 `scripts/k6/`에 있다. 실행 회차는 [LoadTestResults.md](LoadTestResults.md)에 쌓는다.
+>
+> 설계 단계에서 이미 드러난 긴장 하나: 목표 동시 100명이 톰캣 스레드 50개·커넥션 풀 10개를 통과해야 한다. 커넥션 획득 타임아웃이 5초라 포화 지점을 넘으면 응답이 느려지는 게 아니라 **실패로 꺾인다** — 그래서 부하 테스트의 1차 산출물은 "목표를 만족하는가"가 아니라 **"몇 명부터 꺾이는가"**로 잡았다.
 
 
 ### 7.2 보안 요구사항
@@ -1411,7 +1421,8 @@ Spring Actuator: **운영은 관리 포트를 분리한다**(`management.server.
 | Phase 4 | dev/staging/prod 프로파일 구성 및 배포 | 운영 전환 | ⬜ 예정 |
 | Phase 4 | 쿼리 레벨 필터링 전환 (Pick 인메모리 필터링 대체) | 메뉴 수 증가 시 성능 | ⬜ 데이터 증가 시 |
 | Phase 4 | MDC traceId (7.3) | 관측성 | ✅ 완료 |
-| Phase 4 | API 호출 로그, APM 연동 (7.3) | 관측성 | ⬜ 예정 |
+| Phase 4 | API 호출 로그 (7.3) | 관측성 | ✅ 완료 — `AccessLogFilter` |
+| Phase 4 | APM 연동 (Sentry/Datadog 등) | 관측성 | ⬜ 예정 |
 
 본 문서는 개발 진행에 따라 지속 업데이트한다.
 
