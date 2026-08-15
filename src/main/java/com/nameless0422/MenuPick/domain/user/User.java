@@ -1,6 +1,5 @@
 package com.nameless0422.MenuPick.domain.user;
 
-import com.nameless0422.MenuPick.common.config.TimeConfig;
 import com.nameless0422.MenuPick.common.domain.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -59,15 +58,14 @@ public class User extends BaseTimeEntity {
     }
 
     /**
-     * 탈퇴 시각을 기록한다.
+     * 탈퇴 시각을 기록한다. 시각은 서비스가 주입한다 — 엔티티는 Clock 빈을 받을 수 없다.
      *
-     * <p>다른 엔티티(Menu/Restaurant/History)는 시각을 서비스에서 주입받도록 바꿨지만,
-     * 이 메서드의 호출부(AuthService)는 이번 작업 범위 밖이라 시그니처를 유지한다.
-     * 대신 JVM 기본 시간대에 좌우되지 않도록 서비스 기준 시간대(KST)를 명시한다.
-     * TODO: AuthService에 Clock을 주입할 수 있게 되면 {@code softDelete(LocalDateTime)}로 전환.
+     * <p>Menu/Restaurant/History와 같은 방식이다. 엔티티가 스스로 현재 시각을 집어오면
+     * 그 시각을 테스트에서 고정할 수 없어, "유예기간 경계에서 어떻게 되는가"를 실제 날짜에
+     * 의존하지 않고 검증할 방법이 사라진다.
      */
-    public void softDelete() {
-        this.deletedAt = LocalDateTime.now(TimeConfig.SERVICE_ZONE);
+    public void softDelete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
     }
 
     public boolean isDeleted() {
@@ -89,9 +87,8 @@ public class User extends BaseTimeEntity {
         this.nickname = nickname;
     }
 
-    /** {@link #softDelete()}와 같은 이유로 시각을 직접 얻되 기준 시간대를 KST로 고정한다. */
-    public boolean isWithinGracePeriod(int graceDays) {
-        return deletedAt != null
-                && deletedAt.plusDays(graceDays).isAfter(LocalDateTime.now(TimeConfig.SERVICE_ZONE));
+    /** {@link #softDelete(LocalDateTime)}와 같은 이유로 기준 시각을 밖에서 받는다. */
+    public boolean isWithinGracePeriod(int graceDays, LocalDateTime now) {
+        return deletedAt != null && deletedAt.plusDays(graceDays).isAfter(now);
     }
 }

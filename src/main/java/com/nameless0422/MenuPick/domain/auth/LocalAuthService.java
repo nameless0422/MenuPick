@@ -18,7 +18,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,6 +61,7 @@ public class LocalAuthService {
     private final AuthMailer authMailer;
     private final TokenIssuer tokenIssuer;
     private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
 
     /**
      * 존재하지 않는 계정으로 로그인을 시도해도 실제 계정과 같은 시간이 걸리게 하는 비교 대상.
@@ -206,7 +209,7 @@ public class LocalAuthService {
         }
 
         if (user.isDeleted()) {
-            if (!user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS)) {
+            if (!user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
                 return new Authenticated(user.getId(), true);
             }
             // 이메일은 이미 검증된 값이므로 그대로 둔다(null을 넘기면 덮어쓰지 않는다).

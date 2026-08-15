@@ -21,6 +21,8 @@ import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -43,6 +45,7 @@ public class AuthService {
     private final TokenIssuer tokenIssuer;
     private final TransactionTemplate transactionTemplate;
     private final List<OAuthProvider> oAuthProviders;
+    private final Clock clock;
 
     /**
      * 소셜 로그인.
@@ -96,7 +99,7 @@ public class AuthService {
     public void withdraw(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        user.softDelete();
+        user.softDelete(LocalDateTime.now(clock));
         refreshTokenStore.delete(userId);
     }
 
@@ -124,7 +127,7 @@ public class AuthService {
 
         User user = authProvider.getUser();
         if (user.isDeleted()) {
-            if (user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS)) {
+            if (user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
                 String email = trustedEmail(profile);
                 user.reactivate(
                         email != null ? email : user.getEmail(),
