@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.5'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'jacoco'
 }
 
 group = 'com.nameless0422'
@@ -79,4 +80,61 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	dependsOn test
+	reports {
+		xml.required = true
+		html.required = true
+	}
+	// 측정 대상에서 빼는 것들. 커버리지를 올리려고 이런 것까지 테스트하기 시작하면
+	// 숫자만 오르고 회귀는 그대로 새어 나간다.
+	afterEvaluate {
+		classDirectories.setFrom(files(classDirectories.files.collect {
+			fileTree(dir: it, exclude: [
+				// DTO/응답 래퍼: record와 생성자뿐이라 검증할 분기가 없다.
+				'**/dto/**',
+				'**/common/dto/**',
+				// 설정 클래스: 빈 배선이라 단위 테스트가 아니라 컨텍스트 로딩으로 확인된다.
+				'**/config/**',
+				// 부트 진입점.
+				'**/MenuPickApplication.class',
+			])
+		}))
+	}
+}
+
+/**
+ * 커버리지 하한.
+ *
+ * 목표치가 아니라 <b>래칫</b>이다. 지금 실제로 나오는 수치보다 살짝 아래에 두어,
+ * "여기서 더 내려가면 막는다"는 역할만 시킨다. 달성하지 못할 숫자를 걸어두면 CI가 상시
+ * 빨간 상태가 되고, 그 상태에서는 진짜 회귀도 함께 무시된다.
+ *
+ * 분기(BRANCH)를 함께 보는 이유: 라인만 보면 예외 경로·경계 조건을 한 번도 타지 않고도
+ * 수치가 채워진다. 이 프로젝트에서 실제로 위험한 코드는 대부분 그 분기 쪽에 있다.
+ */
+jacocoTestCoverageVerification {
+	dependsOn jacocoTestReport
+	violationRules {
+		rule {
+			limit {
+				counter = 'LINE'
+				minimum = 0.88
+			}
+			limit {
+				counter = 'BRANCH'
+				minimum = 0.75
+			}
+		}
+	}
+	afterEvaluate {
+		classDirectories.setFrom(jacocoTestReport.classDirectories)
+	}
+}
+
+tasks.named('check') {
+	dependsOn jacocoTestCoverageVerification
 }

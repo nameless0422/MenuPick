@@ -31,7 +31,11 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.Optional;
 
@@ -75,6 +79,11 @@ class LocalAuthServiceTest {
 
     private LocalAuthService localAuthService;
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            ZonedDateTime.of(2026, 1, 15, 0, 30, 0, 0, KST).toInstant(), KST);
+    private static final LocalDateTime NOW = LocalDateTime.now(FIXED_CLOCK);
+
     /** 트랜잭션 경계만 흉내내는 최소 매니저 — AuthServiceTest와 같은 이유로 실제 리소스는 없다. */
     private static final PlatformTransactionManager NO_OP_TX_MANAGER = new PlatformTransactionManager() {
         @Override
@@ -96,7 +105,7 @@ class LocalAuthServiceTest {
         localAuthService = new LocalAuthService(
                 userRepository, authProviderRepository, userHardDeleteService,
                 loginAttemptLimiter, passwordEncoder, authTokenStore, authMailer,
-                tokenIssuer, new TransactionTemplate(NO_OP_TX_MANAGER)
+                tokenIssuer, new TransactionTemplate(NO_OP_TX_MANAGER), FIXED_CLOCK
         );
         localAuthService.initDummyHash();
 
@@ -342,7 +351,7 @@ class LocalAuthServiceTest {
         @DisplayName("탈퇴 유예기간 안이면 계정을 되살린다")
         void reactivatesWithinGrace() {
             AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
-            provider.getUser().softDelete();
+            provider.getUser().softDelete(NOW);
             given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
                     .willReturn(Optional.of(provider));
 

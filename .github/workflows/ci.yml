@@ -58,16 +58,19 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run tests
+        # test가 아니라 check를 부른다 — 커버리지 하한(jacocoTestCoverageVerification)까지 함께 돈다.
         # Testcontainers(6번 백로그)가 MySQL 컨테이너를 직접 띄우므로 별도 서비스 컨테이너는 불필요.
         # ubuntu-latest 러너는 Docker 데몬이 기본 탑재되어 있다.
-        run: ./gradlew test --no-daemon
+        run: ./gradlew check --no-daemon
 
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: build/reports/tests/test
+          path: |
+            build/reports/tests/test
+            build/reports/jacoco/test/html
 
   docker-build:
     needs: test

@@ -28,6 +28,10 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,6 +44,11 @@ import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            ZonedDateTime.of(2026, 1, 15, 0, 30, 0, 0, KST).toInstant(), KST);
+    private static final LocalDateTime NOW = LocalDateTime.now(FIXED_CLOCK);
 
     @Mock private UserRepository userRepository;
     @Mock private AuthProviderRepository authProviderRepository;
@@ -82,7 +91,8 @@ class AuthServiceTest {
                 // "로그인 성공 시 어떤 토큰이 저장·반환되는가"라 실제 구현을 그대로 넣는다.
                 new TokenIssuer(jwtTokenProvider, refreshTokenStore, jwtProperties),
                 new TransactionTemplate(NO_OP_TX_MANAGER),
-                List.of(kakaoProvider)
+                List.of(kakaoProvider),
+                FIXED_CLOCK
         );
     }
 
@@ -295,7 +305,7 @@ class AuthServiceTest {
     @DisplayName("탈퇴 후 유예기간 내 로그인하면 계정이 재활성화된다")
     void socialLogin_deletedUser_withinGracePeriod_reactivated() {
         User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
-        deletedUser.softDelete();
+        deletedUser.softDelete(NOW);
         AuthProvider provider = AuthProvider.builder()
                 .user(deletedUser).provider("KAKAO").socialId("kakao_123").build();
 
@@ -318,7 +328,7 @@ class AuthServiceTest {
     @DisplayName("재활성화 시 프로필 닉네임이 없으면 기존 닉네임을 유지한다")
     void socialLogin_deletedUser_nullNickname_keepsExistingNickname() {
         User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
-        deletedUser.softDelete();
+        deletedUser.softDelete(NOW);
         AuthProvider provider = AuthProvider.builder()
                 .user(deletedUser).provider("KAKAO").socialId("kakao_123").build();
 
@@ -340,14 +350,10 @@ class AuthServiceTest {
 
     @Test
     @DisplayName("탈퇴 후 유예기간이 지나면 기존 데이터를 하드 삭제하고 새 계정으로 가입한다")
-    void socialLogin_deletedUser_afterGracePeriod_purgesAndCreatesNewAccount() throws Exception {
+    void socialLogin_deletedUser_afterGracePeriod_purgesAndCreatesNewAccount() {
         User deletedUser = User.builder().email("deleted@email.com").nickname("탈퇴유저").build();
-        deletedUser.softDelete();
-
-        // 리플렉션으로 deletedAt을 31일 전으로 설정
-        var field = User.class.getDeclaredField("deletedAt");
-        field.setAccessible(true);
-        field.set(deletedUser, java.time.LocalDateTime.now().minusDays(31));
+        // Clock을 주입받게 되면서 리플렉션으로 deletedAt을 조작할 필요가 없어졌다.
+        deletedUser.softDelete(NOW.minusDays(31));
 
         AuthProvider provider = AuthProvider.builder()
                 .user(deletedUser).provider("KAKAO").socialId("kakao_123").build();
