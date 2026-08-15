@@ -58,7 +58,7 @@ class RestaurantServiceTest {
                 .phone("02-1234-5678")
                 .latitude(new BigDecimal("37.5665350"))
                 .longitude(new BigDecimal("126.9779692"))
-                .naverUrl("https://naver.me/abc").naverPlaceId("12345")
+                .naverUrl("https://naver.me/abc").kakaoPlaceId("12345")
                 .build();
         setId(restaurant, 1L);
     }
@@ -133,11 +133,82 @@ class RestaurantServiceTest {
             return saved;
         });
 
-        RestaurantResponse.RestaurantDetail result = restaurantService.createRestaurant(1L,
+        RestaurantService.CreateResult result = restaurantService.createRestaurant(1L,
                 new RestaurantRequest.Create("새 식당", "주소", "010-1234",
                         new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
 
-        assertThat(result.name()).isEqualTo("새 식당");
+        assertThat(result.restaurant().name()).isEqualTo("새 식당");
+        assertThat(result.created()).isTrue();
+    }
+
+    // --- 같은 장소 중복 저장 ---
+
+    @Test
+    @DisplayName("같은 place id를 이미 저장했으면 새로 만들지 않고 갖고 있던 식당을 준다")
+    void createRestaurant_samePlace_returnsExisting() {
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "12345"))
+                .willReturn(Optional.of(restaurant));
+
+        RestaurantService.CreateResult result = restaurantService.createRestaurant(1L,
+                new RestaurantRequest.Create("진주회관 명동점", "다른 주소", null,
+                        new BigDecimal("37.5"), new BigDecimal("127.0"), null, "12345"));
+
+        assertThat(result.created()).isFalse();
+        assertThat(result.restaurant().id()).isEqualTo(1L);
+        // 사용자가 이름·주소를 고쳐 뒀을 수 있다. 검색 결과를 다시 저장했다는 이유로
+        // 그 편집을 되돌리면 안 된다.
+        assertThat(result.restaurant().name()).isEqualTo("진주회관");
+        verify(restaurantRepository, never()).save(any(Restaurant.class));
+    }
+
+    @Test
+    @DisplayName("지웠던 장소를 다시 저장하면 같은 행을 되살린다 — 새로 넣으면 유니크 제약에 걸린다")
+    void createRestaurant_deletedPlace_isRestored() {
+        restaurant.softDelete(java.time.LocalDateTime.now(FIXED_CLOCK));
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "12345"))
+                .willReturn(Optional.of(restaurant));
+
+        RestaurantService.CreateResult result = restaurantService.createRestaurant(1L,
+                new RestaurantRequest.Create("진주회관", "새 주소", null,
+                        new BigDecimal("37.5"), new BigDecimal("127.0"), null, "12345"));
+
+        assertThat(restaurant.isDeleted()).isFalse();
+        assertThat(result.created()).isTrue();
+        // 지운 뒤 다시 저장한다는 건 예전에 적어둔 정보가 아니라 지금 값을 원한다는 뜻이다.
+        assertThat(result.restaurant().address()).isEqualTo("새 주소");
+        verify(restaurantRepository, never()).save(any(Restaurant.class));
+    }
+
+    @Test
+    @DisplayName("place id가 없으면 중복 판정 없이 새로 만든다 — 이름은 기준이 못 된다")
+    void createRestaurant_withoutPlaceId_alwaysCreates() {
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(restaurantRepository.save(any(Restaurant.class))).willAnswer(inv -> inv.getArgument(0));
+
+        // 상호가 같은 다른 가게가 실제로 있다. 이름으로 합치면 서로 다른 지점이 하나로 뭉개진다.
+        RestaurantService.CreateResult result = restaurantService.createRestaurant(1L,
+                new RestaurantRequest.Create("진주회관", "부산시", null,
+                        new BigDecimal("35.1"), new BigDecimal("129.0"), null, null));
+
+        assertThat(result.created()).isTrue();
+        verify(restaurantRepository).save(any(Restaurant.class));
+        verify(restaurantRepository, never()).findByUserIdAndKakaoPlaceId(any(), any());
+    }
+
+    @Test
+    @DisplayName("place id가 다르면 이름이 같아도 각각 저장된다")
+    void createRestaurant_differentPlaceId_createsAnother() {
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "99999"))
+                .willReturn(Optional.empty());
+        given(restaurantRepository.save(any(Restaurant.class))).willAnswer(inv -> inv.getArgument(0));
+
+        RestaurantService.CreateResult result = restaurantService.createRestaurant(1L,
+                new RestaurantRequest.Create("진주회관", "부산시", null,
+                        new BigDecimal("35.1"), new BigDecimal("129.0"), null, "99999"));
+
+        assertThat(result.created()).isTrue();
+        verify(restaurantRepository).save(any(Restaurant.class));
     }
 
     @Test
@@ -147,7 +218,7 @@ class RestaurantServiceTest {
 
         RestaurantResponse.RestaurantDetail result = restaurantService.updateRestaurant(1L, 1L,
                 new RestaurantRequest.Update("수정된 식당", "새 주소", "010-9999",
-                        new BigDecimal("37.5"), new BigDecimal("127.0"), null, null));
+                        new BigDecimal("37.5"), new BigDecimal("127.0"), null));
 
         assertThat(result.name()).isEqualTo("수정된 식당");
     }
@@ -171,7 +242,7 @@ class RestaurantServiceTest {
         given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.updateRestaurant(2L, 1L,
-                new RestaurantRequest.Update("수정", "주소", null, null, null, null, null)))
+                new RestaurantRequest.Update("수정", "주소", null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }
@@ -203,7 +274,7 @@ class RestaurantServiceTest {
         given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.updateRestaurant(1L, 999L,
-                new RestaurantRequest.Update("수정", "주소", null, null, null, null, null)))
+                new RestaurantRequest.Update("수정", "주소", null, null, null, null)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }

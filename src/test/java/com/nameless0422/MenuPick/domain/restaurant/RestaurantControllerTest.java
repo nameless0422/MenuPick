@@ -55,7 +55,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
                 new BigDecimal("37.5665350"), new BigDecimal("126.9779692"),
                 null, null, LocalDateTime.now(), LocalDateTime.now());
         given(restaurantService.createRestaurant(eq(1L), any(RestaurantRequest.Create.class)))
-                .willReturn(detail);
+                .willReturn(new RestaurantService.CreateResult(detail, true));
 
         mockMvc.perform(post("/api/v1/restaurants")
                         .with(authentication(AUTH))
@@ -66,6 +66,29 @@ class RestaurantControllerTest extends AbstractControllerTest {
                                         null, null))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.name").value("새 식당"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/restaurants - 이미 저장한 장소면 200 (409 아님 — 실패가 아니다)")
+    void createRestaurant_alreadySaved() throws Exception {
+        var detail = new RestaurantResponse.RestaurantDetail(
+                1L, "진주회관", "주소", null,
+                new BigDecimal("37.5"), new BigDecimal("127.0"),
+                null, "8005012", LocalDateTime.now(), LocalDateTime.now());
+        given(restaurantService.createRestaurant(eq(1L), any(RestaurantRequest.Create.class)))
+                .willReturn(new RestaurantService.CreateResult(detail, false));
+
+        // 사용자는 "이 가게를 목록에 두고 싶다"고 말했고 그 상태는 이미 참이다. 실패로 돌려주면
+        // 아무 문제도 없는데 오류 화면을 보게 된다. 201로 뭉뚱그리면 프론트가 안내를 달리 못 한다.
+        mockMvc.perform(post("/api/v1/restaurants")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RestaurantRequest.Create("진주회관", "주소", null,
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"),
+                                        null, "8005012"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(1));
     }
 
     @Test
@@ -112,8 +135,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new RestaurantRequest.Update("수정됨", "새 주소", "010-9999",
-                                        new BigDecimal("37.5"), new BigDecimal("127.0"),
-                                        null, null))))
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"), null))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("수정됨"));
     }

@@ -339,7 +339,7 @@ erDiagram
     decimal latitude
     decimal longitude
     varchar naver_url
-    varchar naver_place_id
+    varchar kakao_place_id
     datetime created_at
     datetime updated_at
     datetime deleted_at
@@ -410,7 +410,7 @@ erDiagram
 | id | BIGINT (PK, AI) | N | 사용자 고유 ID |
 | email | VARCHAR(255) | Y | 이메일. **소유가 검증된 주소만 들어간다** — 소셜이 검증해 준 주소이거나, 자체 계정이 메일 인증을 마친 주소다. 인증 전 자체 계정은 NULL이고 주소는 `auth_providers.social_id`에만 있다 |
 | email_verified | TINYINT(1) | N | 위 불변식을 명시하는 플래그. 소셜 연동 자동 병합이 이 값을 기준으로 하므로, 미검증 주소가 섞이면 계정 탈취 경로가 열린다 |
-| nickname | VARCHAR(50) | N | 닉네임 |
+| nickname | VARCHAR(50) | N | 닉네임. 중복 불가 (D-028) — 탈퇴 계정도 유예기간 동안 자리를 점유한다 |
 | created_at | DATETIME | N | 생성 시각 |
 | updated_at | DATETIME | N | 수정 시각 |
 | deleted_at | DATETIME | Y | Soft delete 처리 시각 |
@@ -510,7 +510,7 @@ erDiagram
 | latitude | DECIMAL(10,7) | N | 위도 (WGS84) |
 | longitude | DECIMAL(10,7) | N | 경도 (WGS84) |
 | naver_url | VARCHAR(500) | Y | 네이버 지도 URL |
-| naver_place_id | VARCHAR(100) | Y | 네이버 장소 ID |
+| kakao_place_id | VARCHAR(100) | Y | 카카오 장소 ID. 같은 장소 중복 저장 판정 기준 (D-028). 장소 검색을 거치지 않은 옛 행은 NULL |
 | created_at | DATETIME | N | 생성 시각 |
 | updated_at | DATETIME | N | 수정 시각 |
 | deleted_at | DATETIME | Y | Soft delete |
@@ -708,6 +708,8 @@ tags 테이블 컬럼 구성:
 | 구현 복잡도 | naver_places 테이블 분리 시 식당 검색/저장 API 로직이 불필요하게 복잡해진다. |
 
 *결론: restaurants 테이블에서 naver_place_id와 naver_url의 이행적 종속은 실용적 이유(조회 성능, 단순성)로 비정규화(Controlled Denormalization)를 허용한다. 단, 향후 네이버 장소를 별도로 공유/관리해야 하는 요구사항이 생기면 분리를 재검토한다.*
+
+> **2026-08-15 후속**: 위 분석의 `naver_place_id`는 현재 `kakao_place_id`다([D-028](DecisionLog.md#d-028-유일성-규칙--닉네임은-중복-불가-식당은-카카오-place-id-기준으로-하나)). 담기는 값이 처음부터 카카오 장소 id였고, 여기에 유일성 제약이 붙으면서 이름이 틀린 채로 두면 나중에 네이버 id를 같은 칸에 섞어 넣는 사고가 나기 때문이다. 종속 관계 자체(`place_id → url`)와 위 판단은 그대로 유효하다.
 
 
 ### 3.4.4 auth_providers — 이행적 종속 분석
@@ -921,6 +923,7 @@ tags 테이블 컬럼 구성:
 | --- | --- | --- | --- |
 | PRIMARY | PK | id | 자동 생성 |
 | uq_users_email | UQ | email | 이메일 중복 가입 방지 및 이메일 기반 조회 |
+| uq_users_nickname | UQ | nickname | 닉네임 중복 방지 (D-028). 콜레이션(utf8mb4_unicode_ci)을 따라 대소문자를 구분하지 않는다 — 사칭 방지 |
 
 *deleted_at 기반 Soft delete 조회 시: WHERE deleted_at IS NULL — 빈도 낮아 별도 인덱스 불필요*
 
@@ -988,7 +991,7 @@ tags 테이블 컬럼 구성:
 | PRIMARY | PK | id | 자동 생성 |
 | idx_restaurants_user_deleted | IDX | (user_id, deleted_at) | 사용자 식당 목록 조회 — Soft delete 처리 포함 |
 | idx_restaurants_location | IDX | (user_id, latitude, longitude) | 거리 필터링 — 사용자 식당 범위에서 Haversine 계산 대상 후보 추출 |
-| idx_restaurants_naver_place | IDX | naver_place_id | 네이버 장소 ID 중복 저장 방지 및 중복 검색 조회 |
+| uq_restaurants_user_place | UQ | (user_id, kakao_place_id) | 같은 사용자가 같은 장소를 두 번 저장하지 못하게 막는다 (D-028). user_id가 빠지면 남이 저장한 가게를 내가 저장할 수 없다. soft delete된 행도 자리를 차지하므로 저장 경로가 "지워진 게 있으면 되살린다"로 동작해야 한다 |
 
 > 🔶 거리 필터링 성능 주의: (latitude, longitude) 복합 인덱스는 사각형 범위(BETWEEN) 검색에는 효과적이지만, 정확한 반경 계산(Haversine/ST_Distance_Sphere)은 결국 후보군을 먼저 좁힌 뒤 애플리케이션에서 필터링하는 2단계 전략이 필요하다. 데이터 증가 시 MySQL Spatial Index(Point 타입 + ST_Distance_Sphere)로 마이그레이션 권장.
 
@@ -1030,6 +1033,7 @@ tags 테이블 컬럼 구성:
 | --- | --- | --- | --- |
 | users | PRIMARY | PK | id |
 | users | uq_users_email | UQ | email |
+| users | uq_users_nickname | UQ | nickname |
 | auth_providers | PRIMARY | PK | id |
 | auth_providers | uq_auth_provider_social | UQ | (provider, social_id) |
 | auth_providers | idx_auth_user_id | IDX | user_id |
@@ -1046,7 +1050,7 @@ tags 테이블 컬럼 구성:
 | restaurants | PRIMARY | PK | id |
 | restaurants | idx_restaurants_user_deleted | IDX | (user_id, deleted_at) |
 | restaurants | idx_restaurants_location | IDX | (user_id, latitude, longitude) |
-| restaurants | idx_restaurants_naver_place | IDX | naver_place_id |
+| restaurants | uq_restaurants_user_place | UQ | (user_id, kakao_place_id) |
 | menu_restaurants | PRIMARY | PK | id |
 | menu_restaurants | uq_menu_restaurant | UQ | (menu_id, restaurant_id) |
 | menu_restaurants | idx_mr_restaurant_id | IDX | restaurant_id |

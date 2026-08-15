@@ -34,6 +34,9 @@ public enum ErrorCode {
 
     // --- Auth: 자체 계정 ---
     EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
+    // 자체 가입에서만 쓴다. 소셜 로그인은 닉네임을 제공자가 정해 사용자가 고칠 수 없으므로
+    // 거절하면 로그인 자체가 막힌다 — 그쪽은 NicknameAllocator가 번호를 붙여 통과시킨다.
+    NICKNAME_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     // 이메일 존재 여부를 흘리지 않도록 "없는 계정"과 "틀린 비밀번호"에 같은 코드를 쓴다.
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다. 받은 메일의 링크를 눌러주세요."),

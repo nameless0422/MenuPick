@@ -185,6 +185,36 @@ class LocalAuthServiceTest {
         }
 
         @Test
+        @DisplayName("이미 쓰이는 닉네임이면 409로 막는다")
+        void duplicateNickname() {
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.empty());
+            given(userRepository.existsByNickname("테스터")).willReturn(true);
+
+            // 자체 가입은 사용자가 직접 고른 값이라 다시 고를 수 있다 — 소셜 로그인처럼
+            // 번호를 붙여 넘기면 원하지도 않은 이름을 받게 된다.
+            assertThatThrownBy(() -> localAuthService.signup(EMAIL, PASSWORD, "테스터"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.NICKNAME_ALREADY_REGISTERED);
+
+            verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("미인증 계정이 자기 닉네임을 그대로 다시 보내면 중복이 아니다")
+        void keepingOwnNicknameIsNotDuplicate() {
+            // 자기 행이 인덱스를 점유하고 있어 그대로 검사하면 자기 이름에 자기가 걸린다.
+            AuthProvider pending = localAccount(1L, EMAIL, "old-password-1234", false);
+            pending.getUser().updateNickname("테스터");
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.of(pending));
+
+            localAuthService.signup(EMAIL, PASSWORD, "테스터");
+
+            assertThat(pending.getUser().getNickname()).isEqualTo("테스터");
+        }
+
+        @Test
         @DisplayName("미인증 계정이 있으면 덮어쓴다 — 주소 선점으로 남의 가입을 막지 못하게")
         void overwritesUnverified() {
             AuthProvider pending = localAccount(1L, EMAIL, "old-password-1234", false);

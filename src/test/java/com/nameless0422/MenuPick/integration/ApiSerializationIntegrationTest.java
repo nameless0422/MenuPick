@@ -53,9 +53,12 @@ class ApiSerializationIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // 이메일과 닉네임 모두 UNIQUE라(V5) 테스트마다 다른 값이어야 한다.
+        // DB는 클래스 단위로 공유되므로 고정값을 쓰면 두 번째 테스트부터 제약에 걸린다.
+        String unique = UUID.randomUUID().toString().substring(0, 8);
         User user = userRepository.save(User.builder()
-                .email("serialization-" + UUID.randomUUID() + "@test.com")
-                .nickname("직렬화유저")
+                .email("serialization-" + unique + "@test.com")
+                .nickname("직렬화유저-" + unique)
                 .build());
         asUser = authentication(new UsernamePasswordAuthenticationToken(user.getId(), null, List.of()));
         tagId = tagRepository.save(Tag.builder().user(user).name("혼밥").build()).getId();
