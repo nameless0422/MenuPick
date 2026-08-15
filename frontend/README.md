@@ -10,6 +10,15 @@ cp .env .env.local   # 카카오/구글 클라이언트 ID를 .env.local에 채�
 npm run dev           # http://localhost:5173
 ```
 
+그 밖의 스크립트:
+
+```bash
+npm run build        # tsc -b + vite build (CI가 도는 것)
+npm test             # vitest (jsdom, 브라우저 바이너리 불필요)
+npm run test:watch   # 감시 모드
+npm run lint         # oxlint — tsc가 못 잡는 훅 규칙·닿지 않는 코드
+```
+
 백엔드는 `local` 프로파일로 별도 기동해야 한다 (`../src`, `./gradlew bootRun`). 백엔드가 CORS로
 `http://localhost:5173`을 허용해두었다(`application-local.yml`의 `cors.allowed-origins`).
 
@@ -35,11 +44,21 @@ npm run dev           # http://localhost:5173
 
 ```
 src/
+  a11y/         선택 칩의 aria-pressed, 폼 열릴 때 초점 이동 훅
   api/          axios 클라이언트, 인증 API 함수
-  auth/         AuthContext, OAuth authorize URL 빌더
+  auth/         AuthContext, OAuth authorize URL 빌더, 로그인 후 복귀 경로(returnTo)
   routes/       페이지 컴포넌트 + 라우팅
+  test/         vitest 설정과 렌더 헬퍼
 ```
+
+`a11y/`가 따로 있는 이유: 선택 상태를 클래스와 `aria-pressed`로 따로 쓰면 클래스만 고치고 aria를
+빠뜨려도 **화면상 아무 이상이 없어** 발견되지 않는다. 두 값을 한 곳에서 만들어 어긋남을 막는다.
 
 ## 구현 현황
 
-[Requirements.md](../docs/Requirements.md)의 유저 스토리 전 화면이 구현됐다: 로그인/세션 복원, 메뉴 관리(US-2), 식당 관리·카카오 장소 검색·메뉴 연결(US-3), 필터 랜덤 픽(US-4), 히스토리·방문 처리(US-5). 남은 것: 설정 화면(회원 탈퇴 UI), 실사용 E2E 검증.
+[Requirements.md](../docs/Requirements.md)의 유저 스토리 전 화면이 구현됐다: 로그인/세션 복원, 메뉴 관리(US-2), 식당 관리·카카오 장소 검색·메뉴 연결(US-3), 필터 랜덤 픽(US-4), 히스토리·방문 처리(US-5), 설정·회원 탈퇴.
+
+로그인 후에는 막혔던 화면으로 되돌아간다(`auth/returnTo.ts`). 접근성은 화면 제목 `h1` 계층, 선택 칩의
+`aria-pressed`, 인라인 폼의 초점 이동까지 처리했다.
+
+남은 것: 실사용 E2E 검증.
