@@ -10,6 +10,7 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,7 +64,7 @@ class UserRepositoryTest extends AbstractIntegrationTest {
                 .build();
         User saved = userRepository.save(user);
 
-        saved.softDelete();
+        saved.softDelete(LocalDateTime.now());
         userRepository.flush();
 
         User found = userRepository.findById(saved.getId()).orElseThrow();
