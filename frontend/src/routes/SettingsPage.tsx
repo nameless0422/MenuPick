@@ -26,7 +26,7 @@ export default function SettingsPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h2>설정</h2>
+        <h1>설정</h1>
       </header>
 
       <section className="card settings-section">
