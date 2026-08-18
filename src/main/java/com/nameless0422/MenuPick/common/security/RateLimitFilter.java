@@ -11,15 +11,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Redis 기반 고정 윈도우 레이트 리밋 필터.
@@ -55,26 +57,49 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** 게스트 데모 픽 버킷 — 미인증 경로라 IP 기준밖에 없다. */
     private static final String DEMO_KEY_PREFIX = "rl:demo:";
 
-    private static final String DEMO_PICK_PATH = "/api/v1/pick/demo";
-
-    private static final Set<String> AUTH_RATE_LIMITED_PATHS = Set.of(
-            "/api/v1/auth/kakao",
-            "/api/v1/auth/google",
-            "/api/v1/auth/refresh",
+    /**
+     * 제한 대상 판정은 <b>반드시</b> {@link PathPatternRequestMatcher}로 한다.
+     * {@code request.getRequestURI()}를 문자열로 비교하면 안 된다.
+     *
+     * <p>이유: {@code getRequestURI()}는 서블릿 스펙상 <b>URL 디코딩되지 않은</b> 원본 경로를
+     * 그대로 돌려준다(경로 파라미터 {@code ;k=v}도 붙어 있다). 반면 SecurityConfig의
+     * {@code requestMatchers(...)}와 Spring MVC의 핸들러 매핑은 {@code PathPattern}이
+     * 세그먼트를 <b>디코딩한 값</b>으로 매칭한다. 즉 두 판정 기준이 서로 다르다.
+     *
+     * <p>그 틈으로 레이트 리밋이 통째로 우회된다. {@code POST /api/v1/auth/%70assword-reset}은
+     * {@code getRequestURI()} 기준으로는 목록에 없어 제한을 비껴가지만, permitAll과 핸들러 매핑은
+     * 디코딩 후 {@code /api/v1/auth/password-reset}으로 보고 정상 처리한다 —
+     * 임의 주소로 비밀번호 재설정 메일을 무제한 발송할 수 있게 되고(메일 폭탄), SMTP 쿼터가
+     * 마르거나 발신 도메인이 스팸으로 등재되면 정상 가입자가 인증 메일을 못 받는다.
+     * {@code /signup}·{@code /resend-verification}·{@code /pick/demo}도 마찬가지로 무제한이 된다.
+     *
+     * <p>Security가 쓰는 매처를 그대로 쓰면 두 기준이 정의상 어긋날 수 없다.
+     * 이 필터는 DispatcherServlet보다 앞에서 도는 필터라 {@code ServletRequestPathUtils}가
+     * 아직 경로를 파싱해 두지 않았을 수 있는데, {@code PathPatternRequestMatcher}는 그 경우
+     * 스스로 파싱한 뒤 캐시를 되돌려 놓으므로(파싱 여부를 이쪽에서 따로 챙길 필요가 없다)
+     * 필터 순서와 무관하게 안전하다.
+     */
+    private static final List<RequestMatcher> AUTH_RATE_LIMITED_MATCHERS = List.of(
+            authMatcher("/api/v1/auth/kakao"),
+            authMatcher("/api/v1/auth/google"),
+            authMatcher("/api/v1/auth/refresh"),
             // 자체 계정 경로. 비밀번호 대입과 메일 폭탄(재발송·재설정 요청)이 모두 여기로 들어온다.
             // 계정 단위 제한은 LoginAttemptLimiter가 따로 담당한다 — IP 버킷만으로는
             // 여러 IP에서 한 계정을 노리는 분산 대입을 막지 못한다.
-            "/api/v1/auth/signup",
-            "/api/v1/auth/login",
-            "/api/v1/auth/verify-email",
-            "/api/v1/auth/resend-verification",
-            "/api/v1/auth/password-reset",
-            "/api/v1/auth/password-reset/confirm"
+            authMatcher("/api/v1/auth/signup"),
+            authMatcher("/api/v1/auth/login"),
+            authMatcher("/api/v1/auth/verify-email"),
+            authMatcher("/api/v1/auth/resend-verification"),
+            authMatcher("/api/v1/auth/password-reset"),
+            authMatcher("/api/v1/auth/password-reset/confirm")
     );
 
-    private static final List<String> PROXY_RATE_LIMITED_PREFIXES = List.of(
-            "/api/v1/kakao/",
-            "/api/v1/naver/"
+    private static final RequestMatcher DEMO_PICK_MATCHER =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/pick/demo");
+
+    private static final List<RequestMatcher> PROXY_RATE_LIMITED_MATCHERS = List.of(
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/kakao/**"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/naver/**")
     );
 
     private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT = new DefaultRedisScript<>(
@@ -135,21 +160,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     /**
      * 요청에 적용할 버킷을 결정한다. 레이트 리밋 대상이 아니면 null.
+     *
+     * <p>경로 판정은 {@code getRequestURI()} 문자열 비교가 아니라 매처로 한다 —
+     * 근거는 {@link #AUTH_RATE_LIMITED_MATCHERS} javadoc. HTTP 메서드 조건도 매처가 함께 들고 있다.
      */
     private Bucket resolveBucket(HttpServletRequest request) {
-        String uri = request.getRequestURI();
-
-        if ("POST".equalsIgnoreCase(request.getMethod()) && AUTH_RATE_LIMITED_PATHS.contains(uri)) {
+        if (matchesAny(AUTH_RATE_LIMITED_MATCHERS, request)) {
             return new Bucket(AUTH_KEY_PREFIX + resolveClientIp(request),
                     rateLimitProperties.authLimitPerMinute());
         }
 
-        if ("GET".equalsIgnoreCase(request.getMethod()) && DEMO_PICK_PATH.equals(uri)) {
+        if (DEMO_PICK_MATCHER.matches(request)) {
             return new Bucket(DEMO_KEY_PREFIX + resolveClientIp(request),
                     rateLimitProperties.demoLimitPerMinute());
         }
 
-        if ("GET".equalsIgnoreCase(request.getMethod()) && isProxyPath(uri)) {
+        if (matchesAny(PROXY_RATE_LIMITED_MATCHERS, request)) {
             return new Bucket(PROXY_KEY_PREFIX + resolveProxySubject(request),
                     rateLimitProperties.proxyLimitPerMinute());
         }
@@ -157,9 +183,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private boolean isProxyPath(String uri) {
-        for (String prefix : PROXY_RATE_LIMITED_PREFIXES) {
-            if (uri.startsWith(prefix)) {
+    private static RequestMatcher authMatcher(String pattern) {
+        return PathPatternRequestMatcher.pathPattern(HttpMethod.POST, pattern);
+    }
+
+    private boolean matchesAny(List<RequestMatcher> matchers, HttpServletRequest request) {
+        for (RequestMatcher matcher : matchers) {
+            if (matcher.matches(request)) {
                 return true;
             }
         }
