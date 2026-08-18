@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -89,11 +90,17 @@ class AuthServiceTest {
                 jwtTokenProvider, refreshTokenStore, jwtProperties,
                 // 토큰 발급은 TokenIssuer로 옮겼지만, 이 테스트가 검증하는 것은
                 // "로그인 성공 시 어떤 토큰이 저장·반환되는가"라 실제 구현을 그대로 넣는다.
-                new TokenIssuer(jwtTokenProvider, refreshTokenStore, jwtProperties),
+                new TokenIssuer(userRepository, jwtTokenProvider, refreshTokenStore, jwtProperties),
                 new TransactionTemplate(NO_OP_TX_MANAGER),
                 List.of(kakaoProvider),
                 FIXED_CLOCK
         );
+
+        // TokenIssuer가 발급 직전에 계정이 살아 있는지 DB에서 다시 확인한다(탈퇴 계정에
+        // 세션이 붙는 것을 막는 검사). 이 클래스의 관심사는 그 검사가 아니므로 기본값을
+        // "활성 계정"으로 두고, 필요한 테스트만 개별로 덮어쓴다.
+        lenient().when(userRepository.findById(any()))
+                .thenReturn(Optional.of(User.builder().nickname("활성").build()));
     }
 
     @Test
@@ -404,12 +411,34 @@ class AuthServiceTest {
         given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
         given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
         given(refreshTokenStore.rotate(1L, "old_refresh", "new_refresh", jwtProperties.refreshTokenExpiry()))
-                .willReturn(true);
+                .willReturn(Optional.of("new_refresh"));
 
         TokenResponse result = authService.refresh("old_refresh");
 
         assertThat(result.accessToken()).isEqualTo("new_access");
         assertThat(result.refreshToken()).isEqualTo("new_refresh");
+    }
+
+    @Test
+    @DisplayName("유예 창 안의 직전 토큰이면 저장소가 돌려준 현재 토큰을 그대로 내려보낸다")
+    void refresh_previousTokenWithinGrace_returnsStoredToken() {
+        // 탭 두 개가 부팅하며 각자 refresh를 부르는 흔한 상황. 탭1이 먼저 회전하면 탭2의
+        // 쿠키는 직전 토큰이 되는데, 저장소가 유예 창 안이라 판단해 현재 유효한 토큰을
+        // 돌려준다. 여기서 방금 만든 new_refresh를 고집하면 탭2는 저장소에 없는 토큰을
+        // 들고 다니다 다음 회전에서 탈취로 판정되어 양쪽 세션이 함께 끊긴다.
+        Claims claims = Jwts.claims().subject("1").build();
+        given(jwtTokenProvider.parseRefreshToken("previous_refresh")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
+        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(refreshTokenStore.rotate(1L, "previous_refresh", "new_refresh",
+                jwtProperties.refreshTokenExpiry()))
+                .willReturn(Optional.of("current_refresh"));
+
+        TokenResponse result = authService.refresh("previous_refresh");
+
+        assertThat(result.accessToken()).isEqualTo("new_access");
+        assertThat(result.refreshToken()).isEqualTo("current_refresh");
     }
 
     @Test
@@ -420,9 +449,9 @@ class AuthServiceTest {
         given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
         given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
         given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
-        // 스크립트가 불일치를 감지하고 키를 삭제한 뒤 false를 돌려준다
+        // 스크립트가 불일치를 감지하고 키를 삭제한 뒤 빈 값을 돌려준다
         given(refreshTokenStore.rotate(eq(1L), eq("stolen_refresh"), anyString(), anyLong()))
-                .willReturn(false);
+                .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.refresh("stolen_refresh"))
                 .isInstanceOf(BusinessException.class);
