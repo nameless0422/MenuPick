@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import axios from "axios";
 import "./index.css";
 import App from "./App.tsx";
+import ErrorBoundary from "./ErrorBoundary";
 import { AuthProvider } from "./auth/AuthContext";
 
 const queryClient = new QueryClient({
@@ -25,10 +26,14 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </QueryClientProvider>
+    {/* 프로바이더보다 바깥에 둔다. App만 감싸면 AuthProvider·QueryClientProvider 자체가
+        렌더 중에 터졌을 때는 잡을 게 없어 결국 백색 화면으로 돌아간다. */}
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );
