@@ -46,7 +46,7 @@ services:
     # 단일 VM(예: 1 OCPU / 6GB) 전제의 메모리 배분. 합계가 호스트 메모리보다 작아야
     # 한 컨테이너의 누수가 다른 컨테이너를 OOMKill로 끌고 들어가지 않는다.
     # MySQL은 innodb_buffer_pool(기본 128MB) + 커넥션당 버퍼 기준으로 1g면 충분하다.
-    mem_limit: 1g
+    mem_limit: ${MYSQL_MEM_LIMIT:-1g}
     logging: *default-logging
 
   redis:
@@ -81,11 +81,15 @@ services:
     environment:
       # healthcheck의 redis-cli 인증용 (컨테이너 내부에서만 참조)
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
-    mem_limit: 256m
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
     logging: *default-logging
 
   app:
-    build: .
+    # VM에서 소스를 빌드하지 않는다. CI가 이미 검증하고 GHCR에 올린 이미지를 그대로 쓴다 —
+    # VM 빌드는 (1) 되돌릴 태그가 남지 않아 롤백 경로가 없고, (2) Dockerfile이 bootJar -x test라
+    # 운영에 나가는 바이너리가 테스트를 거치지 않으며, (3) 1GB 인스턴스에서는 Gradle이 뜨지도 않는다.
+    # 롤백: .env.prod의 APP_VERSION을 이전 커밋 SHA로 바꾸고 `up -d`.
+    image: ghcr.io/nameless0422/menupick:${APP_VERSION:?APP_VERSION must be set (커밋 SHA 또는 latest)}
     container_name: menupick-app
     restart: unless-stopped
     depends_on:
@@ -137,7 +141,29 @@ services:
       MAIL_BASE_URL: ${MAIL_BASE_URL}
     # JVM 힙은 Dockerfile의 -XX:MaxRAMPercentage=75.0에 따라 이 한도의 75%(≈1.1GB)로 잡힌다.
     # 나머지 25%는 메타스페이스·스레드 스택(톰캣 50 스레드)·네트워크 버퍼 몫이다.
-    mem_limit: 1536m
+    mem_limit: ${APP_MEM_LIMIT:-1536m}
+    logging: *default-logging
+
+  web:
+    # SPA 정적 서빙 + /api 리버스 프록시. 프론트와 API가 같은 오리진이 되므로
+    # refresh 쿠키(SameSite=Strict)가 정상 동작하고 CORS가 필요 없어진다.
+    build:
+      context: ./frontend
+      args:
+        # 같은 오리진이라 API 주소는 상대경로로 둔다.
+        VITE_API_BASE_URL: ""
+        VITE_KAKAO_CLIENT_ID: ${VITE_KAKAO_CLIENT_ID}
+        VITE_KAKAO_REDIRECT_URI: ${VITE_KAKAO_REDIRECT_URI}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_GOOGLE_REDIRECT_URI: ${VITE_GOOGLE_REDIRECT_URI}
+    container_name: menupick-web
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "80:80"
+    mem_limit: ${WEB_MEM_LIMIT:-64m}
     logging: *default-logging
 
 volumes:
