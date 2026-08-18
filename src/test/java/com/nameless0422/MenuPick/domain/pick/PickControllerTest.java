@@ -20,6 +20,7 @@ import java.util.Set;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -127,5 +128,99 @@ class PickControllerTest extends AbstractControllerTest {
                         .content("{\"maxDistance\": 0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("maxDistance"));
+    }
+
+    // --- 필터 컬렉션 검증 ---
+    //
+    // 여기서 막지 않으면 픽 자체는 성공한 뒤 히스토리 INSERT(filter_value VARCHAR(100))에서
+    // 죽어 픽 전체가 롤백되고 409가 나간다. 사용자에겐 정상 요청인데 원인 불명 오류가 된다.
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 20자를 넘는 카테고리가 섞여 있으면 400 (히스토리 INSERT 전에 막는다)")
+    void pick_tooLongCategory_badRequest() throws Exception {
+        // filter_value는 VARCHAR(100). 매칭되는 "한식"이 함께 있어 픽은 성공하고
+        // 히스토리 저장에서만 터지던 조합이다.
+        String longCategory = "가".repeat(150);
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categories\":[\"한식\",\"" + longCategory + "\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+
+        verifyNoInteractions(pickService);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 공백 카테고리는 400")
+    void pick_blankCategory_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categories\":[\"   \"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 카테고리가 20개를 넘으면 400")
+    void pick_tooManyCategories_badRequest() throws Exception {
+        String categories = java.util.stream.IntStream.rangeClosed(1, 21)
+                .mapToObj(i -> "\"cat" + i + "\"")
+                .collect(java.util.stream.Collectors.joining(","));
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categories\":[" + categories + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("categories"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 포함 태그가 20개를 넘으면 400")
+    void pick_tooManyTagIds_badRequest() throws Exception {
+        String tagIds = java.util.stream.IntStream.rangeClosed(1, 21)
+                .mapToObj(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tagIds\":[" + tagIds + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("tagIds"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 제외 태그가 20개를 넘으면 400")
+    void pick_tooManyExcludeTagIds_badRequest() throws Exception {
+        String tagIds = java.util.stream.IntStream.rangeClosed(1, 21)
+                .mapToObj(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"excludeTagIds\":[" + tagIds + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("excludeTagIds"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - 상한(20개, 20자) 안쪽 요청은 통과")
+    void pick_atLimit_success() throws Exception {
+        var menuDetail = new MenuResponse.MenuDetail(
+                3L, "비빔밥", null, 1, false, Set.of("한식"),
+                List.of(), LocalDateTime.now(), LocalDateTime.now());
+        given(pickService.pick(eq(1L), any())).willReturn(
+                new PickResponse.PickResult(3L, menuDetail, List.of()));
+
+        String categories = java.util.stream.IntStream.rangeClosed(1, 20)
+                .mapToObj(i -> "\"cat" + i + "\"")
+                .collect(java.util.stream.Collectors.joining(","));
+
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categories\":[" + categories + "]}"))
+                .andExpect(status().isOk());
     }
 }

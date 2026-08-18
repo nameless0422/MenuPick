@@ -5,9 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,6 +20,7 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -146,6 +150,45 @@ public class GlobalExceptionHandler {
         log.warn("MissingServletRequestParameterException: param={}", e.getParameterName());
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error("필수 파라미터 '" + e.getParameterName() + "'이(가) 누락되었습니다."));
+    }
+
+    /**
+     * 지원하지 않는 HTTP 메서드 처리 — 405 Method Not Allowed.
+     *
+     * <p>이 핸들러가 없으면 405가 아니라 500이 나간다. {@code ExceptionHandlerExceptionResolver}가
+     * {@code DefaultHandlerExceptionResolver}보다 먼저 돌기 때문에, 이 클래스가
+     * {@code ResponseEntityExceptionHandler}를 상속하지 않는 이상 아래
+     * {@code @ExceptionHandler(Exception.class)} catch-all이 먼저 잡아 버린다.
+     *
+     * <p>상태 코드만의 문제가 아니다. catch-all은 매 건 풀 스택트레이스를 ERROR로 남기는데,
+     * PUT/DELETE/TRACE를 훑고 다니는 스캐너 봇 하나면 ERROR 로그가 수천 줄 쌓여
+     * compose의 로그 상한(20MB×5)을 채우고 정작 사고 직전 로그를 밀어낸다.
+     * 클라이언트 실수로 생기는 예상된 예외이므로 WARN + 스택트레이스 없이 남긴다.
+     *
+     * <p>{@code Allow} 헤더는 스펙(RFC 9110)상 405 응답의 필수 헤더라 함께 내려준다.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        log.warn("HttpRequestMethodNotSupportedException: method={}", e.getMethod());
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED);
+        Set<HttpMethod> supported = e.getSupportedHttpMethods();
+        if (supported != null && !supported.isEmpty()) {
+            builder.allow(supported.toArray(new HttpMethod[0]));
+        }
+        return builder.body(ApiResponse.error("지원하지 않는 HTTP 메서드입니다."));
+    }
+
+    /**
+     * 지원하지 않는 Content-Type 처리 — 415 Unsupported Media Type.
+     *
+     * <p>405와 같은 이유로 개별 핸들러가 필요하다(catch-all에 잡히면 500 + ERROR 스택트레이스).
+     * 요청 헤더가 잘못된 것이므로 서버 오류가 아니다.
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e) {
+        log.warn("HttpMediaTypeNotSupportedException: contentType={}", e.getContentType());
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiResponse.error("지원하지 않는 Content-Type입니다."));
     }
 
     /**
