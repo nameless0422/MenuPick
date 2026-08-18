@@ -32,6 +32,9 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      # MySQL 메모리의 대부분은 여기서 나온다. mem_limit을 줄일 때 이걸 같이 줄이지 않으면
+      # 버퍼 풀만으로 한도를 넘어 컨테이너가 OOMKill된다.
+      - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-128M}
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -67,7 +70,8 @@ services:
       - --requirepass
       - ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       - --maxmemory
-      - 192mb
+      # mem_limit보다 낮게 잡아 AOF 버퍼/오버헤드 여유를 남긴다. 둘은 같이 움직여야 한다.
+      - ${REDIS_MAXMEMORY:-192mb}
       - --maxmemory-policy
       - noeviction
     volumes:
