@@ -44,5 +44,15 @@ out/
 !frontend/.env
 docker-compose.override.yml
 
+
 ### Plan ###
 PLAN.md
+
+### SSH keys ###
+# 배포 서버 접속 키. 확장자·이름을 바꿔도 걸리도록 넓게 잡는다 —
+# 개인키가 한 번 푸시되면 이력에서 지워도 유출된 것으로 취급해야 한다.
+*.key
+*.key.pub
+*.pem
+id_rsa*
+id_ed25519*
