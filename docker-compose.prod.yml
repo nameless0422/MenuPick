@@ -127,6 +127,10 @@ services:
       # connectTimeout=5000은 hikari.connection-timeout과 같은 값 — TCP 연결 수립 단계에서
       # 커넥션 획득 상한보다 오래 매달릴 이유가 없다.
       DB_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&connectTimeout=5000&socketTimeout=15000
+      # Flyway 전용. socketTimeout이 런타임보다 훨씬 길다 — 이유는 application-prod.yml의
+      # spring.flyway 주석 참고(15초 상한이 DDL에 걸리면 부분 적용된 스키마가 남는다).
+      # 10분은 "이보다 오래 걸리는 마이그레이션은 무중단 도구(gh-ost 등)로 따로 돌려야 한다"는 선이다.
+      DB_MIGRATION_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&connectTimeout=5000&socketTimeout=600000
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis

@@ -30,6 +30,23 @@ spring:
       # 소켓 타임아웃으로 끝날 일에는 울리지 않고 진짜 반납 누락만 걸러낸다.
       leak-detection-threshold: 20000
 
+  flyway:
+    # 마이그레이션은 앱 커넥션과 분리한다.
+    #
+    # spring.datasource의 DB_URL에는 socketTimeout=15s가 걸려 있다 — 런타임 쿼리가 무한정
+    # 매달려 커넥션 10개를 영구히 잠그는 것을 막기 위한 값이다. 그런데 그 상한이 DDL에도
+    # 그대로 적용되면, 데이터가 쌓인 뒤 큰 테이블에 인덱스를 추가하는 마이그레이션이 15초에서
+    # 잘린다. 이때 MySQL 커넥터는 소켓만 끊고 서버는 ALTER를 계속 실행하며, MySQL은 DDL
+    # 트랜잭션이 없어 롤백도 되지 않는다 — 부분 적용된 스키마와 failed로 마킹된 Flyway 이력만
+    # 남아 앱이 영영 기동하지 못하는 상태가 된다. 런타임 상한과 마이그레이션 상한은 애초에
+    # 다른 값이어야 하는 것이다.
+    #
+    # url을 주면 Flyway가 자체 DataSource를 만들어 쓰고 마이그레이션이 끝나면 닫는다.
+    # 기본값을 DB_URL로 둬, 변수를 안 넘기는 환경(로컬 override 등)에서도 동작은 그대로다.
+    url: ${DB_MIGRATION_URL:${DB_URL}}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
   jpa:
     hibernate:
       ddl-auto: validate
