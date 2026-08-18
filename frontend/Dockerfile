@@ -31,5 +31,7 @@ FROM nginx:1.27.3-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# localhost가 아니라 127.0.0.1을 쓴다 — 컨테이너 안에서 localhost는 ::1로 풀리는데
+# nginx.conf가 `listen 80`이라 IPv4에만 바인딩되어 healthcheck가 항상 실패한다.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1
+  CMD wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1
