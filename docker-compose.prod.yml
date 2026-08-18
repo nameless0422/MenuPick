@@ -117,7 +117,16 @@ services:
       # actuator를 서비스 포트에서 분리한다. Dockerfile의 HEALTHCHECK가 같은 값을 읽으므로
       # 여기만 바꿔도 헬스체크가 따라온다.
       MANAGEMENT_SERVER_PORT: 9090
-      DB_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      # connectTimeout/socketTimeout: MySQL 커넥터의 기본값은 둘 다 0 = 무한이다.
+      # application-prod.yml의 hikari.connection-timeout(5초)은 "풀에서 커넥션을 꺼내는" 시간만
+      # 제한하지, 이미 빌려간 커넥션 위에서 도는 쿼리는 전혀 보호하지 않는다.
+      # 그래서 MySQL이 응답을 멈추면(락 대기, 디스크 포화, OOMKill 직전 등) 풀의 커넥션 10개가
+      # 영원히 잠긴 채 남고, 앱을 재시작하기 전까지 자력으로 회복되지 않는다.
+      # socketTimeout=15000은 이 앱의 정상 쿼리(단건 조회·짧은 목록, 수십 ms)보다 압도적으로 길어
+      # 오탐이 없으면서, 응답 없는 커넥션은 예외로 끊어 풀에 돌려보낸다.
+      # connectTimeout=5000은 hikari.connection-timeout과 같은 값 — TCP 연결 수립 단계에서
+      # 커넥션 획득 상한보다 오래 매달릴 이유가 없다.
+      DB_URL: jdbc:mysql://mysql:3306/menupick?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&connectTimeout=5000&socketTimeout=15000
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
@@ -143,6 +152,16 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       MAIL_FROM: ${MAIL_FROM}
       MAIL_BASE_URL: ${MAIL_BASE_URL}
+    # SIGTERM 후 SIGKILL까지의 유예. Docker 기본값은 10초라, 그대로 두면 앱이 정리를 끝내기 전에
+    # 매번 SIGKILL로 죽는다(정지 시 app만 exit code 137로 남는 것이 그 증거다).
+    # 그러면 두 가지 설정이 통째로 무효가 된다:
+    #   - server.shutdown: graceful + spring.lifecycle.timeout-per-shutdown-phase: 25s
+    #   - MailAsyncConfig의 awaitTerminationSeconds(20) — 큐에 남은 인증 메일을 마저 보내려는 대기
+    # 40초인 이유: graceful 25초와 메일 대기 20초는 순차가 아니라 겹쳐 돌지만, 종료 단계는
+    # 컨텍스트 정리·풀 종료가 뒤따르므로 둘 중 큰 값에 그만큼의 여유를 더한다.
+    # 불변 조건은 하나다 — 이 값은 위 두 값(특히 awaitTerminationSeconds)보다 반드시 커야 한다.
+    # 어느 쪽을 조정하든 함께 움직일 것. 작으면 "메일을 버리지 않겠다"는 결정이 조용히 되돌려진다.
+    stop_grace_period: 40s
     # JVM 힙은 Dockerfile의 -XX:MaxRAMPercentage=75.0에 따라 이 한도의 75%(≈1.1GB)로 잡힌다.
     # 나머지 25%는 메타스페이스·스레드 스택(톰캣 50 스레드)·네트워크 버퍼 몫이다.
     mem_limit: ${APP_MEM_LIMIT:-1536m}

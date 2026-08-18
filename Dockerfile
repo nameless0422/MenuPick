@@ -34,7 +34,24 @@ EXPOSE 8080
 # 컨테이너 메모리 한도(compose의 mem_limit)를 JVM이 인식해 힙 상한을 잡게 한다.
 # 지정하지 않으면 기본 MaxRAMPercentage(25%)로 힙을 너무 작게 잡거나,
 # cgroup 인식 실패 시 호스트 전체 메모리 기준으로 잡아 OOMKill을 유발한다.
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+#
+# 힙이 찼을 때 JVM의 기본 동작은 "죽지 않는 것"이다. GC가 계속 돌며 거의 아무것도 회수하지 못하는
+# 상태(GC 데스 스파이럴)로 들어가면 프로세스는 살아 있고 응답만 안 하는데, 이 조합에서는 아무도
+# 복구하지 못한다: compose의 restart: unless-stopped는 프로세스가 죽어야 개입하고,
+# plain Docker/compose는 unhealthy 컨테이너를 재시작하지 않는다(그건 Swarm의 동작이다).
+# 결과적으로 서비스는 멎어 있는데 컨테이너는 Up으로 보인다.
+#   +ExitOnOutOfMemoryError — 여기서 핵심이다. OOM 발생 즉시 프로세스를 끝내 restart 정책이
+#     컨테이너를 살려내게 한다. 이게 없으면 위 두 안전망이 전부 무력하다.
+#   +HeapDumpOnOutOfMemoryError / HeapDumpPath — 재시작이 증상을 덮어버리므로, 덮이기 전에
+#     원인 분석용 스냅샷을 남긴다. /tmp에 두는 이유는 non-root(menupick)가 쓸 수 있는 경로이고
+#     컨테이너 파일시스템이라 재시작하면 사라지기 때문이다 — 보존이 필요하면 발생 직후
+#     `docker cp menupick-app:/tmp/heapdump.hprof .`로 꺼낼 것. (힙 크기만 한 파일이 생긴다)
+ENTRYPOINT ["java", \
+    "-XX:MaxRAMPercentage=75.0", \
+    "-XX:+HeapDumpOnOutOfMemoryError", \
+    "-XX:HeapDumpPath=/tmp/heapdump.hprof", \
+    "-XX:+ExitOnOutOfMemoryError", \
+    "-jar", "app.jar"]
 
 # actuator health는 SecurityConfig에서 permitAll이므로 인증 없이 조회 가능하다.
 # start-period는 Spring Boot 기동 시간(마이그레이션 포함)을 감안한 값.
