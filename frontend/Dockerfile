@@ -12,18 +12,11 @@ COPY . .
 # (VITE_API_BASE_URL=http://localhost:8080)와 우선순위를 두고 다투므로, .env.production을
 # 직접 만들어 덮어쓴다 — production 모드에서 .env보다 우선한다.
 # 기본값이 빈 문자열이라 상대경로(같은 오리진의 nginx)로 나간다.
+#
+# OAuth 값은 여기 없다. 인가 URL을 백엔드가 조립하므로 client_id·redirect_uri가 번들에
+# 들어갈 일이 없다 — 넣으면 그대로 공개된다(src/auth/oauthUrls.ts 참고).
 ARG VITE_API_BASE_URL=""
-ARG VITE_KAKAO_CLIENT_ID=""
-ARG VITE_KAKAO_REDIRECT_URI=""
-ARG VITE_GOOGLE_CLIENT_ID=""
-ARG VITE_GOOGLE_REDIRECT_URI=""
-RUN { \
-      echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}"; \
-      echo "VITE_KAKAO_CLIENT_ID=${VITE_KAKAO_CLIENT_ID}"; \
-      echo "VITE_KAKAO_REDIRECT_URI=${VITE_KAKAO_REDIRECT_URI}"; \
-      echo "VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}"; \
-      echo "VITE_GOOGLE_REDIRECT_URI=${VITE_GOOGLE_REDIRECT_URI}"; \
-    } > .env.production
+RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production
 
 RUN npm run build
 

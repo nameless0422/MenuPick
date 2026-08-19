@@ -31,6 +31,7 @@ class KakaoOAuthProviderTest {
         String baseUrl = mockWebServer.url("/").toString();
         OAuthProperties.ProviderConfig config = new OAuthProperties.ProviderConfig(
                 "test-client-id", "test-client-secret",
+                "https://kauth.kakao.com/oauth/authorize",
                 baseUrl + "oauth/token",
                 baseUrl + "v2/user/me",
                 "http://localhost:3000/callback"
@@ -226,5 +227,35 @@ class KakaoOAuthProviderTest {
         assertThat(body).contains("code=abc%26client_id%3Dattacker%26x%3D1");
         assertThat(URLDecoder.decode(body, StandardCharsets.UTF_8))
                 .contains("code=abc&client_id=attacker&x=1");
+    }
+
+    @Test
+    @DisplayName("buildAuthorizeUrl - client_id·redirect_uri를 서버 설정에서 채우고 state를 싣는다")
+    void buildAuthorizeUrl_includesServerSideConfig() {
+        String url = kakaoOAuthProvider.buildAuthorizeUrl("abcdef0123456789");
+
+        assertThat(url).startsWith("https://kauth.kakao.com/oauth/authorize?");
+        assertThat(url).contains("client_id=test-client-id");
+        assertThat(url).contains("response_type=code");
+        assertThat(url).contains("state=abcdef0123456789");
+        // redirect_uri는 값이 잘리지 않고 그대로 실려야 한다. `:`과 `/`는 쿼리 성분에서 합법이라
+        // 퍼센트 인코딩되지 않는데(RFC 3986), 제공자가 등록값과 대조하는 데는 영향이 없다.
+        assertThat(url).contains("redirect_uri=http://localhost:3000/callback");
+        // 카카오는 동의 항목을 콘솔에서 정하므로 scope를 싣지 않는다.
+        assertThat(url).doesNotContain("scope=");
+    }
+
+    @Test
+    @DisplayName("buildAuthorizeUrl - client_id가 비어 있으면 제공자로 보내지 않고 끊는다")
+    void buildAuthorizeUrl_blankClientId() {
+        OAuthProperties.ProviderConfig blank = new OAuthProperties.ProviderConfig(
+                "  ", "secret", "https://kauth.kakao.com/oauth/authorize",
+                "https://x/token", "https://x/me", "http://localhost:3000/callback");
+        KakaoOAuthProvider provider =
+                new KakaoOAuthProvider(new OAuthProperties(blank, null), WebClient.create());
+
+        assertThatThrownBy(() -> provider.buildAuthorizeUrl("abcdef0123456789"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OAUTH_PROVIDER_ERROR);
     }
 }
