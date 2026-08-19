@@ -5,6 +5,16 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
+  lifecycle:
+    # graceful shutdown이 "진행 중인 것들이 끝나기를" 기다려주는 상한(server.shutdown과 한 쌍).
+    # 이 값이 없으면 기본 30s가 아니라 애초에 server.shutdown이 IMMEDIATE라 아무것도 안 기다린다.
+    # 25s로 잡는 근거는 이 앱에서 종료 때 실제로 남아 있는 작업이 메일 발송이기 때문이다 —
+    # MailAsyncConfig는 setWaitForTasksToCompleteOnShutdown(true) + awaitTerminationSeconds(20)으로
+    # 큐에 남은 인증 메일을 끝내려 하는데, 그 20초보다 짧으면 "버리지 않겠다"는 그 판단이
+    # 설정 단계에서 무효가 된다(배포할 때마다 대기 중이던 인증 메일이 조용히 사라진다).
+    # 20초 + 인플라이트 HTTP 요청 처리 여유로 25s.
+    timeout-per-shutdown-phase: 25s
+
   jpa:
     open-in-view: false
     properties:
@@ -35,6 +45,15 @@ spring:
       # 인증이 걸린 Redis(운영 compose는 --requirepass 사용)를 위한 공통 자리.
       # 기본값을 빈 문자열로 둬 로컬/테스트의 무인증 Redis에도 그대로 붙는다.
       password: ${REDIS_PASSWORD:}
+      # Lettuce의 기본 커맨드 타임아웃은 60초다. 이 앱의 Redis 접근은 전부 fail-open으로 설계돼 있는데
+      # (RateLimitFilter는 예외를 잡아 검사를 건너뛰고, RedisConfig의 CacheErrorHandler는 캐시 미스로 강등한다),
+      # 그 설계는 "예외가 던져진다"를 전제로 한다. 느려진 Redis는 예외를 내지 않고 그냥 기다리므로
+      # fail-open이 발동조차 하지 않는다 — 요청마다 최대 60초씩 잡히고 톰캣 스레드 50개가 전부 잠긴다.
+      # 1초는 같은 VM 안(compose 내부망)의 Redis 왕복(정상 1ms 미만) 대비 세 자릿수 여유이면서,
+      # 이상이 생기면 즉시 예외로 바뀌어 설계된 fail-open 경로를 타게 하는 값이다.
+      # 늘리려면 "톰캣 스레드 50개가 이 시간만큼 잠겨도 되는가"로 판단할 것.
+      timeout: 1s
+      connect-timeout: 1s
 
   flyway:
     enabled: true
@@ -42,6 +61,15 @@ spring:
     # 붙었을 때 조용히 baseline을 찍고 V1을 건너뛰어, 스키마 불일치가 런타임까지 숨는다.
     # 기존 데이터가 있는 DB에 처음 붙이는 상황에서는 그때만 수동으로 flyway baseline을 수행할 것.
     baseline-on-migrate: false
+
+server:
+  # Spring Boot 기본값은 IMMEDIATE — SIGTERM을 받는 즉시 커넥터를 끊고 컨텍스트를 내린다.
+  # 그러면 (1) 처리 중이던 HTTP 요청이 응답 없이 잘리고, (2) MailAsyncConfig가 큐에 남은 인증 메일을
+  # 마저 보내려고 20초를 기다리기로 한 판단이 실행될 기회 자체를 못 얻는다.
+  # graceful은 새 요청 수락을 멈추고 진행 중인 것들이 끝나기를 기다린다(상한은 위 spring.lifecycle).
+  # 이 값은 배포 파이프라인 전체와 한 묶음이다 — docker-compose.prod.yml의 stop_grace_period가
+  # 이 시간보다 짧으면 Docker가 먼저 SIGKILL을 보내 graceful이 무의미해진다.
+  shutdown: graceful
 
 # 기본은 비노출. local(또는 향후 dev) 프로파일에서만 true로 덮어써 노출한다.
 springdoc:
@@ -71,3 +99,24 @@ management:
     health:
       # 헬스체크는 SecurityConfig에서 permitAll이므로, 비인증 호출자에게 DB/Redis 커넥션 상세를 노출하지 않는다.
       show-details: never
+      # /actuator/health/liveness·/readiness를 항상 만든다. Boot는 Kubernetes를 감지했을 때만
+      # 이 둘을 자동으로 켜므로, compose로 도는 지금은 두 경로가 404다.
+      # 그런데 AccessLogFilter의 UNLOGGED_PATHS는 이미 두 경로가 있다고 전제하고 있고,
+      # 나중에 오케스트레이터를 붙이며 프로브로 지정하면 전부 실패해 컨테이너가 무한 재시작 루프에 빠진다.
+      # 지금 켜 두면 그 경로가 실제로 존재하는지를 지금 확인할 수 있다.
+      probes:
+        enabled: true
+      group:
+        # readiness = "이 인스턴스에 트래픽을 보내도 되는가". 기본 그룹(readinessState만)을 두지 않고
+        # 명시적으로 정의하는 이유는, 자동 구성이 무엇을 넣는지에 서비스 투입 여부를 맡기지 않기 위해서다.
+        # db는 넣는다 — DB가 없으면 이 앱은 사실상 어떤 요청도 처리하지 못한다.
+        #
+        # redis는 의도적으로 제외한다. Redis 장애는 이 앱에서 장애가 아니라 성능 저하다:
+        # RedisConfig의 CacheErrorHandler는 캐시 실패를 미스로 강등하고, RateLimitFilter는
+        # 예외 시 레이트 리밋 검사를 건너뛴다(fail-open). 즉 Redis가 죽어도 서비스는 정상 응답한다.
+        # 그런데 기본 health는 Redis DOWN을 그대로 전체 DOWN으로 올리므로, LB를 붙인 순간
+        # 멀쩡히 응답하는 앱이 통째로 트래픽에서 빠진다 — 아무 문제가 없던 곳에서 장애가 만들어진다.
+        # Redis 상태는 /actuator/health(전체)와 metrics로 계속 보이므로 관측을 잃지도 않는다.
+        # 훗날 Redis를 정합성 요소로 쓰기 시작한다면(= fail-open을 걷어낸다면) 이 결정도 함께 뒤집을 것.
+        readiness:
+          include: readinessState, db

@@ -155,6 +155,31 @@ class MenuControllerTest extends AbstractControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/menus - 1000자를 넘는 메모는 400 (TEXT 컬럼까지 내려가 409가 되기 전에 막는다)")
+    void createMenu_tooLongMemo_badRequest() throws Exception {
+        String longMemo = "가".repeat(1001);
+        mockMvc.perform(post("/api/v1/menus")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"된장찌개\",\"weight\":1,\"memo\":\"" + longMemo + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("memo"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/menus/{menuId} - 1000자를 넘는 메모는 400")
+    void updateMenu_tooLongMemo_badRequest() throws Exception {
+        String longMemo = "가".repeat(1001);
+        mockMvc.perform(put("/api/v1/menus/1")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"수정됨\",\"weight\":3,\"isExcluded\":false,\"memo\":\""
+                                + longMemo + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("memo"));
+    }
+
+    @Test
     @DisplayName("PATCH /api/v1/menus/weights - menuId가 null이면 400")
     void batchUpdateWeight_nullMenuId_badRequest() throws Exception {
         mockMvc.perform(patch("/api/v1/menus/weights")

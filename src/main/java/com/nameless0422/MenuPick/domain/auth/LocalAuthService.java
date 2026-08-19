@@ -226,18 +226,38 @@ public class LocalAuthService {
         Long pendingUserId = authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, token)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
 
-        Long userId = inTransaction(() -> completeVerification(pendingUserId));
-        return tokenIssuer.issue(userId);
+        Verified result = inTransaction(() -> completeVerification(pendingUserId));
+
+        if (result.ownerToPurge() != null) {
+            // 유예기간이 지난 탈퇴 계정이 이 주소를 붙잡고 있다. 같은 트랜잭션에서 지울 수 없다 —
+            // purge가 벌크 삭제 후 영속성 컨텍스트를 비워 들고 있던 엔티티가 죽고, 무엇보다
+            // Hibernate는 플러시 때 UPDATE를 DELETE보다 먼저 내보내므로 users.email을 채우는
+            // UPDATE가 옛 행의 DELETE보다 앞서 나가 uq_users_email에 걸린다.
+            // 로그인 경로가 같은 상황을 트랜잭션 밖에서 정리하는 것과 같은 방식이다.
+            userHardDeleteService.purge(result.ownerToPurge());
+            // 주소를 붙잡던 행이 사라졌으니 이번에는 병합 없이 이 계정이 그 주소의 주인이 된다.
+            result = inTransaction(() -> completeVerification(pendingUserId));
+        }
+
+        return tokenIssuer.issue(result.userId());
     }
 
-    private Long completeVerification(Long pendingUserId) {
+    /**
+     * 메일 인증 결과.
+     *
+     * <p>유예기간이 지난 동일 주소 탈퇴 계정은 트랜잭션 밖에서 정리해야 해서 따로 표시한다
+     * (로그인 경로의 {@link Authenticated}와 같은 이유).
+     */
+    private record Verified(Long userId, Long ownerToPurge) {}
+
+    private Verified completeVerification(Long pendingUserId) {
         AuthProvider provider = authProviderRepository
                 .findByUserIdAndProvider(pendingUserId, AuthProvider.LOCAL)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
 
         User pending = provider.getUser();
         if (pending.isEmailVerified()) {
-            return pending.getId();
+            return new Verified(pending.getId(), null);
         }
 
         String email = provider.getSocialId();
@@ -249,6 +269,23 @@ public class LocalAuthService {
         Optional<User> owner = userRepository.findByEmail(email);
         if (owner.isPresent()) {
             User target = owner.get();
+
+            // findByEmail은 soft delete를 거르지 않는다. 탈퇴한 계정에 그대로 붙이면
+            // deletedAt이 남은 채 로그인까지 되어, 사용자는 예전 메뉴가 다 보이니 복귀했다고
+            // 믿지만 유예기간이 끝나는 순간 WithdrawnUserCleanupScheduler가 이 계정을 잡아
+            // 메뉴·식당·히스토리를 전부 하드 삭제한다. 탈퇴 계정을 만났을 때의 판단은
+            // 소셜 경로(AuthService.resolveUser)·자체 로그인(authenticate)과 같아야 한다 —
+            // 유예 안이면 되살리고, 지났으면 옛 데이터를 버리고 새로 시작한다.
+            if (target.isDeleted()) {
+                if (!target.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
+                    return new Verified(null, target.getId());
+                }
+                // 주소는 이미 검증된 값이라 그대로 두고(null을 넘기면 덮어쓰지 않는다),
+                // 닉네임도 쓰던 것을 지킨다 — 탈퇴 중에도 그 행이 인덱스를 붙잡고 있어
+                // 다시 배정받으려 하면 자기 이름을 자기가 빼앗긴다.
+                target.reactivate(null, target.getNickname());
+            }
+
             provider.moveTo(target);
 
             // FK가 아직 pending을 가리키는 상태로 삭제가 먼저 나가지 않도록 이동을 먼저 반영한다.
@@ -256,11 +293,11 @@ public class LocalAuthService {
 
             // 인증 전이라 로그인한 적이 없고, 따라서 딸린 데이터도 없다.
             userRepository.delete(pending);
-            return target.getId();
+            return new Verified(target.getId(), null);
         }
 
         pending.verifyEmail(email);
-        return pending.getId();
+        return new Verified(pending.getId(), null);
     }
 
     /** 가입 여부를 응답으로 흘리지 않도록, 보낼 대상이 없어도 성공으로 끝낸다. */
@@ -318,7 +355,8 @@ public class LocalAuthService {
         });
 
         // Refresh Token은 사용자당 한 개(refresh:{userId})라, 새로 발급하면 기존 세션이
-        // 밀려난다. 비밀번호를 빼앗겼다 되찾는 흐름이므로 다른 세션이 남으면 안 된다.
+        // 밀려난다. 비밀번호를 빼앗겼다 되찾는 흐름이므로 다른 세션이 남으면 안 된다 —
+        // RefreshTokenStore.save가 회전 유예 값까지 함께 버리는 이유도 이것이다.
         return tokenIssuer.issue(userId);
     }
 

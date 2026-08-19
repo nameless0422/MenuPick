@@ -410,6 +410,67 @@ class LocalAuthServiceTest {
         }
 
         @Test
+        @DisplayName("같은 주소의 계정이 탈퇴 상태여도 유예기간 안이면 되살린 뒤 병합한다")
+        void mergeIntoWithdrawnOwner_withinGrace_reactivates() {
+            AuthProvider pending = localAccount(3L, EMAIL, PASSWORD, false);
+            User pendingUser = pending.getUser();
+
+            User withdrawn = User.builder().email(EMAIL).emailVerified(true).nickname("소셜").build();
+            ReflectionTestUtils.setField(withdrawn, "id", 9L);
+            withdrawn.softDelete(NOW.minusDays(25));
+
+            given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
+                    .willReturn(Optional.of(3L));
+            given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(pending));
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(withdrawn));
+
+            localAuthService.verifyEmail("tok");
+
+            // deletedAt이 남은 채 병합되면 로그인은 되지만, 사용자가 복귀했다고 믿는 사이
+            // 유예기간이 끝나면서 정리 배치가 메뉴·식당·히스토리를 전부 하드 삭제한다.
+            assertThat(withdrawn.isDeleted()).isFalse();
+            // 이미 검증된 주소와 쓰던 닉네임은 그대로 유지된다.
+            assertThat(withdrawn.getEmail()).isEqualTo(EMAIL);
+            assertThat(withdrawn.isEmailVerified()).isTrue();
+            assertThat(withdrawn.getNickname()).isEqualTo("소셜");
+
+            assertThat(pending.getUser()).isSameAs(withdrawn);
+            verify(userRepository).delete(pendingUser);
+            verify(userHardDeleteService, never()).purge(anyLong());
+            verify(tokenIssuer).issue(9L);
+        }
+
+        @Test
+        @DisplayName("같은 주소의 탈퇴 계정이 유예기간을 넘겼으면 옛 데이터를 지우고 이 계정이 주소를 가져간다")
+        void mergeIntoWithdrawnOwner_pastGrace_purgesAndKeepsNewAccount() {
+            AuthProvider pending = localAccount(3L, EMAIL, PASSWORD, false);
+            User pendingUser = pending.getUser();
+
+            User withdrawn = User.builder().email(EMAIL).emailVerified(true).nickname("소셜").build();
+            ReflectionTestUtils.setField(withdrawn, "id", 9L);
+            withdrawn.softDelete(NOW.minusDays(31));
+
+            given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
+                    .willReturn(Optional.of(3L));
+            given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(pending));
+            // 정리가 끝난 뒤 다시 보면 그 주소를 붙잡고 있던 행은 사라져 있다.
+            given(userRepository.findByEmail(EMAIL))
+                    .willReturn(Optional.of(withdrawn), Optional.empty());
+
+            localAuthService.verifyEmail("tok");
+
+            // 소셜 경로(AuthService.resolveUser)와 같은 판단 — 유예가 지났으면 되살리지 않고 버린다.
+            verify(userHardDeleteService).purge(9L);
+            assertThat(pending.getUser()).isSameAs(pendingUser);
+            assertThat(pendingUser.getEmail()).isEqualTo(EMAIL);
+            assertThat(pendingUser.isEmailVerified()).isTrue();
+            verify(userRepository, never()).delete(any(User.class));
+            verify(tokenIssuer).issue(3L);
+        }
+
+        @Test
         @DisplayName("만료·재사용된 토큰은 400으로 끊는다")
         void invalidToken() {
             given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))

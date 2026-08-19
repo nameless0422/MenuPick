@@ -129,6 +129,118 @@ class RateLimitFilterTest {
         verify(filterChain, never()).doFilter(request, response);
     }
 
+    // --- 경로 매칭: 퍼센트 인코딩 우회 차단 ---
+    //
+    // request.getRequestURI()는 디코딩되지 않은 원본 경로다. 문자열로 비교하면 아래 요청들이
+    // 레이트 리밋만 비껴가고 Security permitAll + MVC 핸들러 매핑(둘 다 디코딩된 경로로 매칭)에는
+    // 정상 도달한다 — 비밀번호 재설정 메일을 무제한 발송할 수 있게 된다.
+
+    @Test
+    @DisplayName("퍼센트 인코딩된 인증 경로(/auth/%70assword-reset)도 같은 IP 버킷에 집계된다")
+    @SuppressWarnings("unchecked")
+    void percentEncodedAuthPath_isStillRateLimited() throws ServletException, IOException {
+        // %70 == 'p' — 디코딩하면 /api/v1/auth/password-reset 이다
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("POST", "/api/v1/auth/%70assword-reset");
+        request.setRemoteAddr("198.51.100.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:auth:198.51.100.1")), eq("60")))
+                .willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("인코딩된 경로도 평문 경로와 같은 버킷을 공유한다 (섞어 보내도 합산된다)")
+    @SuppressWarnings("unchecked")
+    void percentEncodedAuthPath_sharesBucketWithPlainPath() throws ServletException, IOException {
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:auth:198.51.100.2")), eq("60")))
+                .willReturn(1L);
+
+        for (String uri : List.of("/api/v1/auth/password-reset",
+                "/api/v1/auth/%70assword-reset",
+                "/api/v1/auth/passwor%64-reset",
+                "/api/v1/auth/signu%70")) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
+            request.setRemoteAddr("198.51.100.2");
+            rateLimitFilter.doFilterInternal(request, new MockHttpServletResponse(), filterChain);
+        }
+
+        verify(redisTemplate, times(4))
+                .execute(any(RedisScript.class), eq(List.of("rl:auth:198.51.100.2")), eq("60"));
+    }
+
+    @Test
+    @DisplayName("퍼센트 인코딩된 데모 픽 경로도 데모 버킷에 집계된다")
+    @SuppressWarnings("unchecked")
+    void percentEncodedDemoPath_isStillRateLimited() throws ServletException, IOException {
+        // %64 == 'd'
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/pick/%64emo");
+        request.setRemoteAddr("198.51.100.3");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:demo:198.51.100.3")), eq("60")))
+                .willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("퍼센트 인코딩된 외부 API 프록시 경로도 프록시 버킷에 집계된다")
+    @SuppressWarnings("unchecked")
+    void percentEncodedProxyPath_isStillRateLimited() throws ServletException, IOException {
+        // %6B == 'k'
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("GET", "/api/v1/%6Bakao/search/keyword");
+        request.setRemoteAddr("198.51.100.4");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:proxy:ip:198.51.100.4")), eq("60")))
+                .willReturn(31L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("경로 파라미터(;)가 붙어도 레이트 리밋 대상이다")
+    @SuppressWarnings("unchecked")
+    void pathParameterSuffix_isStillRateLimited() throws ServletException, IOException {
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("POST", "/api/v1/auth/password-reset;a=b");
+        request.setRemoteAddr("198.51.100.5");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:auth:198.51.100.5")), eq("60")))
+                .willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("디코딩해도 대상이 아닌 경로는 여전히 제한 없이 통과 (매칭이 과하게 넓어지지 않았다)")
+    void encodedNonLimitedPath_passThrough() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/%6Denus");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(redisTemplate);
+    }
+
     // --- X-Forwarded-For 신뢰 홉 처리 (이슈 #3) ---
 
     @Test
