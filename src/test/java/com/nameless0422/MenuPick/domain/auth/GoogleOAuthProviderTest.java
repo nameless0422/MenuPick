@@ -28,6 +28,7 @@ class GoogleOAuthProviderTest {
         String baseUrl = mockWebServer.url("/").toString();
         OAuthProperties.ProviderConfig config = new OAuthProperties.ProviderConfig(
                 "test-client-id", "test-client-secret",
+                "https://accounts.google.com/o/oauth2/v2/auth",
                 baseUrl + "token",
                 baseUrl + "userinfo",
                 "http://localhost:3000/callback"
@@ -187,5 +188,17 @@ class GoogleOAuthProviderTest {
 
         assertThat(body.split("redirect_uri=", -1).length - 1).isEqualTo(1);
         assertThat(body).contains("code=abc%26redirect_uri%3Dhttps%3A%2F%2Fevil.example");
+    }
+
+    @Test
+    @DisplayName("buildAuthorizeUrl - 구글은 scope를 최소 범위로 싣고 공백을 인코딩한다")
+    void buildAuthorizeUrl_includesScope() {
+        String url = googleOAuthProvider.buildAuthorizeUrl("abcdef0123456789");
+
+        assertThat(url).startsWith("https://accounts.google.com/o/oauth2/v2/auth?");
+        assertThat(url).contains("client_id=test-client-id");
+        assertThat(url).contains("state=abcdef0123456789");
+        // 공백이 날것으로 새면 URL이 끊긴다.
+        assertThat(url).contains("scope=openid%20email%20profile");
     }
 }

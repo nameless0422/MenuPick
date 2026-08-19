@@ -9,8 +9,10 @@ import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
@@ -143,6 +145,42 @@ final class OAuthHttpSupport {
                     log.error("{} {} 5xx 응답: status={}, body={}", providerName, step, response.statusCode(), body);
                     return new BusinessException(ErrorCode.OAUTH_PROVIDER_ERROR);
                 });
+    }
+
+    /**
+     * 제공자 동의 화면 URL을 조립한다. scope는 제공자마다 달라 호출자가 넘긴다(없으면 생략).
+     *
+     * <p>설정이 비어 있으면 그대로 조립해 봐야 제공자 화면에서 의미를 알 수 없는 오류가 나므로,
+     * 여기서 먼저 끊어 서버 설정 문제임을 드러낸다.
+     *
+     * <p>{@link UriComponentsBuilder}가 쿼리 성분에서 허용되지 않는 문자만 퍼센트 인코딩한다.
+     * 그래서 scope의 공백은 {@code %20}이 되고, redirect_uri의 {@code :}·{@code /}는 RFC 3986상
+     * 쿼리에서 합법이라 그대로 남는다 — 값이 잘리지 않으므로 제공자는 동일하게 파싱한다.
+     */
+    static String buildAuthorizeUrl(OAuthProperties.ProviderConfig config,
+                                    String providerName,
+                                    String state,
+                                    String scope) {
+        if (isBlank(config.authorizeUri()) || isBlank(config.clientId())
+                || isBlank(config.redirectUri())) {
+            log.error("{} 인가 URL 설정이 비어 있습니다 — authorize-uri/client-id/redirect-uri를 확인하세요.",
+                    providerName);
+            throw new BusinessException(ErrorCode.OAUTH_PROVIDER_ERROR);
+        }
+
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(config.authorizeUri())
+                .queryParam("client_id", config.clientId())
+                .queryParam("redirect_uri", config.redirectUri())
+                .queryParam("response_type", "code")
+                .queryParam("state", state);
+        if (!isBlank(scope)) {
+            builder.queryParam("scope", scope);
+        }
+        return builder.encode(StandardCharsets.UTF_8).toUriString();
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private static String nullToEmpty(String value) {

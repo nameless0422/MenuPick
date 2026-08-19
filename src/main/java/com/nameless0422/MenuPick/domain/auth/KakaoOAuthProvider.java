@@ -21,6 +21,15 @@ public class KakaoOAuthProvider implements OAuthProvider {
         return PROVIDER_NAME;
     }
 
+    /**
+     * 카카오는 동의 항목을 콘솔에서 정하므로 인가 URL에 scope를 싣지 않는다.
+     */
+    @Override
+    public String buildAuthorizeUrl(String state) {
+        return OAuthHttpSupport.buildAuthorizeUrl(
+                oAuthProperties.kakao(), PROVIDER_NAME, state, null);
+    }
+
     @Override
     public OAuthUserProfile getUserProfile(String code) {
         OAuthProperties.ProviderConfig config = oAuthProperties.kakao();

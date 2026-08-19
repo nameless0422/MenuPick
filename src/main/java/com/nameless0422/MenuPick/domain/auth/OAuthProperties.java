@@ -10,6 +10,8 @@ public record OAuthProperties(
     public record ProviderConfig(
             String clientId,
             String clientSecret,
+            /** 사용자를 보낼 제공자의 동의 화면 주소. 서버가 인가 URL을 조립할 때 쓴다. */
+            String authorizeUri,
             String tokenUri,
             String userInfoUri,
             String redirectUri

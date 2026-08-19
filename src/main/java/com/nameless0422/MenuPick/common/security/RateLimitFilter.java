@@ -91,7 +91,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             authMatcher("/api/v1/auth/verify-email"),
             authMatcher("/api/v1/auth/resend-verification"),
             authMatcher("/api/v1/auth/password-reset"),
-            authMatcher("/api/v1/auth/password-reset/confirm")
+            authMatcher("/api/v1/auth/password-reset/confirm"),
+            // 동의 화면 리다이렉트. 인증 없이 열려 있고 호출마다 Redis를 건드리므로
+            // 나머지 auth 경로와 같은 IP 버킷에 넣는다. GET이라 authMatcher(POST 고정)는 못 쓴다.
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/kakao/authorize"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/google/authorize")
     );
 
     private static final RequestMatcher DEMO_PICK_MATCHER =

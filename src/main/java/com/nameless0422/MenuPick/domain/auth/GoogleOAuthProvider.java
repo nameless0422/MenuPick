@@ -12,6 +12,7 @@ import java.util.Map;
 public class GoogleOAuthProvider implements OAuthProvider {
 
     private static final String PROVIDER_NAME = "GOOGLE";
+    private static final String SCOPE = "openid email profile";
 
     private final OAuthProperties oAuthProperties;
     private final WebClient webClient;
@@ -19,6 +20,15 @@ public class GoogleOAuthProvider implements OAuthProvider {
     @Override
     public String getProviderName() {
         return PROVIDER_NAME;
+    }
+
+    /**
+     * 구글은 scope를 인가 URL에서 요구한다. 프로필과 메일만 받으면 되므로 최소 범위로 고정한다.
+     */
+    @Override
+    public String buildAuthorizeUrl(String state) {
+        return OAuthHttpSupport.buildAuthorizeUrl(
+                oAuthProperties.google(), PROVIDER_NAME, state, SCOPE);
     }
 
     @Override

@@ -22,15 +22,19 @@ npm run lint         # oxlint — tsc가 못 잡는 훅 규칙·닿지 않는 �
 백엔드는 `local` 프로파일로 별도 기동해야 한다 (`../src`, `./gradlew bootRun`). 백엔드가 CORS로
 `http://localhost:5173`을 허용해두었다(`application-local.yml`의 `cors.allowed-origins`).
 
-## OAuth 리다이렉트 URI 맞추기 (중요)
+## OAuth 리다이렉트 URI 맞추기
 
-카카오/구글 로그인은 **프론트가 authorize URL로 리다이렉트 → 콜백 페이지가 `code`를 받아 백엔드로 전달**
-하는 구조다. 이때 프론트가 authorize 요청에 쓰는 `redirect_uri`와, 백엔드가 토큰 교환 시 쓰는
-`redirect_uri`(`KAKAO_REDIRECT_URI`/`GOOGLE_REDIRECT_URI` env)가 **정확히 같아야** 한다. 아래 세 곳이 모두 일치해야 한다:
+카카오/구글 로그인은 **프론트가 백엔드의 `/api/v1/auth/{provider}/authorize`로 이동 → 백엔드가
+동의 화면으로 302 → 콜백 페이지가 `code`를 받아 백엔드로 전달**하는 구조다.
 
-1. `.env.local`의 `VITE_KAKAO_REDIRECT_URI` / `VITE_GOOGLE_REDIRECT_URI`
-2. 백엔드 `KAKAO_REDIRECT_URI` / `GOOGLE_REDIRECT_URI` env
-3. 카카오/구글 개발자 콘솔에 등록된 Redirect URI
+인가 URL(`client_id`·`redirect_uri`)은 **백엔드가 조립한다.** 프론트가 만들면 `client_id`가
+번들에 인라인되어 공개되는데, 카카오는 그 값(REST API 키)이 로컬 API 자격증명이기도 해서
+누구나 꺼내 검색 할당량을 소진시킬 수 있다.
+
+그래서 프론트에는 OAuth 관련 `VITE_` 변수가 없다. 맞춰야 할 곳은 두 군데뿐이다:
+
+1. 백엔드 `KAKAO_REDIRECT_URI` / `GOOGLE_REDIRECT_URI` env
+2. 카카오/구글 개발자 콘솔에 등록된 Redirect URI
 
 로컬 기본값은 `http://localhost:5173/oauth/kakao/callback`, `http://localhost:5173/oauth/google/callback`.
 

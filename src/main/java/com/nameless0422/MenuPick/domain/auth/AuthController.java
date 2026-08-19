@@ -107,6 +107,31 @@ public class AuthController {
 
     // ---- 소셜 로그인 ----
 
+    /**
+     * 동의 화면으로 302 리다이렉트한다. 프론트는 이 주소로 이동만 하면 되고,
+     * client_id·redirect_uri는 서버 설정에만 존재한다(근거는 {@link OAuthProvider#buildAuthorizeUrl}).
+     *
+     * <p>목적지는 서버 설정에서만 오고 요청 값이 섞이지 않으므로 오픈 리다이렉트가 되지 않는다.
+     * 요청에서 오는 값은 state뿐이고, 그것도 형식 검증을 거쳐 쿼리 파라미터로만 들어간다.
+     */
+    @GetMapping("/kakao/authorize")
+    public ResponseEntity<Void> kakaoAuthorize(@RequestParam String state) {
+        return redirectTo(authService.authorizeUrl("KAKAO", state));
+    }
+
+    @GetMapping("/google/authorize")
+    public ResponseEntity<Void> googleAuthorize(@RequestParam String state) {
+        return redirectTo(authService.authorizeUrl("GOOGLE", state));
+    }
+
+    private ResponseEntity<Void> redirectTo(String url) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, url)
+                // 사용자마다 state가 다르므로 중간 캐시가 남기면 남의 인가 요청을 재사용하게 된다.
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .build();
+    }
+
     @PostMapping("/kakao")
     public ResponseEntity<ApiResponse<AccessTokenResponse>> kakaoLogin(
             @RequestBody @Valid OAuthLoginRequest request) {
