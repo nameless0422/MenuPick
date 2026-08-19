@@ -31,13 +31,18 @@ class RestaurantControllerTest extends AbstractControllerTest {
     void getRestaurants_success() throws Exception {
         given(restaurantService.getRestaurants(1L))
                 .willReturn(List.of(
-                        new RestaurantResponse.RestaurantSummary(1L, "진주회관", "서울시 중구")));
+                        new RestaurantResponse.RestaurantSummary(
+                                1L, "진주회관", "서울시 중구",
+                                new BigDecimal("37.5665350"), new BigDecimal("126.9779692"))));
 
         mockMvc.perform(get("/api/v1/restaurants")
                         .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].name").value("진주회관"));
+                .andExpect(jsonPath("$.data[0].name").value("진주회관"))
+                // 목록에서 지도 마커를 찍으므로 좌표가 빠지면 마커가 통째로 사라진다
+                .andExpect(jsonPath("$.data[0].latitude").value(37.566535))
+                .andExpect(jsonPath("$.data[0].longitude").value(126.9779692));
     }
 
     @Test

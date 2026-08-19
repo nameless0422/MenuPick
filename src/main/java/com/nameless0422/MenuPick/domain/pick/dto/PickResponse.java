@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.pick.dto;
 
 import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 
@@ -13,10 +14,17 @@ public class PickResponse {
             List<RestaurantWithDistance> restaurants
     ) {}
 
+    /**
+     * 좌표를 함께 내려준다 — 픽 결과 화면이 추천 식당을 지도에 찍는데, 이게 없으면
+     * 식당 목록을 따로 조회해 id로 좌표를 짜맞춰야 한다. distance는 요청에 기준 좌표가
+     * 없으면 null이지만 좌표는 항상 있다(restaurants 테이블이 NOT NULL).
+     */
     public record RestaurantWithDistance(
             Long id,
             String name,
             String address,
+            BigDecimal latitude,
+            BigDecimal longitude,
             Double distance
     ) {}
 
