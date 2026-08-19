@@ -92,3 +92,9 @@
   text-decoration: underline;
   min-height: 0;
 }
+
+/* 소셜 버튼 아래에 붙는 안내 — 소셜은 가입 경로가 아니라는 사실을 누르기 전에 알린다. */
+.login-social-hint {
+  font-size: 13px;
+  margin-top: -8px;
+}

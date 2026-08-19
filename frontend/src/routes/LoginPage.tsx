@@ -1,9 +1,15 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { kakaoAuthorizeUrl, googleAuthorizeUrl } from "../auth/oauthUrls";
+import { loginAuthorizeUrl } from "../auth/oauthUrls";
 import { requestDemoPick } from "../api/pick";
-import { login as apiLogin, resendVerification } from "../api/auth";
+import {
+  login as apiLogin,
+  resendVerification,
+  PROVIDERS,
+  PROVIDER_LABELS,
+  type Provider,
+} from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { consumeReturnTo } from "../auth/returnTo";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
@@ -17,6 +23,10 @@ export default function LoginPage() {
   // 고정 샘플에서 뽑히며 저장되지 않는다.
   const demo = useMutation({ mutationFn: requestDemoPick });
 
+  // 연동된 적 없는 소셜 계정으로 로그인을 시도해 콜백 화면에서 되돌아온 경우
+  // (OAuthCallbackPage가 SOCIAL_ACCOUNT_NOT_LINKED를 보고 여기로 보낸다).
+  const notLinked = (useLocation().state as { socialNotLinked?: Provider } | null)?.socialNotLinked;
+
   return (
     <div className="login-page">
       <h1>메뉴픽</h1>
@@ -26,14 +36,30 @@ export default function LoginPage() {
 
       <div className="auth-divider">또는</div>
 
+      {notLinked && (
+        <p className="auth-notice" role="status">
+          {PROVIDER_LABELS[notLinked]} 계정이 아직 연동돼 있지 않아요.{" "}
+          <Link to="/signup">이메일로 가입</Link>한 뒤 설정에서 연동해주세요.
+        </p>
+      )}
+
       <div className="login-actions">
-        <button onClick={() => (window.location.href = kakaoAuthorizeUrl())}>
-          카카오로 로그인
-        </button>
-        <button onClick={() => (window.location.href = googleAuthorizeUrl())}>
-          구글로 로그인
-        </button>
+        {PROVIDERS.map((provider) => (
+          <button
+            key={provider}
+            onClick={() => (window.location.href = loginAuthorizeUrl(provider))}
+          >
+            {PROVIDER_LABELS[provider]}로 로그인
+          </button>
+        ))}
       </div>
+
+      {/* 소셜은 가입 경로가 아니다. 이 줄이 없으면 "카카오로 로그인"을 처음 누른 사람은
+          가입 버튼으로 읽고, 거절당한 뒤에야 이유를 알게 된다. */}
+      <p className="login-social-hint">
+        소셜 로그인은 이메일로 가입한 계정에 <strong>설정 &gt; 소셜 계정 연동</strong>을 마친 뒤
+        쓸 수 있어요.
+      </p>
 
       <section className="card login-demo">
         <strong>먼저 구경해보기</strong>

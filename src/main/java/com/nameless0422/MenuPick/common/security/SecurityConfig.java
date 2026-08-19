@@ -143,6 +143,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/auth/kakao/authorize",
                                 "/api/v1/auth/google/authorize").permitAll()
+                        // 소셜 계정 연동·해제. anyRequest().authenticated()로도 같은 결과지만,
+                        // 바로 위 permitAll 목록과 한 화면 안에 있어 명시해 둔다 — 여기 한 줄이
+                        // 잘못 들어가면 남의 계정에 소셜 계정을 붙이거나 떼어낼 수 있게 된다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/*/link").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/*/link").authenticated()
                         // 게스트 데모 픽 — 온보딩 퍼널용 시연 (docs/Planning.md 4.3).
                         // 고정 샘플만 반환하고 DB를 건드리지 않으며, RateLimitFilter가 IP 기준으로 제한한다.
                         .requestMatchers(HttpMethod.GET, "/api/v1/pick/demo").permitAll()

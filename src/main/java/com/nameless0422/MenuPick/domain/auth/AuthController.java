@@ -11,6 +11,7 @@ import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.PasswordResetReques
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.SignupRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.TokenRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.AccessTokenResponse;
+import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.LinkedProvidersResponse;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.MeResponse;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
 import com.nameless0422.MenuPick.common.security.JwtProperties;
@@ -142,6 +143,39 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AccessTokenResponse>> googleLogin(
             @RequestBody @Valid OAuthLoginRequest request) {
         return tokenResponse(authService.socialLogin("GOOGLE", request.code()));
+    }
+
+    // ---- 소셜 계정 연동 ----
+
+    /**
+     * 로그인한 사용자의 계정에 소셜 계정을 붙인다.
+     *
+     * <p>인가 흐름은 로그인과 같은 {@code /{provider}/authorize}를 그대로 탄다. 제공자에 등록한
+     * redirect_uri가 하나뿐이라 콜백 주소를 갈라놓을 수 없기 때문이다. 대신 브라우저가
+     * 리다이렉트를 시작할 때 "로그인인지 연동인지"를 sessionStorage에 남겨 두고, 콜백 화면이
+     * 그 값을 보고 이 엔드포인트와 로그인 엔드포인트 중 하나를 고른다. state 자체에 모드를
+     * 실으면 서버의 형식 검증(STATE_PATTERN)과 브라우저의 CSRF 대조를 둘 다 건드리게 된다.
+     *
+     * <p>제공자 이름을 경로 변수로 받는 것은 로그인 쪽(/kakao, /google)과 다른데, 연동은
+     * 제공자가 늘어나도 처리가 완전히 같아 메서드를 나눌 이유가 없어서다. 값이 유효한지는
+     * AuthService가 판단한다(모르는 이름이면 400).
+     */
+    @PostMapping("/{provider}/link")
+    public ResponseEntity<ApiResponse<LinkedProvidersResponse>> linkSocialAccount(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable String provider,
+            @RequestBody @Valid OAuthLoginRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(new LinkedProvidersResponse(
+                authService.linkSocialAccount(userId, provider, request.code()))));
+    }
+
+    /** 연동 해제. 이 계정에 남는 로그인 수단이 없어지는 경우는 서비스가 막는다. */
+    @DeleteMapping("/{provider}/link")
+    public ResponseEntity<ApiResponse<LinkedProvidersResponse>> unlinkSocialAccount(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable String provider) {
+        return ResponseEntity.ok(ApiResponse.ok(new LinkedProvidersResponse(
+                authService.unlinkSocialAccount(userId, provider))));
     }
 
     @PostMapping("/refresh")

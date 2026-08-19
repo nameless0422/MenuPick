@@ -36,6 +36,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -557,18 +558,34 @@ class LocalAuthServiceTest {
     }
 
     @Test
-    @DisplayName("계정 조회는 자체 자격증명 보유 여부를 함께 알려준다")
+    @DisplayName("계정 조회는 자체 자격증명 보유 여부와 연동된 소셜 제공자를 함께 알려준다")
     void me() {
         User user = User.builder().email(EMAIL).emailVerified(true).nickname("테스터").build();
         ReflectionTestUtils.setField(user, "id", 7L);
         given(userRepository.findById(7L)).willReturn(Optional.of(user));
-        given(authProviderRepository.findByUserIdAndProvider(7L, AuthProvider.LOCAL))
-                .willReturn(Optional.of(localAccount(7L, EMAIL, PASSWORD, true)));
+        given(authProviderRepository.findAllByUserId(7L)).willReturn(List.of(
+                localAccount(7L, EMAIL, PASSWORD, true),
+                AuthProvider.builder().user(user).provider("KAKAO").socialId("kakao_1").build()));
 
         MeResponse result = localAuthService.me(7L);
 
         assertThat(result.email()).isEqualTo(EMAIL);
         assertThat(result.nickname()).isEqualTo("테스터");
         assertThat(result.hasPassword()).isTrue();
+        // LOCAL은 연동한 소셜 계정이 아니라 자체 자격증명이라 목록에 들어가면 안 된다 —
+        // 설정 화면이 "LOCAL 연동 해제" 버튼을 그리게 된다.
+        assertThat(result.linkedProviders()).containsExactly("KAKAO");
+    }
+
+    @Test
+    @DisplayName("계정 조회 - 소셜 연동이 없으면 빈 목록을 준다")
+    void me_withoutSocialLink() {
+        User user = User.builder().email(EMAIL).emailVerified(true).nickname("테스터").build();
+        ReflectionTestUtils.setField(user, "id", 7L);
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(authProviderRepository.findAllByUserId(7L))
+                .willReturn(List.of(localAccount(7L, EMAIL, PASSWORD, true)));
+
+        assertThat(localAuthService.me(7L).linkedProviders()).isEmpty();
     }
 }
