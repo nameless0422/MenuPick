@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -384,12 +385,22 @@ public class LocalAuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 
-        boolean hasPassword = authProviderRepository
-                .findByUserIdAndProvider(userId, AuthProvider.LOCAL)
-                .map(provider -> provider.getPasswordHash() != null)
-                .orElse(false);
+        // 인증 수단을 한 번에 가져와 비밀번호 보유 여부와 연동 목록을 함께 만든다 —
+        // 화면이 둘을 같이 쓰므로(연동 해제 버튼을 열어줄지가 hasPassword에 달렸다) 나눠 조회할 이유가 없다.
+        List<AuthProvider> providers = authProviderRepository.findAllByUserId(userId);
 
-        return new MeResponse(user.getEmail(), user.getNickname(), hasPassword);
+        boolean hasPassword = providers.stream()
+                .anyMatch(provider -> provider.isLocal() && provider.getPasswordHash() != null);
+
+        // LOCAL은 제외한다 — 연동한 소셜 계정이 아니라 자체 자격증명이고, 위 hasPassword가 이미 알려준다.
+        // 정렬은 목록 순서가 조회마다 흔들리지 않게 하려는 것뿐이다.
+        List<String> linkedProviders = providers.stream()
+                .filter(provider -> !provider.isLocal())
+                .map(AuthProvider::getProvider)
+                .sorted()
+                .toList();
+
+        return new MeResponse(user.getEmail(), user.getNickname(), hasPassword, linkedProviders);
     }
 
     // ---- 공통 ----

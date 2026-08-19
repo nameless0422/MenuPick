@@ -59,3 +59,39 @@
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
+
+/* 소셜 연동 목록 — 제공자 한 줄에 상태와 버튼이 마주 본다 */
+.settings-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.settings-link-name {
+  color: var(--text-h);
+}
+
+/* 이름과 버튼 사이를 이 항목이 밀어내 버튼이 오른쪽에 붙는다 */
+.settings-link-state {
+  flex: 1;
+  font-size: 13px;
+}
+
+/* 해제 불가 사유는 버튼 아래 줄로 내려 좁은 화면에서 버튼과 겹치지 않게 한다 */
+.settings-link-note {
+  flex-basis: 100%;
+}
