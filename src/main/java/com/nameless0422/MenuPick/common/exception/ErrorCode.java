@@ -32,6 +32,23 @@ public enum ErrorCode {
     OAUTH_INVALID_CODE(HttpStatus.UNAUTHORIZED, "소셜 로그인 인가 코드가 유효하지 않습니다. 다시 로그인해주세요."),
     OAUTH_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "소셜 로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
 
+    // --- Auth: 소셜 연동 ---
+    // 소셜 로그인은 더 이상 가입 경로가 아니다. 카카오에서 이메일을 받으려면 비즈앱 전환이
+    // 필요한데 그게 불가능해, 소셜로 계정을 만들면 비밀번호 재설정도 메일 수신도 못 하는
+    // 고아 계정만 남는다. 그래서 가입은 이메일로만 받고 소셜은 연동 수단으로만 쓴다.
+    // 401을 쓰는 이유는 이것이 "인증 실패"이기 때문이다 — 프론트의 PRE_AUTH_PATHS에
+    // 들어 있는 경로라 401이 토큰 재발급 재시도를 유발하지도 않는다.
+    SOCIAL_ACCOUNT_NOT_LINKED(HttpStatus.UNAUTHORIZED,
+            "연동된 계정이 없습니다. 이메일로 가입한 뒤 설정에서 소셜 계정을 연동해주세요."),
+    // 남의 소셜 계정을 자기 계정에 붙이려는 시도까지 포함한다 — 허용하면 그 소셜 계정의
+    // 주인이 다음 로그인부터 공격자 계정으로 들어오게 된다.
+    SOCIAL_ACCOUNT_TAKEN(HttpStatus.CONFLICT, "이미 다른 계정에 연동된 소셜 계정입니다."),
+    SOCIAL_ALREADY_LINKED(HttpStatus.CONFLICT, "이미 연동된 소셜 계정입니다."),
+    SOCIAL_LINK_NOT_FOUND(HttpStatus.NOT_FOUND, "연동되지 않은 소셜 계정입니다."),
+    // 이걸 막지 않으면 비밀번호 없는 계정이 마지막 연동을 끊는 순간 영원히 들어갈 수 없게 된다.
+    LAST_LOGIN_METHOD(HttpStatus.CONFLICT,
+            "마지막 로그인 수단이라 해제할 수 없습니다. 비밀번호를 먼저 설정해주세요."),
+
     // --- Auth: 자체 계정 ---
     EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
     // 자체 가입에서만 쓴다. 소셜 로그인은 닉네임을 제공자가 정해 사용자가 고칠 수 없으므로

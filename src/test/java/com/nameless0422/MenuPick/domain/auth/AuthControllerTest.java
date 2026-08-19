@@ -1,5 +1,7 @@
 package com.nameless0422.MenuPick.domain.auth;
 
+import com.nameless0422.MenuPick.common.exception.BusinessException;
+import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.EmailRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.LoginRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.OAuthLoginRequest;
@@ -16,7 +18,10 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.List;
+
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -249,16 +254,17 @@ class AuthControllerTest extends AbstractControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/auth/me - 계정 정보와 비밀번호 보유 여부를 반환한다")
+    @DisplayName("GET /api/v1/auth/me - 계정 정보와 비밀번호 보유 여부, 연동 목록을 반환한다")
     void me_success() throws Exception {
         given(localAuthService.me(1L))
-                .willReturn(new MeResponse("user@example.com", "테스터", true));
+                .willReturn(new MeResponse("user@example.com", "테스터", true, List.of("KAKAO")));
 
         mockMvc.perform(get("/api/v1/auth/me").with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.email").value("user@example.com"))
                 .andExpect(jsonPath("$.data.nickname").value("테스터"))
-                .andExpect(jsonPath("$.data.hasPassword").value(true));
+                .andExpect(jsonPath("$.data.hasPassword").value(true))
+                .andExpect(jsonPath("$.data.linkedProviders[0]").value("KAKAO"));
     }
 
     @Test
@@ -266,5 +272,145 @@ class AuthControllerTest extends AbstractControllerTest {
     void me_unauthorized() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---- 소셜 계정 연동 ----
+
+    @Test
+    @DisplayName("POST /api/v1/auth/{provider}/link - 연동 후 갱신된 연동 목록을 반환한다")
+    void linkSocialAccount_success() throws Exception {
+        given(authService.linkSocialAccount(1L, "kakao", "link_code")).willReturn(List.of("KAKAO"));
+
+        mockMvc.perform(post("/api/v1/auth/kakao/link")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest("link_code"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.linkedProviders[0]").value("KAKAO"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/{provider}/link - 인증 없이 요청하면 401")
+    void linkSocialAccount_unauthorized() throws Exception {
+        // permitAll 목록에 딸려 들어가면 남의 계정에 소셜 계정을 붙일 수 있게 된다.
+        mockMvc.perform(post("/api/v1/auth/kakao/link")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest("link_code"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/{provider}/link - 인가 코드 누락 시 400")
+    void linkSocialAccount_blankCode() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/kakao/link")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest(""))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/auth/{provider}/link - 해제 후 남은 연동 목록을 반환한다")
+    void unlinkSocialAccount_success() throws Exception {
+        given(authService.unlinkSocialAccount(1L, "kakao")).willReturn(List.of());
+
+        mockMvc.perform(delete("/api/v1/auth/kakao/link").with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.linkedProviders").isEmpty());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/auth/{provider}/link - 인증 없이 요청하면 401")
+    void unlinkSocialAccount_unauthorized() throws Exception {
+        mockMvc.perform(delete("/api/v1/auth/kakao/link"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ---- 거절 경로 ----
+    //
+    // 서비스가 던진 사유가 HTTP 상태와 errorCode로 온전히 나가는지 본다. 프론트는 이 두 값으로만
+    // 화면을 가르므로(콜백 화면의 SOCIAL_ACCOUNT_NOT_LINKED 분기, 설정 화면의 실패 문구),
+    // 상태 코드가 뭉개지면 사용자는 "로그인 실패"라는 말만 보고 이유를 영영 알 수 없게 된다.
+
+    @Test
+    @DisplayName("POST /api/v1/auth/kakao - 연동된 적 없는 소셜 계정이면 401 SOCIAL_ACCOUNT_NOT_LINKED")
+    void socialLogin_notLinked_unauthorized() throws Exception {
+        willThrow(new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_LINKED))
+                .given(authService).socialLogin("KAKAO", "test_code");
+
+        mockMvc.perform(post("/api/v1/auth/kakao")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest("test_code"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("SOCIAL_ACCOUNT_NOT_LINKED"))
+                // 거절인데 세션 쿠키가 나가면 로그인하지 못한 사용자가 갱신 쿠키만 쥐게 된다
+                .andExpect(cookie().doesNotExist("refresh_token"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/{provider}/link - 남의 계정에 연동된 소셜 계정이면 409 SOCIAL_ACCOUNT_TAKEN")
+    void linkSocialAccount_takenByAnotherUser_conflict() throws Exception {
+        willThrow(new BusinessException(ErrorCode.SOCIAL_ACCOUNT_TAKEN))
+                .given(authService).linkSocialAccount(1L, "kakao", "link_code");
+
+        mockMvc.perform(post("/api/v1/auth/kakao/link")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest("link_code"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("SOCIAL_ACCOUNT_TAKEN"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/{provider}/link - 이미 연동돼 있으면 409 SOCIAL_ALREADY_LINKED")
+    void linkSocialAccount_alreadyLinked_conflict() throws Exception {
+        willThrow(new BusinessException(ErrorCode.SOCIAL_ALREADY_LINKED))
+                .given(authService).linkSocialAccount(1L, "kakao", "link_code");
+
+        mockMvc.perform(post("/api/v1/auth/kakao/link")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest("link_code"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("SOCIAL_ALREADY_LINKED"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/{provider}/link - 지원하지 않는 제공자면 400")
+    void linkSocialAccount_unknownProvider_badRequest() throws Exception {
+        // 제공자 이름은 경로 변수라 아무 문자열이나 들어온다. 404가 아니라 400인 것은
+        // 매핑이 없는 게 아니라 값이 잘못된 것이기 때문이다(AuthService.findProvider).
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT))
+                .given(authService).linkSocialAccount(1L, "naver", "link_code");
+
+        mockMvc.perform(post("/api/v1/auth/naver/link")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new OAuthLoginRequest("link_code"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_INPUT"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/auth/{provider}/link - 연동한 적 없는 제공자면 404 SOCIAL_LINK_NOT_FOUND")
+    void unlinkSocialAccount_notLinked_notFound() throws Exception {
+        willThrow(new BusinessException(ErrorCode.SOCIAL_LINK_NOT_FOUND))
+                .given(authService).unlinkSocialAccount(1L, "kakao");
+
+        mockMvc.perform(delete("/api/v1/auth/kakao/link").with(authentication(AUTH)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("SOCIAL_LINK_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/auth/{provider}/link - 마지막 로그인 수단이면 409 LAST_LOGIN_METHOD")
+    void unlinkSocialAccount_lastLoginMethod_conflict() throws Exception {
+        // 통과시키면 그 계정에는 영원히 들어갈 수 없고, 탈퇴조차 못 해 데이터만 남는다.
+        willThrow(new BusinessException(ErrorCode.LAST_LOGIN_METHOD))
+                .given(authService).unlinkSocialAccount(1L, "kakao");
+
+        mockMvc.perform(delete("/api/v1/auth/kakao/link").with(authentication(AUTH)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("LAST_LOGIN_METHOD"));
     }
 }
