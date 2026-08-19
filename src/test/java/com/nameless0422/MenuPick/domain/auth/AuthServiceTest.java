@@ -18,6 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -42,6 +44,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -503,5 +506,47 @@ class AuthServiceTest {
 
         assertThat(user.isDeleted()).isTrue();
         verify(refreshTokenStore).delete(1L);
+    }
+
+    @Test
+    @DisplayName("authorizeUrl - 제공자가 만든 URL을 그대로 돌려준다")
+    void authorizeUrl_delegatesToProvider() {
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.buildAuthorizeUrl("abcdef0123456789"))
+                .willReturn("https://kauth.kakao.com/oauth/authorize?client_id=x");
+
+        assertThat(authService.authorizeUrl("KAKAO", "abcdef0123456789"))
+                .isEqualTo("https://kauth.kakao.com/oauth/authorize?client_id=x");
+    }
+
+    /**
+     * state는 브라우저가 준 값을 URL에 그대로 싣는 자리다. 형식을 막지 않으면 개행이나
+     * 따옴표가 섞여 들어가 인가 URL이 의도치 않게 잘리거나 늘어난다.
+     */
+    @ParameterizedTest
+    @DisplayName("authorizeUrl - state 형식이 어긋나면 제공자를 부르지 않고 400")
+    @ValueSource(strings = {"short", "has space", "semi;colon", "amp&ersand", "hash#mark"})
+    void authorizeUrl_rejectsMalformedState(String state) {
+        assertThatThrownBy(() -> authService.authorizeUrl("KAKAO", state))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+
+        verifyNoInteractions(kakaoProvider);
+    }
+
+    /**
+     * 개행이 섞인 state를 그대로 URL에 실으면 인가 요청이 그 지점에서 잘린다.
+     * 이스케이프 표기 대신 문자 코드로 만들어, 소스에서 눈에 띄지 않는 제어문자를 확실히 넣는다.
+     */
+    @Test
+    @DisplayName("authorizeUrl - state에 제어문자가 섞이면 400")
+    void authorizeUrl_rejectsControlCharacterInState() {
+        String state = "abcdef0123456789" + (char) 10 + "abcdef0123456789";
+
+        assertThatThrownBy(() -> authService.authorizeUrl("KAKAO", state))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_INPUT);
+
+        verifyNoInteractions(kakaoProvider);
     }
 }

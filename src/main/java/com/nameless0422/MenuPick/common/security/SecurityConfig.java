@@ -138,6 +138,11 @@ public class SecurityConfig {
                                 "/api/v1/auth/resend-verification",
                                 "/api/v1/auth/password-reset",
                                 "/api/v1/auth/password-reset/confirm").permitAll()
+                        // 동의 화면 리다이렉트 — 로그인 시작점이라 당연히 인증 전이다.
+                        // 응답은 제공자 URL로의 302뿐이고 사용자 데이터를 읽지 않는다.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/auth/kakao/authorize",
+                                "/api/v1/auth/google/authorize").permitAll()
                         // 게스트 데모 픽 — 온보딩 퍼널용 시연 (docs/Planning.md 4.3).
                         // 고정 샘플만 반환하고 DB를 건드리지 않으며, RateLimitFilter가 IP 기준으로 제한한다.
                         .requestMatchers(HttpMethod.GET, "/api/v1/pick/demo").permitAll()

@@ -32,6 +32,10 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class AuthService {
 
+    /** 브라우저가 만든 CSRF state의 허용 형식. 프론트는 32바이트 난수의 hex(64자)를 보낸다. */
+    private static final java.util.regex.Pattern STATE_PATTERN =
+            java.util.regex.Pattern.compile("[A-Za-z0-9_-]{16,128}");
+
     /** 제공자가 닉네임을 주지 않은 경우(프로필 동의 거부 등) 사용할 기본 닉네임 — users.nickname은 NOT NULL이다. */
     private static final String DEFAULT_NICKNAME = "메뉴픽 사용자";
 
@@ -207,6 +211,20 @@ public class AuthService {
             return Optional.empty();
         }
         return userRepository.findByEmail(email);
+    }
+
+    /**
+     * 제공자 동의 화면 URL을 만들어 돌려준다. 브라우저는 이 주소로 이동만 하면 된다.
+     *
+     * <p>state는 브라우저가 만들어 넘긴 값을 그대로 싣는다(대조 주체가 브라우저라서다).
+     * 다만 남이 준 값을 URL에 넣는 자리이므로 형식을 검증한다 — 길이·문자 집합을 묶어
+     * 제어문자나 개행이 섞여 들어가지 못하게 한다.
+     */
+    public String authorizeUrl(String providerName, String state) {
+        if (state == null || !STATE_PATTERN.matcher(state).matches()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "state 형식이 올바르지 않습니다.");
+        }
+        return findProvider(providerName).buildAuthorizeUrl(state);
     }
 
     private OAuthProvider findProvider(String name) {

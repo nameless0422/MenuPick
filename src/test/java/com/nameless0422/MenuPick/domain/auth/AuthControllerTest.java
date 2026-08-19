@@ -29,6 +29,27 @@ class AuthControllerTest extends AbstractControllerTest {
     @MockitoBean private LocalAuthService localAuthService;
 
     @Test
+    @DisplayName("GET /api/v1/auth/kakao/authorize - 동의 화면으로 302, client_id는 응답에 노출되지 않는다")
+    void kakaoAuthorize_redirects() throws Exception {
+        given(authService.authorizeUrl("KAKAO", "0123456789abcdef"))
+                .willReturn("https://kauth.kakao.com/oauth/authorize?client_id=secret&state=0123456789abcdef");
+
+        mockMvc.perform(get("/api/v1/auth/kakao/authorize").param("state", "0123456789abcdef"))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location",
+                        "https://kauth.kakao.com/oauth/authorize?client_id=secret&state=0123456789abcdef"))
+                // 사용자마다 state가 달라 중간 캐시가 남기면 남의 인가 요청을 재사용하게 된다.
+                .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/auth/google/authorize - state 없이 호출하면 400")
+    void googleAuthorize_requiresState() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/google/authorize"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("POST /api/v1/auth/kakao - 카카오 로그인 성공 (Refresh Token은 HttpOnly 쿠키로만 전달)")
     void kakaoLogin_success() throws Exception {
         given(authService.socialLogin("KAKAO", "test_code"))
