@@ -79,16 +79,18 @@ public class AuthService {
         String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
 
         // 비교와 교체를 Lua로 원자 실행 — 동시 요청이 둘 다 통과해 유효 토큰이 두 개 생기는 창을 막는다.
-        boolean rotated = refreshTokenStore.rotate(
-                userId, refreshToken, newRefreshToken, jwtProperties.refreshTokenExpiry());
+        // 돌려받은 값을 그대로 내려보내야 한다. 방금 회전에 밀려난 직전 토큰이 제시된 경우
+        // (탭 두 개가 부팅하며 각자 refresh를 부르는 흔한 상황) 저장소는 새로 만든 토큰이 아니라
+        // 이미 유효한 토큰을 돌려주고, 여기서 newRefreshToken을 고집하면 그 값이 버려져
+        // 클라이언트가 저장소에 없는 토큰을 들고 다음 회전에서 탈취로 판정된다.
+        String issuedRefreshToken = refreshTokenStore
+                .rotate(userId, refreshToken, newRefreshToken, jwtProperties.refreshTokenExpiry())
+                // 저장값·유예값 어느 쪽과도 불일치 = 유예 창 밖의 옛 토큰이거나 탈취된 토큰.
+                // 스크립트가 키를 삭제했으므로 해당 유저의 모든 Refresh Token 체인이 무효화된다.
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.UNAUTHORIZED, "Refresh Token이 일치하지 않습니다."));
 
-        if (!rotated) {
-            // 저장값 불일치·부재 = 이미 회전됐거나 탈취된 토큰. 스크립트가 키를 삭제했으므로
-            // 해당 유저의 모든 Refresh Token 체인이 무효화된다.
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Refresh Token이 일치하지 않습니다.");
-        }
-
-        return new TokenResponse(newAccessToken, newRefreshToken);
+        return new TokenResponse(newAccessToken, issuedRefreshToken);
     }
 
     public void logout(Long userId) {

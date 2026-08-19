@@ -262,6 +262,35 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    @DisplayName("POST /api/v1/menus/{menuId}/restaurants - 1000자를 넘는 메모는 400"
+            + " (TEXT 컬럼까지 내려가 409가 되기 전에 막는다)")
+    void createMenuRestaurant_tooLongMemo_badRequest() throws Exception {
+        String longMemo = "가".repeat(1001);
+        mockMvc.perform(post("/api/v1/menus/1/restaurants")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"restaurantId\":10,\"rating\":4,\"memo\":\"" + longMemo + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("memo"));
+
+        verifyNoInteractions(menuRestaurantService);
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/menus/{menuId}/restaurants/{restaurantId} - 1000자를 넘는 메모는 400")
+    void updateMenuRestaurant_tooLongMemo_badRequest() throws Exception {
+        String longMemo = "가".repeat(1001);
+        mockMvc.perform(put("/api/v1/menus/1/restaurants/10")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"rating\":4,\"memo\":\"" + longMemo + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("memo"));
+
+        verifyNoInteractions(menuRestaurantService);
+    }
+
     // --- 연결 삭제 ---
 
     @Test

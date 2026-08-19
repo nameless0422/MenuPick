@@ -56,3 +56,6 @@ PLAN.md
 *.pem
 id_rsa*
 id_ed25519*
+
+### Agent worktrees ###
+.claude/worktrees/
