@@ -1,7 +1,15 @@
 # --- build stage ---
 # 태그를 마이너까지 고정한다. `17-jdk`처럼 떠 있는 태그는 같은 Dockerfile로도 매번 다른 이미지를
 # 만들어내 "내 머신에서는 되는데" 류의 재현 불가 빌드를 만든다.
-FROM eclipse-temurin:17-jdk-jammy AS build
+#
+# --platform=$BUILDPLATFORM: 이 단계는 타깃 아키텍처가 아니라 "빌드를 돌리는 머신"의
+# 아키텍처로 고정한다. 멀티아치(amd64+arm64) 빌드에서 이게 없으면 buildx가 타깃마다
+# 이 단계를 한 번씩, 그것도 QEMU 에뮬레이션으로 돌린다 — 에뮬레이트된 JVM 위에서 Gradle을
+# 돌리는 셈이라 arm64 빌드만 수십 분씩 걸린다.
+# 안전한 이유는 산출물이 순수 바이트코드 fat jar라 아키텍처 독립이기 때문이다(빌드 대상에
+# 네이티브 분류자 의존성이 없다). 아키텍처 차이는 런타임 단계의 JRE 베이스 이미지가 흡수한다.
+# 네이티브 라이브러리를 끌어오는 의존성이 생기면 이 전제가 깨지므로 그때 재검토할 것.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-jammy AS build
 WORKDIR /workspace
 
 COPY gradlew build.gradle settings.gradle ./
