@@ -7,6 +7,7 @@ import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import { chipToggle } from "../a11y/chipToggle";
 import { CATEGORY_PRESETS } from "../constants";
+import KakaoMap from "../maps/KakaoMap";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -236,6 +237,10 @@ function PickResultCard({
           ))}
         </div>
       )}
+
+      {/* 추천 식당은 목록에 그대로 두고 지도를 덧붙인다. 지도가 안 떠도(키 미설정·로드 실패)
+          어디로 가야 할지는 목록만으로 알 수 있어야 한다. */}
+      <KakaoMap points={restaurants} ariaLabel={`${menu.name} 추천 식당 위치`} />
 
       {restaurants.length > 0 && (
         <ul className="pick-restaurants">

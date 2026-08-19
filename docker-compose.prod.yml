@@ -180,6 +180,11 @@ services:
         # 같은 오리진이라 API 주소는 상대경로로 둔다.
         # OAuth 값은 넘기지 않는다 — 인가 URL은 백엔드가 조립한다(frontend/Dockerfile 참고).
         VITE_API_BASE_URL: ""
+        # 카카오맵 JS 키. app의 KAKAO_REST_API_KEY와 다른 값이며, 이건 번들에 구워져
+        # 공개되는 것이 정상이다(카카오 콘솔의 사이트 도메인 화이트리스트가 보호).
+        # :- 기본값이 빈 문자열이라 .env.prod에 없어도 배포는 그대로 되고,
+        # 그때는 지도 자리에 안내만 뜬다 — 지도 때문에 앱이 안 뜨는 일은 없어야 한다.
+        VITE_KAKAO_JS_KEY: "${VITE_KAKAO_JS_KEY:-}"
     container_name: menupick-web
     restart: unless-stopped
     depends_on:

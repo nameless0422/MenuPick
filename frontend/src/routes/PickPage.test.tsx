@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
+import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 
 vi.mock("../api/pick", () => ({ requestPick: vi.fn() }));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]) }));
@@ -38,6 +39,8 @@ function failRequest(index: number) {
 
 beforeEach(() => {
   pendingRequests = [];
+  resetKakaoSdkForTest();
+  delete window.kakao;
   requestPickMock.mockReset();
   // 이 파일이 보는 것은 픽 요청에 무엇이 실려 나가는지이므로 응답은 최소 형태로 고정한다.
   requestPickMock.mockResolvedValue({
@@ -155,5 +158,49 @@ describe("PickPage 거리 필터 — 위치 요청 취소", () => {
     expect(sent.latitude).toBe(37.5665);
     expect(sent.longitude).toBe(126.978);
     expect(sent.maxDistance).toBe(500);
+  });
+});
+
+/**
+ * 픽 결과에 지도를 얹었지만, 운영 서버에는 아직 VITE_KAKAO_JS_KEY가 없다.
+ * 지도가 못 뜨는 상태에서 결과 카드가 함께 죽으면 앱의 핵심 기능이 사라진다.
+ */
+describe("PickPage 결과 지도", () => {
+  it("지도 키가 없어도 추천 식당 목록은 그대로 보인다", async () => {
+    requestPickMock.mockResolvedValue({
+      historyId: 1,
+      menu: {
+        id: 1,
+        name: "김치찌개",
+        memo: null,
+        categories: [],
+        tags: [],
+        weight: 1,
+        isExcluded: false,
+        createdAt: "2026-01-01T00:00:00",
+        updatedAt: "2026-01-01T00:00:00",
+      },
+      restaurants: [
+        {
+          id: 10,
+          name: "진주회관",
+          address: "서울시 중구",
+          latitude: 37.5665,
+          longitude: 126.978,
+          distance: 120,
+        },
+      ],
+    });
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+    await user.click(spinButton());
+
+    // 슬롯 연출(SPIN_MS)이 끝나야 결과가 공개된다
+    expect(await screen.findByText("진주회관", undefined, { timeout: 3000 })).toBeInTheDocument();
+    // 지도 컴포넌트는 결과 카드와 함께 마운트되므로 키 판정은 한 틱 뒤에 반영된다
+    expect(await screen.findByText(/지도 키가 설정되지 않아/)).toBeInTheDocument();
+    expect(screen.getByText("120m")).toBeInTheDocument();
   });
 });

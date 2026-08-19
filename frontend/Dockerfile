@@ -15,8 +15,14 @@ COPY . .
 #
 # OAuth 값은 여기 없다. 인가 URL을 백엔드가 조립하므로 client_id·redirect_uri가 번들에
 # 들어갈 일이 없다 — 넣으면 그대로 공개된다(src/auth/oauthUrls.ts 참고).
+# 카카오맵 JS 키는 반대로 여기에 들어가는 게 맞다. JS SDK는 브라우저가 카카오에 직접 붙어
+# 키를 숨길 방법이 없고, 카카오 콘솔의 사이트 도메인 화이트리스트가 대신 보호한다
+# (REST API 키와는 다른 값 — 자세한 구분은 src/maps/kakaoSdk.ts).
+# 기본값이 빈 문자열이라 키를 안 넘겨도 빌드는 통과하고, 지도 자리에 안내만 뜬다.
 ARG VITE_API_BASE_URL=""
+ARG VITE_KAKAO_JS_KEY=""
 RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production
+RUN echo "VITE_KAKAO_JS_KEY=${VITE_KAKAO_JS_KEY}" >> .env.production
 
 RUN npm run build
 

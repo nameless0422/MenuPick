@@ -12,11 +12,14 @@ export interface PickRequest {
   maxDistance?: number;
 }
 
-// PickResponse.RestaurantWithDistance — distance는 요청에 위치가 없으면 null
+// PickResponse.RestaurantWithDistance — distance는 요청에 위치가 없으면 null이지만
+// 좌표는 항상 온다(픽 결과를 지도에 찍는 데 쓴다).
 export interface PickRestaurant {
   id: number;
   name: string;
   address: string | null;
+  latitude: number;
+  longitude: number;
   distance: number | null;
 }
 

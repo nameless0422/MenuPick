@@ -145,7 +145,8 @@ public class PickService {
                                     r.getLatitude().doubleValue(), r.getLongitude().doubleValue())
                             : null;
                     return new PickResponse.RestaurantWithDistance(
-                            r.getId(), r.getName(), r.getAddress(), distance);
+                            r.getId(), r.getName(), r.getAddress(),
+                            r.getLatitude(), r.getLongitude(), distance);
                 })
                 .sorted(Comparator.comparing(PickResponse.RestaurantWithDistance::distance,
                         Comparator.nullsLast(Comparator.naturalOrder())))

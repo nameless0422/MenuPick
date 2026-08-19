@@ -15,6 +15,7 @@ import { fetchMenus } from "../api/menus";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import { chipToggle } from "../a11y/chipToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
+import KakaoMap from "../maps/KakaoMap";
 
 export default function RestaurantsPage() {
   const queryClient = useQueryClient();
@@ -42,6 +43,10 @@ export default function RestaurantsPage() {
       {restaurantsQuery.isSuccess && restaurants.length === 0 && (
         <p>저장한 식당이 없습니다. 위에서 장소를 검색해 자주 가는 식당을 저장해 보세요.</p>
       )}
+
+      {/* 지도는 목록을 대체하지 않고 위에 얹는다 — 좌표가 없거나 지도를 못 띄우는
+          상황에서도 식당을 보고 고칠 수 있어야 한다. */}
+      <KakaoMap points={restaurants} ariaLabel="저장한 식당 위치" />
 
       <ul className="card-list">
         {restaurants.map((restaurant) => (
