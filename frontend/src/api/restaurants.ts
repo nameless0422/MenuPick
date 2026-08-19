@@ -5,6 +5,10 @@ export interface RestaurantSummary {
   id: number;
   name: string;
   address: string | null;
+  // 지도 마커용. restaurants 테이블이 NOT NULL이라 서버는 항상 채워 보내지만,
+  // 옛 서버(좌표 없는 응답)와 섞여 돌 수 있으므로 화면에서는 없을 수 있다고 보고 다룬다.
+  latitude: number;
+  longitude: number;
 }
 
 // RestaurantResponse.RestaurantDetail

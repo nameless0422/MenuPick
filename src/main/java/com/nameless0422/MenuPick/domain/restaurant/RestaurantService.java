@@ -26,7 +26,8 @@ public class RestaurantService {
 
     public List<RestaurantResponse.RestaurantSummary> getRestaurants(Long userId) {
         return restaurantRepository.findAllByUserIdAndDeletedAtIsNull(userId).stream()
-                .map(r -> new RestaurantResponse.RestaurantSummary(r.getId(), r.getName(), r.getAddress()))
+                .map(r -> new RestaurantResponse.RestaurantSummary(
+                        r.getId(), r.getName(), r.getAddress(), r.getLatitude(), r.getLongitude()))
                 .toList();
     }
 

@@ -187,6 +187,9 @@ class PickServiceTest {
         assertThat(result.menu().name()).isEqualTo("김치찌개");
         assertThat(result.restaurants()).isNotEmpty();
         assertThat(result.restaurants().get(0).distance()).isLessThan(1000.0);
+        // 픽 결과 화면이 이 좌표로 지도 마커를 찍는다
+        assertThat(result.restaurants().get(0).latitude()).isEqualByComparingTo(new BigDecimal("37.5670"));
+        assertThat(result.restaurants().get(0).longitude()).isEqualByComparingTo(new BigDecimal("126.9790"));
     }
 
     @Test

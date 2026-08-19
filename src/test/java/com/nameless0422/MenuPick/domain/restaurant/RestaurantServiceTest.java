@@ -78,6 +78,10 @@ class RestaurantServiceTest {
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).name()).isEqualTo("진주회관");
+        // 목록만으로 지도 마커를 찍을 수 있어야 한다 — 좌표가 빠지면 화면이 식당 수만큼
+        // 상세를 더 조회하거나 마커를 포기하게 된다.
+        assertThat(result.get(0).latitude()).isEqualByComparingTo(new BigDecimal("37.5665350"));
+        assertThat(result.get(0).longitude()).isEqualByComparingTo(new BigDecimal("126.9779692"));
     }
 
     @Test

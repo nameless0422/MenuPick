@@ -37,7 +37,9 @@ class PickControllerTest extends AbstractControllerTest {
         var menuDetail = new MenuResponse.MenuDetail(
                 1L, "김치찌개", "맛있음", 3, false, Set.of("한식"),
                 List.of(), LocalDateTime.now(), LocalDateTime.now());
-        var restaurant = new PickResponse.RestaurantWithDistance(1L, "식당A", "서울시 강남구", 500.0);
+        var restaurant = new PickResponse.RestaurantWithDistance(
+                1L, "식당A", "서울시 강남구",
+                new BigDecimal("37.4979000"), new BigDecimal("127.0276000"), 500.0);
         var result = new PickResponse.PickResult(1L, menuDetail, List.of(restaurant));
 
         given(pickService.pick(eq(1L), any(PickRequest.class))).willReturn(result);
@@ -53,7 +55,10 @@ class PickControllerTest extends AbstractControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.menu.name").value("김치찌개"))
-                .andExpect(jsonPath("$.data.restaurants[0].name").value("식당A"));
+                .andExpect(jsonPath("$.data.restaurants[0].name").value("식당A"))
+                // 지도 마커를 찍는 값이라 직렬화에서 빠지면 픽 화면의 지도가 조용히 빈다
+                .andExpect(jsonPath("$.data.restaurants[0].latitude").value(37.4979))
+                .andExpect(jsonPath("$.data.restaurants[0].longitude").value(127.0276));
     }
 
     @Test

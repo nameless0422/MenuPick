@@ -1,0 +1,49 @@
+/* 지도 자리는 로드 전/실패 시에도 같은 높이를 차지한다 — 뒤늦게 지도가 뜨면서
+   아래 목록이 통째로 밀려 내려가면 사용자가 누르려던 버튼이 손 밑에서 사라진다. */
+.kakao-map {
+  position: relative;
+  min-height: 260px;
+  margin: 0 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kakao-map-canvas {
+  width: 100%;
+  height: 260px;
+}
+
+/* 로드 전/실패 시에는 감춘다. 카카오 지도는 생성 시점의 컨테이너 크기를 그대로 읽어
+   고정하므로, 감춰진 상태에서 만들면 0px 지도가 되어 아무것도 안 보인다 —
+   그래서 지도 생성은 이 클래스가 떨어진 뒤(status === "ready")에만 일어난다.
+   KakaoMap.tsx의 효과 순서가 그 전제를 지키고 있으니 함께 움직여야 한다. */
+.kakao-map-canvas.is-hidden {
+  display: none;
+}
+
+.kakao-map-notice {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text);
+  font-size: 0.9em;
+}
+
+/* 말풍선은 지도(카카오가 만든 DOM) 안에 붙으므로 이 파일이 아니면 손댈 곳이 없다. */
+.kakao-map-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  min-width: 140px;
+  color: #08060d;
+  font: 14px/140% var(--sans);
+}
+
+.kakao-map-info strong {
+  color: #08060d;
+}
