@@ -26,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -35,9 +36,6 @@ public class AuthService {
     /** 브라우저가 만든 CSRF state의 허용 형식. 프론트는 32바이트 난수의 hex(64자)를 보낸다. */
     private static final java.util.regex.Pattern STATE_PATTERN =
             java.util.regex.Pattern.compile("[A-Za-z0-9_-]{16,128}");
-
-    /** 제공자가 닉네임을 주지 않은 경우(프로필 동의 거부 등) 사용할 기본 닉네임 — users.nickname은 NOT NULL이다. */
-    private static final String DEFAULT_NICKNAME = "메뉴픽 사용자";
 
     private final UserRepository userRepository;
     private final AuthProviderRepository authProviderRepository;
@@ -64,9 +62,132 @@ public class AuthService {
         OAuthProvider provider = findProvider(providerName);
         OAuthUserProfile profile = provider.getUserProfile(code);
 
-        Long userId = resolveUserWithConflictRetry(providerName, profile);
+        Resolved resolved = resolveUserWithConflictRetry(provider.getProviderName(), profile);
 
-        return tokenIssuer.issue(userId);
+        if (resolved.userToPurge() != null) {
+            // 유예기간이 지난 탈퇴 계정. 트랜잭션 안에서 지우며 예외를 던지면 정리까지 함께
+            // 롤백되므로 트랜잭션을 닫은 뒤에 지운다(LocalAuthService.login과 같은 방식).
+            // 연동 행도 함께 사라지므로 이번 시도는 실패로 끝난다. 예전과 달리 여기서 새 계정을
+            // 만들지 않는다 — 소셜만으로는 계정을 만들지 않는다는 규칙이 복귀 경로에도 그대로 적용된다.
+            userHardDeleteService.purge(resolved.userToPurge());
+            throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_LINKED);
+        }
+
+        return tokenIssuer.issue(resolved.userId());
+    }
+
+    /**
+     * 로그인한 사용자가 자기 계정에 소셜 계정을 붙인다.
+     *
+     * <p>외부 HTTP 호출을 트랜잭션 밖으로 빼는 이유는 {@link #socialLogin}과 같다.
+     *
+     * <p>같은 소셜 계정으로 연동 요청이 동시에 들어오면 uq_auth_provider_social에 걸린다.
+     * 제약 위반이 난 트랜잭션은 rollback-only로 마킹돼 같은 트랜잭션에서 다시 조회해봐야
+     * 커밋 시점에 UnexpectedRollbackException이 난다({@link #resolveUserWithConflictRetry}와 같은 이유).
+     * 새 트랜잭션에서 다시 보면 상대가 커밋한 행이 보이므로, 재시도는 성공이 아니라
+     * "이미 연동됨"이라는 정확한 거절로 끝난다.
+     */
+    public List<String> linkSocialAccount(Long userId, String providerName, String code) {
+        OAuthProvider provider = findProvider(providerName);
+        OAuthUserProfile profile = provider.getUserProfile(code);
+        // 경로에서 온 문자열이 아니라 제공자가 선언한 이름으로 저장한다 — findProvider가 대소문자를
+        // 가리지 않으므로, 받은 값을 그대로 쓰면 "kakao" 행과 "KAKAO" 행이 갈라져 연동 조회가 엇나간다.
+        String canonicalName = provider.getProviderName();
+
+        try {
+            return inTransaction(() -> link(userId, canonicalName, profile));
+        } catch (DataIntegrityViolationException | UnexpectedRollbackException e) {
+            log.info("소셜 연동 동시 요청 충돌 — 새 트랜잭션에서 재시도합니다: provider={}", canonicalName);
+            return inTransaction(() -> link(userId, canonicalName, profile));
+        }
+    }
+
+    private List<String> link(Long userId, String providerName, OAuthUserProfile profile) {
+        User user = activeUser(userId);
+
+        authProviderRepository.findByProviderAndSocialId(providerName, profile.socialId())
+                .ifPresent(linked -> {
+                    // 남의 소셜 계정을 가져오게 두면, 그 계정의 주인이 다음 로그인부터
+                    // 공격자 계정으로 들어오게 된다.
+                    throw new BusinessException(userId.equals(linked.getUser().getId())
+                            ? ErrorCode.SOCIAL_ALREADY_LINKED
+                            : ErrorCode.SOCIAL_ACCOUNT_TAKEN);
+                });
+
+        List<AuthProvider> owned = authProviderRepository.findAllByUserId(userId);
+
+        // 같은 제공자를 다른 소셜 계정으로 한 번 더 붙이려는 경우. DB에는 (user_id, provider)
+        // UNIQUE가 없어서(V1 스키마) 여기서 막지 않으면 KAKAO 행이 둘 생기고, 그때부터
+        // findByUserIdAndProvider가 결과 둘을 만나 조회 자체가 터진다(비밀번호 변경·해제 경로).
+        if (owned.stream().anyMatch(mine -> mine.getProvider().equals(providerName))) {
+            throw new BusinessException(ErrorCode.SOCIAL_ALREADY_LINKED);
+        }
+
+        AuthProvider saved = authProviderRepository.save(
+                AuthProvider.builder()
+                        .user(user)
+                        .provider(providerName)
+                        .socialId(profile.socialId())
+                        .build()
+        );
+
+        // 재조회 대신 직접 이어 붙인다 — 방금 save한 행이 조회에 잡히려면 flush 시점에 기대게 된다.
+        return socialProviderNames(Stream.concat(owned.stream(), Stream.of(saved)).toList());
+    }
+
+    /**
+     * 연동 해제.
+     *
+     * <p>외부 호출이 없어 통째로 @Transactional을 걸어도 되지만, 같은 빈의 @Transactional 메서드를
+     * 안에서 부르면 프록시를 타지 않아 무효라 이 클래스의 다른 경로와 같은 방식을 유지한다.
+     */
+    public List<String> unlinkSocialAccount(Long userId, String providerName) {
+        String canonicalName = findProvider(providerName).getProviderName();
+        return inTransaction(() -> unlink(userId, canonicalName));
+    }
+
+    private List<String> unlink(Long userId, String providerName) {
+        activeUser(userId);
+
+        List<AuthProvider> owned = authProviderRepository.findAllByUserId(userId);
+
+        AuthProvider target = owned.stream()
+                .filter(provider -> provider.getProvider().equals(providerName))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_LINK_NOT_FOUND));
+
+        // 해제한 뒤에도 들어올 문이 하나는 남아야 한다. 비밀번호가 없는 계정이 마지막 연동을
+        // 끊으면 그 계정에는 영원히 들어갈 수 없고, 탈퇴조차 못 해 데이터만 남는다.
+        // LOCAL 행이 있어도 passwordHash가 비어 있으면 로그인 수단이 아니다(/me의 hasPassword와 같은 판단).
+        boolean anotherWayIn = owned.stream()
+                .filter(provider -> provider != target)
+                .anyMatch(provider -> !provider.isLocal() || provider.getPasswordHash() != null);
+        if (!anotherWayIn) {
+            throw new BusinessException(ErrorCode.LAST_LOGIN_METHOD);
+        }
+
+        authProviderRepository.delete(target);
+
+        return socialProviderNames(owned.stream().filter(provider -> provider != target).toList());
+    }
+
+    /**
+     * 연동 목록에는 소셜 제공자만 담는다 — LOCAL은 연동한 소셜 계정이 아니라 자체 자격증명이고,
+     * 그 보유 여부는 /me의 hasPassword가 따로 알려준다.
+     */
+    private List<String> socialProviderNames(List<AuthProvider> providers) {
+        return providers.stream()
+                .filter(provider -> !provider.isLocal())
+                .map(AuthProvider::getProvider)
+                .sorted()
+                .toList();
+    }
+
+    /** 탈퇴 처리된 계정에는 연동을 붙이거나 떼지 않는다 — 되살아날 때의 상태가 조용히 달라진다. */
+    private User activeUser(Long userId) {
+        return userRepository.findById(userId)
+                .filter(user -> !user.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
     }
 
     public TokenResponse refresh(String refreshToken) {
@@ -117,7 +238,7 @@ public class AuthService {
      * UnexpectedRollbackException이 나므로, 새 트랜잭션에서 한 번 더 시도한다.
      * (두 번째 시도에서는 상대 트랜잭션이 커밋한 행이 조회되어 정상 종료된다.)
      */
-    private Long resolveUserWithConflictRetry(String providerName, OAuthUserProfile profile) {
+    private Resolved resolveUserWithConflictRetry(String providerName, OAuthUserProfile profile) {
         try {
             return inTransaction(() -> resolveUser(providerName, profile));
         } catch (DataIntegrityViolationException | UnexpectedRollbackException e) {
@@ -126,49 +247,54 @@ public class AuthService {
         }
     }
 
-    private Long resolveUser(String providerName, OAuthUserProfile profile) {
+    /**
+     * 소셜 로그인 결과.
+     *
+     * <p>유예기간이 지난 탈퇴 계정은 트랜잭션 밖에서 정리해야 해서 따로 표시한다 —
+     * LocalAuthService가 같은 상황을 다루는 방식과 같다.
+     */
+    private record Resolved(Long userId, Long userToPurge) {}
+
+    private Resolved resolveUser(String providerName, OAuthUserProfile profile) {
         AuthProvider authProvider = authProviderRepository
                 .findByProviderAndSocialId(providerName, profile.socialId())
-                .orElseGet(() -> createNewUser(providerName, profile));
+                .orElseGet(() -> linkToVerifiedEmailOwner(providerName, profile));
 
         User user = authProvider.getUser();
         if (user.isDeleted()) {
-            if (user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
-                String email = trustedEmail(profile);
-                user.reactivate(
-                        email != null ? email : user.getEmail(),
-                        keptOrFreeNickname(user, nickname(profile, user.getNickname())));
-            } else {
-                // 유예기간 경과: 기존 데이터를 하드 삭제하고 새 계정으로 가입 처리
-                userHardDeleteService.purge(user.getId());
-                authProvider = createNewUser(providerName, profile);
-                user = authProvider.getUser();
+            if (!user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
+                return new Resolved(null, user.getId());
             }
+            String email = trustedEmail(profile);
+            user.reactivate(
+                    email != null ? email : user.getEmail(),
+                    keptOrFreeNickname(user, nickname(profile, user.getNickname())));
         }
 
-        return user.getId();
+        return new Resolved(user.getId(), null);
     }
 
     private <T> T inTransaction(Supplier<T> work) {
         return transactionTemplate.execute(status -> work.get());
     }
 
-    private AuthProvider createNewUser(String providerName, OAuthUserProfile profile) {
-        // 같은 이메일로 가입된 유저가 있으면 새 계정을 만들지 않고
-        // 해당 유저에 소셜 연동만 추가한다 (이메일 기준 자동 통합).
-        // 단, 제공자가 소유를 검증한 이메일만 통합·저장에 사용한다 — 미검증 이메일을
-        // 신뢰하면 공격자가 타인 주소를 자기 소셜 계정에 넣어 기존 계정을 탈취할 수 있다.
-        // 반대 방향도 같다: users.email에는 검증된 주소만 들어가므로(V4 마이그레이션 주석 참고)
-        // 미인증 자체 계정이 병합 대상으로 잡히는 일은 없다.
-        String email = trustedEmail(profile);
-        User user = findUserByEmail(email)
-                .orElseGet(() -> userRepository.save(
-                        User.builder()
-                                .email(email)
-                                .emailVerified(email != null)
-                                .nickname(nicknameAllocator.allocate(nickname(profile, DEFAULT_NICKNAME)))
-                                .build()
-                ));
+    /**
+     * 아직 연동된 적 없는 소셜 계정으로 로그인이 들어왔을 때.
+     *
+     * <p>같은 이메일로 가입된 유저가 있으면 그 유저에 소셜 연동만 추가한다(이메일 기준 자동 통합).
+     * 단, 제공자가 소유를 검증한 이메일만 통합에 사용한다 — 미검증 이메일을 신뢰하면 공격자가
+     * 타인 주소를 자기 소셜 계정에 넣어 기존 계정을 탈취할 수 있다. 반대 방향도 같다:
+     * users.email에는 검증된 주소만 들어가므로(V4 마이그레이션 주석 참고) 미인증 자체 계정이
+     * 병합 대상으로 잡히는 일은 없다. 구글은 검증된 주소를 주므로 이 경로가 계속 동작한다.
+     *
+     * <p>찾지 못하면 <b>새 유저를 만들지 않고 거절한다</b>. 카카오는 비즈앱 전환(사업자 등록)
+     * 없이는 이메일을 주지 않아, 예전처럼 여기서 계정을 만들면 users.email이 NULL인 채로 남는다.
+     * 그 계정은 비밀번호 재설정도 안내 메일 수신도 불가능한 고아 계정이다. 그래서 가입은
+     * 이메일로만 받고, 소셜은 로그인한 상태에서 명시적으로 붙이게 한다({@link #linkSocialAccount}).
+     */
+    private AuthProvider linkToVerifiedEmailOwner(String providerName, OAuthUserProfile profile) {
+        User user = findUserByEmail(trustedEmail(profile))
+                .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_LINKED));
 
         return authProviderRepository.save(
                 AuthProvider.builder()

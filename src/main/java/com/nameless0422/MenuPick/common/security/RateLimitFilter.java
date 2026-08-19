@@ -95,7 +95,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             // 동의 화면 리다이렉트. 인증 없이 열려 있고 호출마다 Redis를 건드리므로
             // 나머지 auth 경로와 같은 IP 버킷에 넣는다. GET이라 authMatcher(POST 고정)는 못 쓴다.
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/kakao/authorize"),
-            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/google/authorize")
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/auth/google/authorize"),
+            // 소셜 계정 연동. 인증이 필요한 경로지만 호출당 카카오/구글 토큰 교환 + 프로필 조회로
+            // 외부 API를 두 번 때리므로 제한 없이 두면 제공자 쿼터가 그대로 소모된다.
+            // 사용자 ID가 아니라 IP 버킷이 되는데(이 필터가 JWT 필터보다 먼저 돈다 — 클래스 주석),
+            // 연동은 계정당 몇 번 하고 마는 동작이라 IP 기준으로도 정상 사용자가 걸리지 않는다.
+            // 해제(DELETE)는 외부 호출 없이 DB 행 하나를 지울 뿐이고 인증도 필요해,
+            // 같은 성격의 /logout·/withdraw와 마찬가지로 넣지 않는다.
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/*/link")
     );
 
     private static final RequestMatcher DEMO_PICK_MATCHER =
