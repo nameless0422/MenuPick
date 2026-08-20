@@ -93,6 +93,15 @@ services:
     # VM 빌드는 (1) 되돌릴 태그가 남지 않아 롤백 경로가 없고, (2) Dockerfile이 bootJar -x test라
     # 운영에 나가는 바이너리가 테스트를 거치지 않으며, (3) 1GB 인스턴스에서는 Gradle이 뜨지도 않는다.
     # 롤백: .env.prod의 APP_VERSION을 이전 커밋 SHA로 바꾸고 `up -d`.
+    #
+    # 롤백 전 확인 두 가지:
+    #  (1) 되돌릴 SHA가 지금 DB 스키마와 맞는가. ddl-auto=validate라 스키마가 앞서 있으면
+    #      옛 이미지는 기동 검증에서 실패하고 restart 루프에 빠진다. 특히 V5는
+    #      naver_place_id를 kakao_place_id로 RENAME해 버려서, V5 이전 이미지로는
+    #      **이미지 교체만으로 되돌아가지 않는다**(컬럼 수동 복구 + flyway_schema_history
+    #      정리가 필요하다). 스키마를 바꾸는 마이그레이션은 앞으로 expand/contract로 나눈다.
+    #  (2) app이 재생성되면 컨테이너 IP가 바뀐다. web(nginx)이 옛 IP를 캐시하지 않도록
+    #      frontend/nginx.conf가 resolver + 변수 업스트림을 쓰고 있어야 한다.
     image: ghcr.io/nameless0422/menupick:${APP_VERSION:?APP_VERSION must be set (커밋 SHA 또는 latest)}
     container_name: menupick-app
     restart: unless-stopped
@@ -138,6 +147,12 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
       JWT_SECRET: ${JWT_SECRET}
       RATE_LIMIT_TRUST_PROXY: "true"
+      # 프록시 홉 수. 여기 없으면 .env.prod에 적어도 컨테이너에 전달되지 않는다 —
+      # compose의 environment는 명시한 키만 넘기고, 앱은 기본값 1로 굳는다.
+      # 값이 실제 토폴로지보다 작으면 XFF 오른쪽 N번째가 클라이언트가 아니라 프록시 IP라
+      # 전 사용자가 버킷 하나를 공유하고 인증 경로가 분당 10회에서 429로 막힌다.
+      # web(nginx) 한 겹만 앞에 있으면 1, TLS 종단 프록시가 더 있으면 2 이상.
+      RATE_LIMIT_TRUSTED_PROXY_HOPS: ${RATE_LIMIT_TRUSTED_PROXY_HOPS:-1}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
       KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
