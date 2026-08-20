@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import KakaoMap, { type KakaoMapPoint } from "./KakaoMap";
 import { resetKakaoSdkForTest, type KakaoMaps } from "./kakaoSdk";
 
@@ -141,6 +141,50 @@ describe("SDK 로드 성공", () => {
     // setMap(null)을 빼먹으면 화면을 오갈 때마다 옛 마커가 지도에 그대로 쌓인다
     expect(sdk.markers.every((m) => m.map === null)).toBe(true);
     expect(sdk.removedListeners).toBe(2);
+  });
+});
+
+describe("좌표가 SDK보다 늦게 도착할 때", () => {
+  // 목록 API가 SDK 로드보다 느린 흔한 순서다. 특히 /pick에서 지도를 한 번 띄운 뒤
+  // /restaurants로 이동하면 SDK가 모듈 캐시에서 즉시 resolve되어 확정적으로 이 순서가 된다.
+  // 지도 생성 효과가 "찍을 게 생겼는지"를 의존성에 넣지 않으면, 컨테이너가 없는 동안 한 번
+  // 빠져나간 뒤 다시 돌지 않아 사용자에게는 빈 박스만 남는다.
+  it("뒤늦게 좌표가 들어와도 지도를 만든다", async () => {
+    setKey("test-js-key");
+    const sdk = fakeSdk();
+
+    const view = render(<KakaoMap points={[]} ariaLabel="식당 위치" />);
+    await waitFor(() => expect(appended).toHaveLength(1));
+
+    // act로 감싸 로드 결과가 상태에 반영될 때까지 흘려보낸다. 이걸 안 하면 좌표를 넣는
+    // 시점에 maps가 아직 null이라, 고치기 전 코드로도 통과해 버려 회귀를 못 잡는다.
+    await act(async () => {
+      resolveScript(sdk);
+    });
+    expect(sdk.maps).toHaveLength(0);
+
+    view.rerender(<KakaoMap points={POINTS} ariaLabel="식당 위치" />);
+
+    await waitFor(() => expect(sdk.maps).toHaveLength(1));
+    expect(sdk.markers).toHaveLength(2);
+  });
+
+  it("좌표가 비었다가 다시 들어오면 지도를 새로 만든다", async () => {
+    setKey("test-js-key");
+    const sdk = fakeSdk();
+
+    const view = render(<KakaoMap points={POINTS} ariaLabel="식당 위치" />);
+    await waitFor(() => expect(appended).toHaveLength(1));
+    resolveScript(sdk);
+    await waitFor(() => expect(sdk.maps).toHaveLength(1));
+
+    // 필터를 좁혀 결과가 0건이 된 상태. 컨테이너가 사라지므로 지도도 함께 정리돼야 한다.
+    view.rerender(<KakaoMap points={[]} ariaLabel="식당 위치" />);
+    await waitFor(() => expect(sdk.markers.every((m) => m.map === null)).toBe(true));
+
+    view.rerender(<KakaoMap points={POINTS} ariaLabel="식당 위치" />);
+
+    await waitFor(() => expect(sdk.maps).toHaveLength(2));
   });
 });
 
