@@ -7,6 +7,7 @@ import {
   fetchMe,
   unlinkSocialAccount,
   PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
   PROVIDERS,
   PROVIDER_LABELS,
   type Me,
@@ -272,6 +273,7 @@ function PasswordSection() {
           현재 비밀번호
           <input
             type="password"
+            maxLength={PASSWORD_MAX_LENGTH}
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
             autoComplete="current-password"
@@ -282,6 +284,7 @@ function PasswordSection() {
           새 비밀번호
           <input
             type="password"
+            maxLength={PASSWORD_MAX_LENGTH}
             value={next}
             onChange={(e) => setNext(e.target.value)}
             autoComplete="new-password"
@@ -295,6 +298,7 @@ function PasswordSection() {
           새 비밀번호 확인
           <input
             type="password"
+            maxLength={PASSWORD_MAX_LENGTH}
             value={nextCheck}
             onChange={(e) => setNextCheck(e.target.value)}
             autoComplete="new-password"

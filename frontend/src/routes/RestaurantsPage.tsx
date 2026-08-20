@@ -14,6 +14,7 @@ import { createMenuRestaurant } from "../api/menuRestaurants";
 import { fetchMenus } from "../api/menus";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import { chipToggle } from "../a11y/chipToggle";
+import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import KakaoMap from "../maps/KakaoMap";
 
@@ -375,19 +376,19 @@ function MenuLinkForm({
 
       <label>
         별점
-        <span className="weight-picker">
+        <span className="weight-picker" role="group" aria-label="별점">
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
               type="button"
-              className={value <= rating ? "star on" : "star"}
+              {...starToggle(value <= rating)}
               aria-label={`별점 ${value}`}
               onClick={() => setRating(value)}
             >
               ★
             </button>
           ))}
-          <small>{rating}점</small>
+          <small aria-live="polite">{rating}점</small>
         </span>
       </label>
 
@@ -397,6 +398,8 @@ function MenuLinkForm({
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
           rows={2}
+          // 백엔드 MenuRestaurantRequest.memo와 같은 상한
+          maxLength={1000}
           placeholder="예: 이 집 김치찌개가 최고"
         />
       </label>

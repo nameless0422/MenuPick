@@ -14,6 +14,14 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 /** 백엔드 AuthRequest.PASSWORD_MIN_LENGTH와 같은 값 — 어긋나면 서버에서만 걸려 폼이 헛돈다. */
 export const PASSWORD_MIN_LENGTH = 8;
 
+/**
+ * 백엔드 AuthRequest.PASSWORD_MAX_LENGTH와 같은 값.
+ *
+ * <p>상한이 있는 이유는 길이 제한 자체보다 Argon2 비용이다 — 입력이 길수록 해싱이 비싸진다.
+ * 프론트에서 막지 않으면 사용자는 "저장"을 눌러야 400을 받는다.
+ */
+export const PASSWORD_MAX_LENGTH = 128;
+
 export interface Me {
   email: string | null;
   nickname: string;

@@ -228,7 +228,10 @@ function VisitAction({
   if (candidates) {
     return (
       <span className="visit-choice">
+        {/* 한 카드에 방문 확정·취소·삭제 버튼이 함께 있어, 이름이 없으면 이 콤보박스가
+            무엇을 고르는 것인지 알 수 없다. 히스토리 항목이 여러 개면 서로 구분되지도 않는다. */}
         <select
+          aria-label={`${history.menuName ?? "이 픽"} 방문 식당 선택`}
           value={selectedRestaurantId}
           onChange={(e) => setSelectedRestaurantId(Number(e.target.value))}
         >
