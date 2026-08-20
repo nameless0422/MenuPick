@@ -118,7 +118,7 @@ jobs:
         # 푸시하지 않는 PR 검증에서는 로그인하지 않는다. fork PR의 GITHUB_TOKEN은
         # packages 쓰기 권한이 없어 로그인 단계에서 먼저 실패한다.
         if: env.PUBLISH == 'true'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
