@@ -55,6 +55,14 @@ export default function KakaoMap({ points, level = 5, ariaLabel }: Props) {
     [points],
   );
 
+  // 컨테이너는 plotted가 빌 동안 렌더되지 않는다(아래 early return). 그래서 지도 생성 효과의
+  // 의존성에 "찍을 게 생겼는지"를 반드시 포함해야 한다 — 이게 빠지면 SDK가 목록 API보다 먼저
+  // 준비됐을 때 첫 실행이 container === null로 빠져나가고, 뒤늦게 좌표가 도착해도 maps·level이
+  // 그대로라 효과가 다시 돌지 않아 지도가 영영 만들어지지 않는다(빈 회색 박스만 남는다).
+  // /pick에서 지도를 한 번 띄운 뒤 /restaurants로 이동하면 SDK가 모듈 캐시에서 즉시 resolve되어
+  // 확정적으로 재현된다.
+  const hasPoints = plotted.length > 0;
+
   useEffect(() => {
     // 언마운트 뒤에 도착하는 로드 결과로 setState하지 않도록 세대를 표시한다.
     let alive = true;
@@ -92,7 +100,7 @@ export default function KakaoMap({ points, level = 5, ariaLabel }: Props) {
       container.innerHTML = "";
     };
     // level은 초기 확대 수준일 뿐이라 바뀌어도 지도를 다시 만들지 않는다(아래 효과가 반영한다).
-  }, [maps, level]);
+  }, [maps, level, hasPoints]);
 
   useEffect(() => {
     const map = mapRef.current;
