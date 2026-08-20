@@ -102,7 +102,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
             // 연동은 계정당 몇 번 하고 마는 동작이라 IP 기준으로도 정상 사용자가 걸리지 않는다.
             // 해제(DELETE)는 외부 호출 없이 DB 행 하나를 지울 뿐이고 인증도 필요해,
             // 같은 성격의 /logout·/withdraw와 마찬가지로 넣지 않는다.
-            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/*/link")
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/*/link"),
+            // 비밀번호 변경. 인증이 필요하지만 그것만으로는 부족하다.
+            //  (1) currentPassword 대입: LoginAttemptLimiter는 login()에서만 집계하므로
+            //      이 경로의 검증 실패는 어디에도 세어지지 않는다. 세션 하나만 손에 넣으면
+            //      원래 비밀번호를 무제한으로 맞춰 볼 수 있고, 비밀번호 재사용을 감안하면
+            //      피해가 이 서비스 밖으로 번진다.
+            //  (2) Argon2 증폭: 요청마다 m=9216KiB·t=4 검증이 돌아, 톰캣 스레드 50개가
+            //      전부 여기 들어가면 해싱 메모리만 450MB로 힙의 절반을 잡는다.
+            //      SecurityConfig가 Argon2 파라미터를 고를 때 근거로 삼은 전제("로그인 경로는
+            //      IP당 10회/분")가 이 경로에서만 무너져 있었다.
+            // PATCH라 authMatcher(POST 고정)로는 잡히지 않는다.
+            PathPatternRequestMatcher.pathPattern(HttpMethod.PATCH, "/api/v1/auth/password")
     );
 
     private static final RequestMatcher DEMO_PICK_MATCHER =
