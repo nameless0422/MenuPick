@@ -8,6 +8,12 @@ on:
     # docker-build 잡은 아래 if 조건으로 여전히 main push에서만 실행된다.
     branches: [main, dev]
 
+# 잡별로 올려 쓰기 전까지는 읽기만 준다. 선언이 없으면 리포지토리 기본값을 상속하는데,
+# 그 값이 read/write이면 PR로 실행되는 npm ci(전이 의존성의 postinstall 스크립트 수백 개)와
+# ./gradlew check가 쓰기 권한을 가진 토큰이 있는 환경에서 돈다.
+permissions:
+  contents: read
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
@@ -72,15 +78,23 @@ jobs:
             build/reports/tests/test
             build/reports/jacoco/test/html
 
+  # PR에서도 이미지가 빌드되는지 확인한다. main push에서만 돌리면 Dockerfile을 고친 PR이
+  # 초록으로 머지된 뒤 main에서 처음 깨지고, 그때는 이미 main이 깨진 상태인 데다 :latest가
+  # 갱신되지 않아 사정을 모르는 배포가 옛 이미지를 계속 받는다.
+  # PR에서는 amd64만 빌드한다 — arm64는 QEMU 에뮬레이션이라 검증 대비 비용이 크고,
+  # 아키텍처별로 갈리는 건 JRE 베이스뿐이라 amd64가 통과하면 Dockerfile 자체는 유효하다.
   docker-build:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # frontend까지 기다린다. test만 걸어 두면 lint·tsc·vitest가 빨개도 이미지가 푸시된다.
+    needs: [test, frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    env:
+      # 푸시 여부를 한 곳에서 정한다 — 로그인·플랫폼·push가 전부 이 값을 따라간다.
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # 컨테이너 레지스트리는 저장소 이름에 소문자만 허용한다. github.repository는
       # 'nameless0422/MenuPick'처럼 원래 대소문자를 그대로 주므로 그대로 태그에 쓰면
@@ -92,30 +106,37 @@ jobs:
       # 멀티아치 빌드는 buildx가 필요하고, 러너와 다른 아키텍처의 단계를 실행하려면
       # binfmt 핸들러(QEMU)가 등록돼 있어야 한다. 기본 러너에는 둘 다 없다.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        # arm64 단계를 러너에서 실행하려면 binfmt 핸들러가 필요하다. amd64만 빌드하는
+        # PR 검증에는 쓸모가 없어 건너뛴다(등록 자체가 수십 초 든다).
+        if: env.PUBLISH == 'true'
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        # 푸시하지 않는 PR 검증에서는 로그인하지 않는다. fork PR의 GITHUB_TOKEN은
+        # packages 쓰기 권한이 없어 로그인 단계에서 먼저 실패한다.
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build image
         # ghcr.io는 GITHUB_TOKEN만으로 인증되어 별도 시크릿 설정이 필요 없다.
-        # 실제 배포(어디에 이 이미지를 pull해서 띄울지)는 배포 대상 확정 후 별도 과제
-        # (docs/ImprovementBacklog.md 8번, docs/DecisionLog.md D-019).
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          push: true
+          push: ${{ env.PUBLISH == 'true' }}
           # 배포 대상(OCI Ampere A1)이 arm64라 amd64 이미지만으로는 pull해서 띄울 수 없다.
           # Dockerfile의 빌드 단계가 $BUILDPLATFORM에 고정돼 있어 Gradle 빌드는 러너에서
           # 네이티브로 한 번만 돌고, 아키텍처별로 갈리는 건 JRE 베이스뿐이다.
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.PUBLISH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          # PR 검증이 매번 Gradle 빌드를 처음부터 돌지 않도록 레이어를 재사용한다.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ steps.image.outputs.name }}:${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
