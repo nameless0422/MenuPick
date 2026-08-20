@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { signup, resendVerification, PASSWORD_MIN_LENGTH } from "../api/auth";
+import { signup, resendVerification, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../api/auth";
 import { apiErrorMessage } from "../api/http";
 import "./AuthPages.css";
 
@@ -63,6 +63,7 @@ export default function SignupPage() {
           비밀번호
           <input
             type="password"
+            maxLength={PASSWORD_MAX_LENGTH}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
@@ -77,6 +78,7 @@ export default function SignupPage() {
           비밀번호 확인
           <input
             type="password"
+            maxLength={PASSWORD_MAX_LENGTH}
             value={passwordCheck}
             onChange={(e) => setPasswordCheck(e.target.value)}
             autoComplete="new-password"

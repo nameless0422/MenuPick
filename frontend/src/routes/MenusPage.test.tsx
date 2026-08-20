@@ -105,3 +105,39 @@ describe("MenusPage 카테고리 칩", () => {
     expect(screen.getByRole("button", { name: "중식", pressed: true })).toBeInTheDocument();
   });
 });
+
+describe("선호도 별점 접근성", () => {
+  it("현재 선호도를 색이 아니라 aria-pressed로도 알린다", async () => {
+    // 스크린리더에는 색이 전달되지 않는다. aria-pressed가 없으면 "선호도 1 버튼 …
+    // 선호도 5 버튼"이 상태 없이 읽혀, 지금이 3인지 5인지 알 방법이 없다.
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "수정" }));
+
+    // KIMCHI는 weight 3 — 채워진 별 셋이 눌린 상태다
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "선호도 3" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(screen.getByRole("button", { name: "선호도 1" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "선호도 4" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "선호도 5" })).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(screen.getByRole("button", { name: "선호도 5" }));
+
+    expect(screen.getByRole("button", { name: "선호도 4" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "선호도 5" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("별 묶음에 이름이 있어 무엇을 고르는 것인지 알 수 있다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "수정" }));
+
+    expect(await screen.findByRole("group", { name: "선호도" })).toBeInTheDocument();
+  });
+});

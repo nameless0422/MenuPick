@@ -17,6 +17,7 @@ import {
 import { createTag, searchTags } from "../api/tags";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import { chipToggle } from "../a11y/chipToggle";
+import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import { CATEGORY_PRESETS } from "../constants";
 
@@ -271,25 +272,28 @@ function MenuFormFields({
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
           rows={2}
+          // 백엔드 MenuRequest.memo와 같은 상한 — 서버에 닿기 전에 막는다
+          maxLength={1000}
           placeholder="예: 매운 게 당길 때"
         />
       </label>
 
       <label>
         선호도
-        <span className="weight-picker">
+        <span className="weight-picker" role="group" aria-label="선호도">
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
               type="button"
-              className={value <= weight ? "star on" : "star"}
+              {...starToggle(value <= weight)}
               aria-label={`선호도 ${value}`}
               onClick={() => setWeight(value)}
             >
               ★
             </button>
           ))}
-          <small>{WEIGHT_LABELS[weight - 1]}</small>
+          {/* 눌러도 포커스는 버튼에 머물러 요약이 다시 읽히지 않는다 — aria-live로 알린다 */}
+          <small aria-live="polite">{WEIGHT_LABELS[weight - 1]}</small>
         </span>
       </label>
 
