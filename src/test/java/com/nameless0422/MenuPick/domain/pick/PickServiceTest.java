@@ -193,6 +193,78 @@ class PickServiceTest {
     }
 
     @Test
+    @DisplayName("거리 필터를 걸면 반경 밖 식당은 결과 목록에서도 빠진다")
+    void pick_distanceFilter_excludesFarRestaurantsFromResult() {
+        // 한 메뉴에 가까운 식당과 먼 식당이 함께 달린 경우. 후보 판정은 anyMatch라
+        // 가까운 식당 하나로 이 메뉴가 살아남는데, 결과 목록까지 그대로 담으면
+        // "1km 이내"를 요청한 사용자에게 325km 떨어진 식당이 보인다.
+        Restaurant near = Restaurant.builder()
+                .user(user).name("가까운식당").address("서울")
+                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
+                .build();
+        setId(near, 1L);
+
+        Restaurant far = Restaurant.builder()
+                .user(user).name("먼식당").address("부산")
+                .latitude(new BigDecimal("35.1796")).longitude(new BigDecimal("129.0756"))
+                .build();
+        setId(far, 2L);
+
+        setMenuRestaurants(koreanMenu, List.of(
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(near).build(),
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(far).build()));
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickRequest request = new PickRequest(null, null, null,
+                new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
+        PickResponse.PickResult result = pickService.pick(1L, request);
+
+        assertThat(result.restaurants())
+                .extracting(PickResponse.RestaurantWithDistance::name)
+                .containsExactly("가까운식당");
+    }
+
+    @Test
+    @DisplayName("거리 필터가 없으면 먼 식당도 거리와 함께 그대로 내려간다")
+    void pick_withoutMaxDistance_keepsAllRestaurants() {
+        // 위 테스트가 과잉 필터링으로 번지지 않도록 반대 방향을 함께 고정한다.
+        // maxDistance가 없으면 거리 계산만 하고 목록은 거르지 않는다.
+        Restaurant near = Restaurant.builder()
+                .user(user).name("가까운식당").address("서울")
+                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
+                .build();
+        setId(near, 1L);
+
+        Restaurant far = Restaurant.builder()
+                .user(user).name("먼식당").address("부산")
+                .latitude(new BigDecimal("35.1796")).longitude(new BigDecimal("129.0756"))
+                .build();
+        setId(far, 2L);
+
+        setMenuRestaurants(koreanMenu, List.of(
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(near).build(),
+                MenuRestaurant.builder().menu(koreanMenu).restaurant(far).build()));
+
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickRequest request = new PickRequest(null, null, null,
+                new BigDecimal("37.5666"), new BigDecimal("126.9784"), null);
+        PickResponse.PickResult result = pickService.pick(1L, request);
+
+        // 가까운 순으로 정렬되므로 순서까지 고정한다
+        assertThat(result.restaurants())
+                .extracting(PickResponse.RestaurantWithDistance::name)
+                .containsExactly("가까운식당", "먼식당");
+    }
+
+    @Test
     @DisplayName("후보가 없으면 NO_PICK_CANDIDATES 예외 발생")
     void pick_noCandidates_throwsException() {
         given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))

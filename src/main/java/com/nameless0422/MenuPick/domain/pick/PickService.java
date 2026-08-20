@@ -57,8 +57,10 @@ public class PickService {
 
         BigDecimal lat = request != null ? request.latitude() : null;
         BigDecimal lng = request != null ? request.longitude() : null;
+        Integer maxDistance = request != null ? request.maxDistance() : null;
 
-        List<PickResponse.RestaurantWithDistance> restaurants = buildRestaurantList(picked, lat, lng);
+        List<PickResponse.RestaurantWithDistance> restaurants =
+                buildRestaurantList(picked, lat, lng, maxDistance);
 
         History history = saveHistory(userId, picked, findNearestRestaurant(picked, lat, lng), request);
 
@@ -102,15 +104,28 @@ public class PickService {
         if (lat == null || lng == null || maxDistance == null) return menus;
         return menus.stream()
                 .filter(m -> m.getMenuRestaurants().stream()
-                        .anyMatch(mr -> {
-                            Restaurant r = mr.getRestaurant();
-                            if (r.isDeleted()) return false;
-                            double dist = calculateHaversineDistance(
-                                    lat.doubleValue(), lng.doubleValue(),
-                                    r.getLatitude().doubleValue(), r.getLongitude().doubleValue());
-                            return dist <= maxDistance;
-                        }))
+                        .map(MenuRestaurant::getRestaurant)
+                        .anyMatch(r -> !r.isDeleted() && withinDistance(r, lat, lng, maxDistance)))
                 .toList();
+    }
+
+    /**
+     * 기준 좌표에서 {@code maxDistance} 이내인가.
+     *
+     * <p>후보 메뉴를 거를 때({@link #filterByDistance})와 결과 목록을 만들 때
+     * ({@link #buildRestaurantList})가 <b>같은 판정</b>을 써야 한다. 둘이 갈라지면
+     * "1km 이내"로 요청한 결과에 325km 떨어진 식당이 섞여 나온다 — 메뉴는 가까운 식당
+     * 하나 덕분에 후보로 남는데(anyMatch) 목록은 연결된 식당을 전부 담았기 때문이다.
+     *
+     * <p>셋 중 하나라도 없으면 거리 필터를 걸지 않은 요청이므로 전부 통과시킨다.
+     */
+    private static boolean withinDistance(
+            Restaurant restaurant, BigDecimal lat, BigDecimal lng, Integer maxDistance) {
+        if (lat == null || lng == null || maxDistance == null) return true;
+        double distance = calculateHaversineDistance(
+                lat.doubleValue(), lng.doubleValue(),
+                restaurant.getLatitude().doubleValue(), restaurant.getLongitude().doubleValue());
+        return distance <= maxDistance;
     }
 
     private Menu weightedRandom(List<Menu> menus) {
@@ -133,10 +148,18 @@ public class PickService {
         return menus.get(menus.size() - 1);
     }
 
+    /**
+     * 픽 결과에 실을 식당 목록.
+     *
+     * <p>거리 필터를 건 요청이면 <b>후보 판정과 같은 기준으로</b> 목록도 거른다.
+     * 이 목록이 비는 일은 없다 — 메뉴가 후보로 남았다는 것 자체가 반경 안에 식당이
+     * 최소 하나 있다는 뜻이다({@link #filterByDistance}의 anyMatch).
+     */
     private List<PickResponse.RestaurantWithDistance> buildRestaurantList(
-            Menu menu, BigDecimal lat, BigDecimal lng) {
+            Menu menu, BigDecimal lat, BigDecimal lng, Integer maxDistance) {
         return menu.getMenuRestaurants().stream()
                 .filter(mr -> !mr.getRestaurant().isDeleted())
+                .filter(mr -> withinDistance(mr.getRestaurant(), lat, lng, maxDistance))
                 .map(mr -> {
                     Restaurant r = mr.getRestaurant();
                     Double distance = (lat != null && lng != null)
