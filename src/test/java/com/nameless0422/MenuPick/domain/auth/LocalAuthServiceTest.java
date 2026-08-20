@@ -46,6 +46,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -516,6 +517,57 @@ class LocalAuthServiceTest {
 
             assertThat(provider.getPasswordHash()).isEqualTo(original);
             verify(tokenIssuer, never()).issue(anyLong());
+        }
+
+        @Test
+        @DisplayName("현재 비밀번호 실패는 로그인과 같은 계정 버킷에 집계된다")
+        void changeWithWrongCurrent_countsAgainstLoginBucket() {
+            // 버킷을 나누면 공격자가 login과 changePassword를 번갈아 써서 한도를 두 배로 늘린다.
+            AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
+            given(authProviderRepository.findByUserIdAndProvider(7L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(provider));
+
+            assertThatThrownBy(() ->
+                    localAuthService.changePassword(7L, "wrong", "brand-new-password"))
+                    .isInstanceOf(BusinessException.class);
+
+            verify(loginAttemptLimiter).recordFailure(EMAIL);
+            verify(loginAttemptLimiter, never()).reset(EMAIL);
+        }
+
+        @Test
+        @DisplayName("이미 잠긴 계정은 현재 비밀번호를 검증조차 하지 않는다")
+        void changeWhenLockedOut_doesNotVerify() {
+            // Argon2 검증에 들어가기 전에 막아야 한다 — 요청마다 m=9216KiB가 잡히므로
+            // 검증까지 가는 것 자체가 증폭 수단이 된다.
+            AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
+            String original = provider.getPasswordHash();
+            given(authProviderRepository.findByUserIdAndProvider(7L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(provider));
+            willThrow(new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS))
+                    .given(loginAttemptLimiter).checkAllowed(EMAIL);
+
+            assertThatThrownBy(() ->
+                    localAuthService.changePassword(7L, PASSWORD, "brand-new-password"))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
+
+            // 맞는 비밀번호를 줬는데도 바뀌지 않았다 = 검증 자체에 도달하지 않았다
+            assertThat(provider.getPasswordHash()).isEqualTo(original);
+            verify(tokenIssuer, never()).issue(anyLong());
+        }
+
+        @Test
+        @DisplayName("성공하면 잠금 카운터를 초기화한다")
+        void changeSucceeds_resetsCounter() {
+            AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
+            given(authProviderRepository.findByUserIdAndProvider(7L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(provider));
+
+            localAuthService.changePassword(7L, PASSWORD, "brand-new-password");
+
+            verify(loginAttemptLimiter).reset(EMAIL);
+            verify(loginAttemptLimiter, never()).recordFailure(EMAIL);
         }
 
         @Test

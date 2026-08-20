@@ -129,6 +129,58 @@ class RateLimitFilterTest {
         verify(filterChain, never()).doFilter(request, response);
     }
 
+    @Test
+    @DisplayName("비밀번호 변경(PATCH)도 인증 버킷에 집계된다")
+    @SuppressWarnings("unchecked")
+    void passwordChange_isRateLimited() throws ServletException, IOException {
+        // PATCH라 authMatcher(POST 고정)에 걸리지 않아 그동안 무제한이었다.
+        // currentPassword 무제한 대입과 Argon2 증폭이 둘 다 이 경로로 들어온다.
+        MockHttpServletRequest request = new MockHttpServletRequest("PATCH", "/api/v1/auth/password");
+        request.setRemoteAddr("10.0.0.3");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:auth:10.0.0.3")), eq("60")))
+                .willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정 확인(POST)과 변경(PATCH)은 같은 IP 버킷을 공유한다")
+    @SuppressWarnings("unchecked")
+    void passwordChangeAndResetConfirm_shareBucket() throws ServletException, IOException {
+        // 버킷이 갈리면 공격자가 두 경로를 번갈아 써서 한도를 두 배로 늘릴 수 있다.
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:auth:10.0.0.4")), eq("60")))
+                .willReturn(1L, 2L);
+
+        for (MockHttpServletRequest request : List.of(
+                new MockHttpServletRequest("POST", "/api/v1/auth/password-reset/confirm"),
+                new MockHttpServletRequest("PATCH", "/api/v1/auth/password"))) {
+            request.setRemoteAddr("10.0.0.4");
+            rateLimitFilter.doFilterInternal(request, new MockHttpServletResponse(), filterChain);
+        }
+
+        // 같은 키로 두 번 집계됐다 = 같은 버킷
+        verify(redisTemplate, times(2))
+                .execute(any(RedisScript.class), eq(List.of("rl:auth:10.0.0.4")), eq("60"));
+    }
+
+    @Test
+    @DisplayName("같은 경로라도 다른 메서드는 대상이 아니다 (매칭이 과하게 넓어지지 않았다)")
+    void passwordPath_otherMethod_passThrough() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/password");
+        request.setRemoteAddr("10.0.0.5");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+        verifyNoInteractions(redisTemplate);
+    }
+
     // --- 경로 매칭: 퍼센트 인코딩 우회 차단 ---
     //
     // request.getRequestURI()는 디코딩되지 않은 원본 경로다. 문자열로 비교하면 아래 요청들이
