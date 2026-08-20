@@ -361,18 +361,39 @@ public class LocalAuthService {
         return tokenIssuer.issue(userId);
     }
 
+    /**
+     * 비밀번호 변경.
+     *
+     * <p>{@code currentPassword} 대입을 <b>로그인과 같은 계정 버킷</b>으로 센다.
+     * 인증을 요구한다는 것만으로는 부족하다 — 세션 하나를 손에 넣은 공격자가 원래 비밀번호를
+     * 무제한으로 맞춰 볼 수 있고, 비밀번호 재사용을 감안하면 피해가 이 서비스 밖으로 번진다.
+     * 버킷을 따로 두면 두 경로를 번갈아 써서 한도를 두 배로 늘릴 수 있으므로 login과 공유한다
+     * (LOCAL 행의 socialId가 곧 이메일이다).
+     *
+     * <p>Redis 접근을 트랜잭션 밖으로 빼느라 조회가 한 번 더 든다(클래스 주석의 원칙).
+     * 자주 일어나는 동작이 아니라 이 비용이 문제되지 않는다.
+     */
     public TokenResponse changePassword(Long userId, String currentPassword, String newPassword) {
+        String email = inTransaction(() -> localProvider(userId).getSocialId());
+        loginAttemptLimiter.checkAllowed(email);
 
-        inTransaction(() -> {
+        boolean matched = inTransaction(() -> {
             AuthProvider provider = localProvider(userId);
 
             if (!passwordEncoder.matches(currentPassword, provider.getPasswordHash())) {
-                throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+                return false;
             }
 
             provider.changePassword(passwordEncoder.encode(newPassword));
-            return null;
+            return true;
         });
+
+        if (!matched) {
+            loginAttemptLimiter.recordFailure(email);
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        loginAttemptLimiter.reset(email);
 
         // 재설정과 같은 이유로 세션을 새로 발급한다.
         return tokenIssuer.issue(userId);
