@@ -40,7 +40,7 @@ export default function RestaurantsPage() {
 
       <h2>저장한 식당</h2>
       {restaurantsQuery.isPending && <p>불러오는 중…</p>}
-      {restaurantsQuery.isError && <p className="error">{errorMessage(restaurantsQuery.error)}</p>}
+      {restaurantsQuery.isError && <p className="error" role="alert">{errorMessage(restaurantsQuery.error)}</p>}
       {restaurantsQuery.isSuccess && restaurants.length === 0 && (
         <p>저장한 식당이 없습니다. 위에서 장소를 검색해 자주 가는 식당을 저장해 보세요.</p>
       )}
@@ -109,8 +109,8 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
         </button>
       </form>
 
-      {searchQuery.isError && <p className="error">{errorMessage(searchQuery.error)}</p>}
-      {saveMutation.isError && <p className="error">{errorMessage(saveMutation.error)}</p>}
+      {searchQuery.isError && <p className="error" role="alert">{errorMessage(searchQuery.error)}</p>}
+      {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
       {searchQuery.isSuccess && places.length === 0 && (
         <p>'{submitted}' 검색 결과가 없습니다. 다른 키워드로 검색해 보세요.</p>
       )}
@@ -220,7 +220,7 @@ function RestaurantCard({
       </div>
       <span>{summary.address || "주소 정보 없음"}</span>
       {detail?.phone && <span>{detail.phone}</span>}
-      {deleteMutation.isError && <p className="error">{errorMessage(deleteMutation.error)}</p>}
+      {deleteMutation.isError && <p className="error" role="alert">{errorMessage(deleteMutation.error)}</p>}
       <div className="card-actions">
         <button ref={editButton} disabled={!detail} onClick={() => setMode("edit")}>수정</button>
         <button
@@ -305,7 +305,7 @@ function RestaurantEditForm({
         <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />
       </label>
 
-      {saveMutation.isError && <p className="error">{errorMessage(saveMutation.error)}</p>}
+      {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
 
       <div className="card-actions">
         <button type="submit" disabled={saveMutation.isPending || !name.trim()}>
@@ -357,7 +357,7 @@ function MenuLinkForm({
       <fieldset>
         <legend>메뉴 선택</legend>
         {menusQuery.isPending && <p>불러오는 중…</p>}
-        {menusQuery.isError && <p className="error">{errorMessage(menusQuery.error)}</p>}
+        {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
         {menusQuery.isSuccess && menus.length === 0 && (
           <p>등록된 메뉴가 없습니다. 먼저 메뉴를 등록해 주세요.</p>
         )}
@@ -407,7 +407,7 @@ function MenuLinkForm({
         />
       </label>
 
-      {linkMutation.isError && <p className="error">{errorMessage(linkMutation.error)}</p>}
+      {linkMutation.isError && <p className="error" role="alert">{errorMessage(linkMutation.error)}</p>}
 
       <div className="card-actions">
         <button type="submit" disabled={linkMutation.isPending || menuId == null}>

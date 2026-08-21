@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
@@ -57,7 +57,7 @@ export default function SettingsPage() {
             {logoutMutation.isPending ? "로그아웃 중…" : "로그아웃"}
           </button>
         </div>
-        {logoutMutation.isError && <p className="error">{errorMessage(logoutMutation.error)}</p>}
+        {logoutMutation.isError && <p className="error" role="alert">{errorMessage(logoutMutation.error)}</p>}
       </section>
 
       {/* 연동 상태를 모르면 "연동"과 "해제" 중 무엇을 그릴지 정할 수 없다 — /me를 받은 뒤에 그린다. */}
@@ -117,7 +117,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {withdrawMutation.isError && <p className="error">{errorMessage(withdrawMutation.error)}</p>}
+        {withdrawMutation.isError && <p className="error" role="alert">{errorMessage(withdrawMutation.error)}</p>}
       </section>
     </div>
   );
@@ -176,7 +176,7 @@ function SocialLinkSection({ me }: { me: Me }) {
         ))}
       </ul>
 
-      {unlinkMutation.isError && <p className="error">{errorMessage(unlinkMutation.error)}</p>}
+      {unlinkMutation.isError && <p className="error" role="alert">{errorMessage(unlinkMutation.error)}</p>}
     </section>
   );
 }
@@ -253,6 +253,11 @@ function PasswordSection() {
 
   const tooShort = next.length > 0 && next.length < PASSWORD_MIN_LENGTH;
   const mismatch = nextCheck.length > 0 && next !== nextCheck;
+  // 검증 메시지는 role="alert"를 쓰지 않는다. 타이핑하는 동안 나타났다 사라지므로
+  // 글자마다 낭독을 가로채 오히려 방해가 된다. 대신 aria-describedby로 필드에 묶어
+  // 두면, 그 칸으로 이동했을 때 이름 뒤에 이유가 함께 읽힌다.
+  const tooShortId = useId();
+  const mismatchId = useId();
   const canSubmit = current.length > 0 && next.length >= PASSWORD_MIN_LENGTH && !mismatch;
 
   return (
@@ -289,10 +294,12 @@ function PasswordSection() {
             onChange={(e) => setNext(e.target.value)}
             autoComplete="new-password"
             required
+            aria-invalid={tooShort || undefined}
+            aria-describedby={tooShort ? tooShortId : undefined}
           />
         </label>
         {tooShort && (
-          <p className="error">비밀번호는 {PASSWORD_MIN_LENGTH}자 이상이어야 합니다.</p>
+          <p className="error" id={tooShortId}>비밀번호는 {PASSWORD_MIN_LENGTH}자 이상이어야 합니다.</p>
         )}
         <label>
           새 비밀번호 확인
@@ -303,11 +310,13 @@ function PasswordSection() {
             onChange={(e) => setNextCheck(e.target.value)}
             autoComplete="new-password"
             required
+            aria-invalid={mismatch || undefined}
+            aria-describedby={mismatch ? mismatchId : undefined}
           />
         </label>
-        {mismatch && <p className="error">비밀번호가 서로 다릅니다.</p>}
+        {mismatch && <p className="error" id={mismatchId}>비밀번호가 서로 다릅니다.</p>}
 
-        {changeMutation.isError && <p className="error">{errorMessage(changeMutation.error)}</p>}
+        {changeMutation.isError && <p className="error" role="alert">{errorMessage(changeMutation.error)}</p>}
         {changeMutation.isSuccess && (
           <p className="settings-desc" role="status">비밀번호를 변경했습니다.</p>
         )}

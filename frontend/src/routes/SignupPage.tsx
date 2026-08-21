@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { signup, resendVerification, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../api/auth";
@@ -18,6 +18,11 @@ export default function SignupPage() {
   // 서버에 보내기 전에 잡아야 하는 것만 여기서 본다. 나머지(형식·중복)는 서버 응답을 그대로 보여준다.
   const tooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
   const mismatch = passwordCheck.length > 0 && password !== passwordCheck;
+  // 검증 메시지는 role="alert"를 쓰지 않는다. 타이핑하는 동안 나타났다 사라지므로
+  // 글자마다 낭독을 가로채 오히려 방해가 된다. 대신 aria-describedby로 필드에 묶어
+  // 두면, 그 칸으로 이동했을 때 이름 뒤에 이유가 함께 읽힌다.
+  const tooShortId = useId();
+  const mismatchId = useId();
   const canSubmit =
     email.trim() && nickname.trim() && password.length >= PASSWORD_MIN_LENGTH && !mismatch;
 
@@ -68,10 +73,12 @@ export default function SignupPage() {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
             required
+            aria-invalid={tooShort || undefined}
+            aria-describedby={tooShort ? tooShortId : undefined}
           />
         </label>
         {tooShort && (
-          <p className="error">비밀번호는 {PASSWORD_MIN_LENGTH}자 이상이어야 합니다.</p>
+          <p className="error" id={tooShortId}>비밀번호는 {PASSWORD_MIN_LENGTH}자 이상이어야 합니다.</p>
         )}
 
         <label>
@@ -83,11 +90,13 @@ export default function SignupPage() {
             onChange={(e) => setPasswordCheck(e.target.value)}
             autoComplete="new-password"
             required
+            aria-invalid={mismatch || undefined}
+            aria-describedby={mismatch ? mismatchId : undefined}
           />
         </label>
-        {mismatch && <p className="error">비밀번호가 서로 다릅니다.</p>}
+        {mismatch && <p className="error" id={mismatchId}>비밀번호가 서로 다릅니다.</p>}
 
-        {signupMutation.isError && <p className="error">{apiErrorMessage(signupMutation.error)}</p>}
+        {signupMutation.isError && <p className="error" role="alert">{apiErrorMessage(signupMutation.error)}</p>}
 
         <button type="submit" disabled={signupMutation.isPending || !canSubmit}>
           {signupMutation.isPending ? "가입 중…" : "가입하기"}
@@ -123,7 +132,7 @@ function VerificationSent({ email }: { email: string }) {
             {resendMutation.isPending ? "보내는 중…" : "메일이 안 왔어요"}
           </button>
         )}
-        {resendMutation.isError && <p className="error">{apiErrorMessage(resendMutation.error)}</p>}
+        {resendMutation.isError && <p className="error" role="alert">{apiErrorMessage(resendMutation.error)}</p>}
       </section>
 
       <div className="auth-links">

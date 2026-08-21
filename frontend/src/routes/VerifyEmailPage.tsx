@@ -40,7 +40,7 @@ export default function VerifyEmailPage() {
     return (
       <div className="login-page">
         <h1>인증하지 못했습니다</h1>
-        <p className="error">{error}</p>
+        <p className="error" role="alert">{error}</p>
         <div className="auth-links">
           <Link to="/login">로그인 화면에서 인증 메일 다시 받기</Link>
         </div>
