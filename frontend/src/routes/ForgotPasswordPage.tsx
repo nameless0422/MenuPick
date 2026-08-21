@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
             />
           </label>
 
-          {resetMutation.isError && <p className="error">{apiErrorMessage(resetMutation.error)}</p>}
+          {resetMutation.isError && <p className="error" role="alert">{apiErrorMessage(resetMutation.error)}</p>}
 
           <button type="submit" disabled={resetMutation.isPending || !email.trim()}>
             {resetMutation.isPending ? "보내는 중…" : "재설정 링크 받기"}

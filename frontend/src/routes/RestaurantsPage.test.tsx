@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import RestaurantsPage from "./RestaurantsPage";
 import { fetchRestaurant, fetchRestaurants } from "../api/restaurants";
@@ -60,5 +61,48 @@ describe("VITE_KAKAO_JS_KEY가 없어도", () => {
     expect(await screen.findByText("좌표없는집")).toBeInTheDocument();
     // 찍을 좌표가 하나도 없으면 지도 자리 자체를 만들지 않는다
     expect(screen.queryByText(/지도 키가 설정되지 않아/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 별 묶음을 {@code <label>}로 감싸면 안 된다. {@code <button>}은 labelable 요소라
+ * for 없는 label의 대상 컨트롤이 <b>첫 번째 별</b>이 되고, .menu-form label이
+ * flex-column이라 label 상자가 폼 전체 폭을 차지한다. 결과적으로 "별점" 글자와
+ * 별 오른쪽 빈 영역 전체가 별 1의 클릭 영역이 되어, 스크롤하려고 탭하거나 별 4를
+ * 겨냥하다 빗나가면 점수가 조용히 1로 떨어진다. MenusPage의 선호도 위젯도 같다.
+ */
+describe("메뉴 연결 폼의 별점", () => {
+  beforeEach(() => {
+    fetchRestaurantsMock.mockResolvedValue([
+      { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978 },
+    ]);
+  });
+
+  it("라벨 영역을 눌러도 점수가 바뀌지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "메뉴 연결" }));
+
+    const group = await screen.findByRole("group", { name: "별점" });
+    await user.click(screen.getByRole("button", { name: "별점 5" }));
+    expect(screen.getByRole("button", { name: "별점 5" })).toHaveAttribute("aria-pressed", "true");
+
+    // 별 묶음을 감싼 컨테이너(옛 <label>) 자체를 클릭한다.
+    await user.click(group.parentElement!);
+
+    // label이었다면 이 클릭이 별 1로 위임되어 5점이 1점이 된다.
+    expect(screen.getByRole("button", { name: "별점 5" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "별점 2" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("별 묶음을 감싼 요소가 label이 아니다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "메뉴 연결" }));
+
+    const group = await screen.findByRole("group", { name: "별점" });
+    expect(group.closest("label")).toBeNull();
   });
 });

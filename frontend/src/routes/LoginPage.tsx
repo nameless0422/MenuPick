@@ -81,7 +81,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        {demo.isError && <p className="error">{apiErrorMessage(demo.error)}</p>}
+        {demo.isError && <p className="error" role="alert">{apiErrorMessage(demo.error)}</p>}
       </section>
     </div>
   );
@@ -139,7 +139,7 @@ function EmailLoginForm() {
       </label>
 
       {loginMutation.isError && (
-        <p className="error">{apiErrorMessage(loginMutation.error)}</p>
+        <p className="error" role="alert">{apiErrorMessage(loginMutation.error)}</p>
       )}
 
       {needsVerification && (
@@ -158,7 +158,7 @@ function EmailLoginForm() {
           )}
         </p>
       )}
-      {resendMutation.isError && <p className="error">{apiErrorMessage(resendMutation.error)}</p>}
+      {resendMutation.isError && <p className="error" role="alert">{apiErrorMessage(resendMutation.error)}</p>}
 
       <button type="submit" disabled={loginMutation.isPending || !email.trim() || !password}>
         {loginMutation.isPending ? "로그인 중…" : "로그인"}

@@ -375,7 +375,7 @@ function TagFilter({
           placeholder={placeholder}
         />
       </div>
-      {tagsQuery.isError && <p className="error">{apiErrorMessage(tagsQuery.error)}</p>}
+      {tagsQuery.isError && <p className="error" role="alert">{apiErrorMessage(tagsQuery.error)}</p>}
       {suggestions.length > 0 && (
         <div className="chip-row">
           {suggestions.map((tag) => (
