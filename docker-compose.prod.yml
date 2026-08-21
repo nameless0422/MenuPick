@@ -31,7 +31,12 @@ services:
       TZ: Asia/Seoul
     command:
       - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
+      # utf8mb4_unicode_ci(UCA 4.0.0)는 모든 이모지를 같은 문자로 취급해
+      # 닉네임·태그의 UNIQUE를 오작동시킨다(V7, issue #114). MySQL 8 기본값인
+      # 0900_ai_ci는 UCA 9.0.0 기반이라 이모지를 정확히 구분한다.
+      # 이 값은 새로 만들어지는 스키마의 기본값을 정한다 — 이미 만들어진
+      # menupick 스키마 자체는 V7의 ALTER DATABASE가 바꾼다.
+      - --collation-server=utf8mb4_0900_ai_ci
       # MySQL 메모리의 대부분은 여기서 나온다. mem_limit을 줄일 때 이걸 같이 줄이지 않으면
       # 버퍼 풀만으로 한도를 넘어 컨테이너가 OOMKill된다.
       - --innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-128M}
