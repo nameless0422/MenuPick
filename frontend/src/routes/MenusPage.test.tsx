@@ -140,4 +140,44 @@ describe("선호도 별점 접근성", () => {
 
     expect(await screen.findByRole("group", { name: "선호도" })).toBeInTheDocument();
   });
+
+  /**
+   * 별 묶음을 {@code <label>}로 감싸면 안 된다. {@code <button>}은 labelable 요소라
+   * for 없는 label의 대상 컨트롤이 <b>첫 번째 별</b>이 되고, 그때부터 label 영역
+   * 아무 곳이나 누르면 별 1이 눌린다. .menu-form label이 flex-column이라 그 영역은
+   * 폼 전체 폭이다 — 즉 "선호도" 글자와 별 오른쪽 빈 공간 전체가 별 1의 클릭 영역이다.
+   *
+   * 화면만 보면 아무 문제가 없어 보이는데, 스크롤하려고 탭하거나 별 3을 겨냥하다
+   * 살짝 빗나가면 점수가 조용히 1로 떨어진다.
+   */
+  it("라벨 영역을 눌러도 점수가 바뀌지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "수정" }));
+
+    const group = await screen.findByRole("group", { name: "선호도" });
+    // KIMCHI는 weight 3에서 시작한다. 5로 올려 두면 회귀 시 1로 떨어지는 폭이 커진다.
+    await user.click(screen.getByRole("button", { name: "선호도 5" }));
+    expect(screen.getByRole("button", { name: "선호도 5" })).toHaveAttribute("aria-pressed", "true");
+
+    // 별 묶음을 감싼 컨테이너(옛 <label>) 자체를 클릭한다.
+    const container = group.parentElement!;
+    await user.click(container);
+
+    // label이었다면 이 클릭이 별 1로 위임되어 5점이 1점이 된다.
+    expect(screen.getByRole("button", { name: "선호도 5" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "선호도 2" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("별 묶음을 감싼 요소가 label이 아니다", async () => {
+    // 위 테스트는 jsdom의 label 위임 구현에 기대므로, 구조 자체도 직접 못 박아 둔다.
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "수정" }));
+
+    const group = await screen.findByRole("group", { name: "선호도" });
+    expect(group.closest("label")).toBeNull();
+  });
 });
