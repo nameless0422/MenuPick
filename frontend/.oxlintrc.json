@@ -1,8 +1,55 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  // jsx-a11y는 oxlint에 내장돼 있지만 기본으로 꺼져 있다. 켜 두지 않으면
+  // <div onClick> 같은 고전적 접근성 회귀가 리뷰를 그대로 통과한다.
+  "plugins": ["react", "typescript", "oxc", "jsx-a11y"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+
+    // 아래 둘은 이 코드베이스에서 오탐만 낸다. 끄지 않으면 경고 8건이 상시로 깔려
+    // 정작 새로 생기는 진짜 지적이 묻힌다.
+    //
+    // role="status"를 <output>으로 바꾸라고 권한다. <output>은 form-associated
+    // 계산 결과용이라 일반 라이브 리전에는 맞지 않고, role="group" → <fieldset>
+    // 권고는 해당 <span>이 <label> 안에 있어 적용하면 invalid HTML이 된다.
+    "jsx-a11y/prefer-tag-over-role": "off",
+    // autoComplete="nickname"을 무효로 본다. WHATWG HTML의 autofill field name
+    // 목록에 실재하는 유효 토큰이다.
+    "jsx-a11y/autocomplete-valid": "off",
+
+    // 여기부터는 error로 올린다. jsx-a11y 규칙은 기본이 warn인데, CI의 lint 단계는
+    // 경고로 빌드를 막지 않는다(ci.yml에 의도가 적혀 있다 — 기존 경고 하나 때문에
+    // 무관한 PR이 전부 빨개지는 걸 피하려는 선택이다). 그대로 두면 새로 들어온
+    // <div onClick>이 경고만 남기고 머지된다.
+    //
+    // 아래 규칙들은 도입 시점에 전수 검사해 적발 0건임을 확인했다. 즉 error로
+    // 올려도 지금 코드는 통과하고, 앞으로 생기는 위반만 CI를 막는다.
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-has-content": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-role": "error",
+    "jsx-a11y/aria-unsupported-elements": "error",
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/heading-has-content": "error",
+    "jsx-a11y/html-has-lang": "error",
+    "jsx-a11y/iframe-has-title": "error",
+    "jsx-a11y/img-redundant-alt": "error",
+    "jsx-a11y/interactive-supports-focus": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/media-has-caption": "error",
+    "jsx-a11y/mouse-events-have-key-events": "error",
+    "jsx-a11y/no-access-key": "error",
+    "jsx-a11y/no-autofocus": "error",
+    "jsx-a11y/no-distracting-elements": "error",
+    "jsx-a11y/no-noninteractive-tabindex": "error",
+    "jsx-a11y/no-redundant-roles": "error",
+    "jsx-a11y/no-static-element-interactions": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+    "jsx-a11y/role-supports-aria-props": "error",
+    "jsx-a11y/scope": "error",
+    "jsx-a11y/tabindex-no-positive": "error"
   }
 }
