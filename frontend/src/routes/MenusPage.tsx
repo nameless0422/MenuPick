@@ -294,7 +294,7 @@ function MenuFormFields({
               aria-label={`선호도 ${value}`}
               onClick={() => setWeight(value)}
             >
-              ★
+              {value <= weight ? "★" : "☆"}
             </button>
           ))}
           {/* 눌러도 포커스는 버튼에 머물러 요약이 다시 읽히지 않는다 — aria-live로 알린다 */}
