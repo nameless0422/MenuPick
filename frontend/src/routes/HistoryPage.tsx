@@ -106,7 +106,7 @@ export default function HistoryPage() {
       </div>
 
       {historyQuery.isPending && <p>불러오는 중…</p>}
-      {historyQuery.isError && <p className="error">{errorMessage(historyQuery.error)}</p>}
+      {historyQuery.isError && <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>}
 
       {/* 삭제 실패 시 목록만 새로고침되어 항목이 그대로 남는다 — 이유를 알려야 한다 */}
       {deleteMutation.isError && (
@@ -258,7 +258,7 @@ function VisitAction({
         {loadingCandidates || visitMutation.isPending ? "처리 중…" : "방문했어요"}
       </button>
       {(loadError || visitMutation.isError) && (
-        <span className="error">{loadError ?? errorMessage(visitMutation.error)}</span>
+        <span className="error" role="alert">{loadError ?? errorMessage(visitMutation.error)}</span>
       )}
     </span>
   );

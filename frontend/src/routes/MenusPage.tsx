@@ -90,7 +90,7 @@ export default function MenusPage() {
       )}
 
       {menusQuery.isPending && <p>불러오는 중…</p>}
-      {menusQuery.isError && <p className="error">{errorMessage(menusQuery.error)}</p>}
+      {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
 
       {/* 삭제·제외 토글은 실패해도 onSettled가 목록을 새로고침해 원래대로 돌아간다.
           이유를 알리지 않으면 사용자에게는 클릭이 그냥 씹힌 것으로만 보인다. */}
@@ -201,7 +201,7 @@ function MenuForm({
 
   if (menuId != null && !hasFreshDetail) {
     return detailQuery.isError ? (
-      <p className="error">{errorMessage(detailQuery.error)}</p>
+      <p className="error" role="alert">{errorMessage(detailQuery.error)}</p>
     ) : (
       <p>불러오는 중…</p>
     );
@@ -316,7 +316,7 @@ function MenuFormFields({
         </label>
       )}
 
-      {saveMutation.isError && <p className="error">{errorMessage(saveMutation.error)}</p>}
+      {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
 
       <div className="card-actions">
         <button type="submit" disabled={saveMutation.isPending || !name.trim()}>
@@ -449,7 +449,7 @@ function TagPicker({
           </button>
         )}
       </div>
-      {createMutation.isError && <p className="error">{errorMessage(createMutation.error)}</p>}
+      {createMutation.isError && <p className="error" role="alert">{errorMessage(createMutation.error)}</p>}
       {suggestions.length > 0 && (
         <div className="chip-row">
           {suggestions.map((tag) => (

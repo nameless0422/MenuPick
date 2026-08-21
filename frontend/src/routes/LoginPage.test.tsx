@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import LoginPage from "./LoginPage";
+import { login } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
 vi.mock("../api/pick", () => ({ requestDemoPick: vi.fn() }));
@@ -81,5 +82,28 @@ describe("LoginPage 소셜 로그인 안내", () => {
 
     expect(window.location.href).toContain("/api/v1/auth/kakao/authorize");
     expect(sessionStorage.getItem("oauth_request_kakao")).toContain('"mode":"login"');
+  });
+});
+
+/**
+ * 로그인은 이 앱의 유일한 관문이다. 실패를 알리지 않으면 스크린리더 사용자는
+ * 무슨 일이 일어났는지 알 수 없다 — 제출 버튼이 isPending 동안 disabled가 되면서
+ * 초점까지 {@code <body>}로 되돌아가, 화면 맨 위에 선 채 아무 소리도 듣지 못한다.
+ *
+ * 같은 리포의 HistoryPage·MenusPage·PickPage는 이미 .error에 role="alert"를 붙여
+ * 두었는데 인증 화면만 빠져 있었다.
+ */
+describe("LoginPage 실패 통지", () => {
+  it("로그인 실패를 role=alert로 알린다", async () => {
+    const user = userEvent.setup();
+    vi.mocked(login).mockRejectedValue(new Error("이메일 또는 비밀번호가 올바르지 않습니다."));
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com");
+    await user.type(screen.getByLabelText("비밀번호"), "wrongpassword");
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/올바르지 않습니다/);
   });
 });
