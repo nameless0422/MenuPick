@@ -141,7 +141,37 @@ nav {
 nav a {
   color: var(--text);
   text-decoration: none;
+  /* 인라인 요소라 높이가 폰트 메트릭에 좌우된다. 24x24(2.5.8)를 폰트에 맡기지 않고
+     못 박는다 — 루트가 16px로 줄어드는 좁은 화면에서 특히 흔들린다. */
+  display: inline-block;
+  min-height: 24px;
   padding: 4px 0;
+}
+
+/* NavLink가 현재 경로에 붙이는 표시. 색만 바꾸면 색각 이상이 있는 사용자에게
+   현재 위치가 전달되지 않으므로(1.4.1) 굵기와 밑줄을 함께 준다. */
+nav a[aria-current="page"] {
+  color: var(--text-h);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* 건너뛰기 링크. 평소에는 화면 밖에 두되 접근성 트리에는 남겨야 하므로
+   display:none을 쓸 수 없다. 초점을 받으면 제자리로 돌아와 눈에 보인다. */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -100%;
+  z-index: 10;
+  padding: 8px 12px;
+  border-radius: 0 0 6px 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  border: 1px solid var(--field-border);
+}
+.skip-link:focus {
+  top: 0;
 }
 
 nav a:hover {
