@@ -2,7 +2,14 @@
   --text: #6b6375;
   --text-h: #08060d;
   --bg: #fff;
+  /* 카드 테두리·구분선 같은 장식용. 대비 요구가 없는 자리에만 쓴다. */
   --border: #e5e4e7;
+  /* 폼 컨트롤(버튼·입력창) 전용. --border(#e5e4e7)는 흰 배경 대비 1.27:1이라
+     WCAG 1.4.11이 요구하는 3:1의 절반도 안 됐다. 입력창은 배경이 페이지와 같아
+     테두리가 "여기가 입력할 수 있는 곳"이라는 유일한 신호인데 그게 보이지 않았다.
+     이 값은 4.49:1. --border를 통째로 올리지 않는 이유는 그 토큰이 카드·nav
+     구분선 등 장식에도 널리 쓰여 디자인 전반이 흔들리기 때문이다. */
+  --field-border: #767680;
   --code-bg: #f4f3ec;
   /* 이전 #aa3bff는 흰 배경 대비 4.39:1로 소형 텍스트 기준(4.5:1)에 미달했다.
      선택된 필터 칩처럼 상태를 알리는 유일한 신호에도 쓰여 한 단계 어둡게 잡았다.
@@ -10,8 +17,12 @@
   --accent: #8b1fd9;
   --accent-bg: rgba(139, 31, 217, 0.1);
   --accent-border: rgba(139, 31, 217, 0.5);
-  /* 에러·위험 동작 색. 하드코딩하면 다크 모드에서 배경에 묻혀 메시지를 못 읽는다. */
-  --danger: #d0342c;
+  /* 에러·위험 동작 색. 하드코딩하면 다크 모드에서 배경에 묻혀 메시지를 못 읽는다.
+     이전 #d0342c는 흰 배경에서는 4.99:1로 통과했지만, 전역 button 배경(--code-bg)
+     위에서 4.485:1로 4.5:1에 아슬하게 미달했다(.settings-withdraw). hover 시에는
+     배경이 더 밝아져 4.18:1까지 떨어졌다.
+     현재 5.62:1 (흰 배경) / 5.05:1 (--code-bg 위) / 4.64:1 (hover 배경 위). */
+  --danger: #c62828;
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -39,6 +50,8 @@
     --text-h: #f3f4f6;
     --bg: #16171d;
     --border: #2e303a;
+    /* #2e303a는 배경 대비 1.36:1이었다. 이 값은 5.42:1. */
+    --field-border: #8b8d98;
     --code-bg: #1f2028;
     --accent: #c084fc;
     --accent-bg: rgba(192, 132, 252, 0.15);
@@ -161,7 +174,7 @@ button {
   font-size: 15px;
   color: var(--text-h);
   background: var(--code-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
@@ -181,7 +194,7 @@ select {
   font-size: 15px;
   color: var(--text-h);
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--field-border);
   border-radius: 6px;
   padding: 6px 10px;
   box-sizing: border-box;
@@ -267,13 +280,20 @@ select {
   border-style: dashed;
 }
 
+/* 눌러서 상태를 바꾸는 칩은 UI 컨트롤이라 경계가 보여야 한다(1.4.11).
+   표시 전용 .chip / .chip-tag는 해당하지 않아 --border 그대로 둔다. */
 .chip.selectable {
   cursor: pointer;
+  border-color: var(--field-border);
 }
+/* 선택 여부를 색으로만 알리면 안 된다(1.4.1). 명도만 남기면 글자 1.11:1,
+   배경 1.06:1로 사실상 구분되지 않는다. 굵기와 진한 테두리를 함께 바꾼다.
+   --accent-border(2.47:1) 대신 불투명 --accent(6.37:1)를 쓴다. */
 .chip.selectable.on {
   color: var(--accent);
   background: var(--accent-bg);
-  border-color: var(--accent-border);
+  border-color: var(--accent);
+  font-weight: 600;
 }
 
 .menu-form {
@@ -324,12 +344,19 @@ select {
   align-items: center;
   gap: 2px;
 }
+/* 빈 별을 --border로 칠하면 배경 대비 1.27:1이라 화면에서 사라진다. 그러면
+   "5점 만점에 3점"이 아니라 "별 세 개"로만 보여, 척도가 몇 점인지 알 수 없다.
+   읽기 전용 별점(.weight)이 이미 ★/☆ 글리프로 구분하고 있으니 같은 방식으로
+   맞춘다 — 색이 아니라 모양이 신호가 되므로 색각·저시력과 무관하게 읽힌다. */
 .weight-picker .star {
   background: none;
   border: none;
   padding: 0 2px;
   font-size: 22px;
-  color: var(--border);
+  line-height: 1;
+  min-width: 24px;
+  min-height: 24px;
+  color: var(--text);
 }
 .weight-picker .star.on {
   color: var(--accent);
@@ -351,4 +378,18 @@ select {
 .error {
   color: var(--danger);
   font-size: 14px;
+}
+
+/* 화면에는 안 보이되 스크린리더에는 읽히는 텍스트. display:none이나
+   visibility:hidden은 접근성 트리에서도 지워지므로 쓸 수 없다. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

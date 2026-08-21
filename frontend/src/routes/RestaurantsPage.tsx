@@ -388,7 +388,7 @@ function MenuLinkForm({
               aria-label={`별점 ${value}`}
               onClick={() => setRating(value)}
             >
-              ★
+              {value <= rating ? "★" : "☆"}
             </button>
           ))}
           <small aria-live="polite">{rating}점</small>

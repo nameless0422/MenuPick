@@ -170,6 +170,29 @@ describe("선호도 별점 접근성", () => {
     expect(screen.getByRole("button", { name: "선호도 2" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  /**
+   * 빈 별을 색으로만 구분하면(이전에는 --border, 배경 대비 1.27:1) 화면에서 사라져
+   * "5점 만점에 3점"이 아니라 "별 세 개"로만 보인다. 척도가 몇 점인지 알 수 없으니
+   * 3점이 높은 점수인지 낮은 점수인지도 판단할 수 없다. 읽기 전용 별점이 이미
+   * ★/☆로 구분하고 있으므로 편집 위젯도 같은 방식이어야 한다.
+   */
+  it("채운 별과 빈 별을 색이 아니라 글리프로 구분한다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "수정" }));
+
+    // KIMCHI는 weight 3
+    expect(await screen.findByRole("button", { name: "선호도 3" })).toHaveTextContent("★");
+    expect(screen.getByRole("button", { name: "선호도 4" })).toHaveTextContent("☆");
+    expect(screen.getByRole("button", { name: "선호도 5" })).toHaveTextContent("☆");
+
+    await user.click(screen.getByRole("button", { name: "선호도 5" }));
+
+    expect(screen.getByRole("button", { name: "선호도 4" })).toHaveTextContent("★");
+    expect(screen.getByRole("button", { name: "선호도 5" })).toHaveTextContent("★");
+  });
+
   it("별 묶음을 감싼 요소가 label이 아니다", async () => {
     // 위 테스트는 jsdom의 label 위임 구현에 기대므로, 구조 자체도 직접 못 박아 둔다.
     const user = userEvent.setup();
