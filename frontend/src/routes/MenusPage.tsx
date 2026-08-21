@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -234,6 +234,7 @@ function MenuFormFields({
   const [categories, setCategories] = useState<string[]>(initial?.categories ?? []);
   const [tags, setTags] = useState<TagSummary[]>(initial?.tags ?? []);
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
+  const weightLabelId = useId();
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -278,9 +279,13 @@ function MenuFormFields({
         />
       </label>
 
-      <label>
-        선호도
-        <span className="weight-picker" role="group" aria-label="선호도">
+      {/* <label>로 감싸면 안 된다. <button>은 labelable 요소라 for 없는 label의 대상이
+          첫 번째 별 버튼이 되고, .menu-form label이 flex-column이라 label 상자가 폼
+          전체 폭을 차지한다. 결과적으로 "선호도" 글자와 별 오른쪽 빈 영역 전체가 별 1의
+          클릭 영역이 되어, 스크롤하려고 탭하거나 살짝 빗나가면 점수가 조용히 1로 떨어진다. */}
+      <div className="field">
+        <span id={weightLabelId}>선호도</span>
+        <span className="weight-picker" role="group" aria-labelledby={weightLabelId}>
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
@@ -295,7 +300,7 @@ function MenuFormFields({
           {/* 눌러도 포커스는 버튼에 머물러 요약이 다시 읽히지 않는다 — aria-live로 알린다 */}
           <small aria-live="polite">{WEIGHT_LABELS[weight - 1]}</small>
         </span>
-      </label>
+      </div>
 
       <CategoryPicker selected={categories} onChange={setCategories} />
       <TagPicker selected={tags} onChange={setTags} />

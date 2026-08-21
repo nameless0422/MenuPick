@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRestaurant,
@@ -328,6 +328,7 @@ function MenuLinkForm({
 }) {
   const [menuId, setMenuId] = useState<number | null>(null);
   const [rating, setRating] = useState(3);
+  const ratingLabelId = useId();
   const [memo, setMemo] = useState("");
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
 
@@ -374,9 +375,11 @@ function MenuLinkForm({
         </div>
       </fieldset>
 
-      <label>
-        별점
-        <span className="weight-picker" role="group" aria-label="별점">
+      {/* <label>로 감싸지 않는 이유는 MenusPage의 선호도 위젯과 같다 —
+          <button>이 labelable이라 label 전체가 별 1의 클릭 영역이 된다. */}
+      <div className="field">
+        <span id={ratingLabelId}>별점</span>
+        <span className="weight-picker" role="group" aria-labelledby={ratingLabelId}>
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
@@ -390,7 +393,7 @@ function MenuLinkForm({
           ))}
           <small aria-live="polite">{rating}점</small>
         </span>
-      </label>
+      </div>
 
       <label>
         메모
