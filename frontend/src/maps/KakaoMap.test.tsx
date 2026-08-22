@@ -198,6 +198,49 @@ it("찍을 좌표가 하나도 없으면 아무것도 렌더하지 않는다", (
   expect(container).toBeEmptyDOMElement();
 });
 
+describe("스크린리더에 드러나는 모양", () => {
+  it('캔버스는 role="img"다 — 키보드 조작이 없는데 브라우즈 모드를 끄면 안 된다', async () => {
+    setKey("test-js-key");
+    const sdk = fakeSdk();
+
+    render(<KakaoMap points={POINTS} ariaLabel="저장한 식당 위치" />);
+    await waitFor(() => expect(appended).toHaveLength(1));
+    resolveScript(sdk);
+    await waitFor(() => expect(sdk.maps).toHaveLength(1));
+
+    // role="application"이면 NVDA/JAWS가 가상 커서를 끈다. 이 컴포넌트에는 키 핸들러가
+    // 하나도 없으므로, 그 순간 사용자는 조작 수단 없이 탐색 수단만 잃는다.
+    const canvas = screen.getByRole("img", { name: "저장한 식당 위치" });
+    expect(canvas).not.toHaveAttribute("role", "application");
+    // SDK가 만드는 수백 개 노드는 여전히 무음이어야 한다 — 픽 결과 낭독을 덮어쓴다.
+    expect(canvas).toHaveAttribute("aria-live", "off");
+  });
+
+  it("지도를 못 띄웠다는 안내가 통지된다", async () => {
+    setKey("");
+
+    render(<KakaoMap points={POINTS} ariaLabel="저장한 식당 위치" />);
+
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent(/지도 키가 설정되지 않아/);
+  });
+
+  it("안내가 조상의 aria-live=\"off\"에 갇히지 않는다", async () => {
+    setKey("test-js-key");
+
+    render(<KakaoMap points={POINTS} ariaLabel="저장한 식당 위치" />);
+    await waitFor(() => expect(appended).toHaveLength(1));
+    appended[0].onerror?.(new Event("error"));
+
+    const notice = await screen.findByText(/지도를 불러오지 못했어요/);
+    // aria-live는 상속되고 자손의 off가 조상의 polite를 이긴다. 래퍼에 off가 걸려 있으면
+    // role="status"를 붙여도 이 안내는 영영 읽히지 않는다.
+    for (let el = notice.parentElement; el; el = el.parentElement) {
+      expect(el.getAttribute("aria-live")).not.toBe("off");
+    }
+  });
+});
+
 // ---- 카카오 SDK 대역 ----
 
 /** 실제로 호출되는 생성자만 흉내 낸다. 지도 렌더 자체는 jsdom에서 확인할 수 없다. */
