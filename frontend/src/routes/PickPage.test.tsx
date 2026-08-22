@@ -204,3 +204,80 @@ describe("PickPage 결과 지도", () => {
     expect(screen.getByText("120m")).toBeInTheDocument();
   });
 });
+
+/**
+ * TagFilter는 "포함 태그"와 "제외 태그"로 <b>두 번</b> 렌더된다. legend는 fieldset에만 붙어
+ * 있어 입력의 이름 계산에 들어오지 않으므로, 입력마다 이름이 없으면 음성 제어로 어느 쪽을
+ * 지목했는지 알 수 없고 스크린리더에도 똑같은 칸 두 개로만 보인다.
+ */
+describe("필터 입력의 이름", () => {
+  it("포함/제외 태그 검색 입력이 서로 구분되는 이름을 갖는다", async () => {
+    renderWithProviders(<PickPage />);
+
+    expect(await screen.findByRole("textbox", { name: "포함 태그 검색" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "제외 태그 검색" })).toBeInTheDocument();
+  });
+
+  it("카테고리 직접 입력에 이름이 있다", async () => {
+    renderWithProviders(<PickPage />);
+
+    expect(await screen.findByRole("textbox", { name: "직접 입력한 카테고리" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 픽은 초점을 옮기지 않고 화면 일부만 바꾼다 — 통지가 없으면 Enter를 친 뒤 무슨 일이
+ * 일어났는지 알 수 없다. 특히 뽑는 동안은 최소 1.2초가 <b>완전한 무음</b>이었다:
+ * 돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다.
+ */
+describe("픽 진행·결과 통지", () => {
+  it("뽑는 동안 무음으로 두지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("메뉴를 뽑는 중…"));
+  });
+
+  it("추천 식당이 몇 곳인지 알린다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockResolvedValue({
+      historyId: 1,
+      menu: {
+        id: 1,
+        name: "김치찌개",
+        memo: null,
+        categories: [],
+        tags: [],
+        weight: 1,
+        isExcluded: false,
+        createdAt: "2026-01-01T00:00:00",
+        updatedAt: "2026-01-01T00:00:00",
+      },
+      restaurants: [
+        { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978, distance: null },
+        { id: 2, name: "을지면옥", address: "서울시 중구", latitude: 37.566, longitude: 126.99, distance: null },
+      ],
+    } as never);
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    // 지도를 못 보는 사람에게 이 목록은 유일한 경로다 — 건수부터 알아야 한다.
+    // 슬롯 연출이 최소 1.2초라 기본 대기(1초)로는 결과가 아직 안 나온다.
+    expect(await screen.findByText("추천 식당 2곳", {}, { timeout: 3000 })).toBeInTheDocument();
+  });
+
+  it("위치 권한 실패를 통지한다 — 체크박스가 스스로 꺼지는 이유다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(distanceToggle());
+    await waitFor(() => expect(pendingRequests).toHaveLength(1));
+    failRequest(0);
+
+    // 최대 10초 뒤에 비동기로 나타난다. role이 없으면 "이유 없이 되돌아간 것"으로만 보인다.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/위치를 가져오지 못해/);
+  });
+});

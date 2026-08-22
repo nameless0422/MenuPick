@@ -42,7 +42,7 @@ beforeEach(() => {
   });
 });
 
-const editButton = () => screen.getByRole("button", { name: "수정" });
+const editButton = () => screen.getByRole("button", { name: "김치찌개 수정" });
 const newMenuButton = () => screen.getByRole("button", { name: "+ 새 메뉴" });
 
 /**
@@ -55,7 +55,7 @@ describe("MenusPage 폼 초점", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
 
     const heading = await screen.findByRole("heading", { name: "메뉴 수정" });
     await waitFor(() => expect(heading).toHaveFocus());
@@ -65,7 +65,7 @@ describe("MenusPage 폼 초점", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
     await screen.findByRole("heading", { name: "메뉴 수정" });
 
     await user.click(screen.getByRole("button", { name: "취소" }));
@@ -93,7 +93,7 @@ describe("MenusPage 카테고리 칩", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
     await screen.findByRole("heading", { name: "메뉴 수정" });
 
     // 이 메뉴는 "한식"만 가지고 있다.
@@ -113,7 +113,7 @@ describe("선호도 별점 접근성", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
 
     // KIMCHI는 weight 3 — 채워진 별 셋이 눌린 상태다
     await waitFor(() =>
@@ -136,7 +136,7 @@ describe("선호도 별점 접근성", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
 
     expect(await screen.findByRole("group", { name: "선호도" })).toBeInTheDocument();
   });
@@ -154,7 +154,7 @@ describe("선호도 별점 접근성", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
 
     const group = await screen.findByRole("group", { name: "선호도" });
     // KIMCHI는 weight 3에서 시작한다. 5로 올려 두면 회귀 시 1로 떨어지는 폭이 커진다.
@@ -180,7 +180,7 @@ describe("선호도 별점 접근성", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
 
     // KIMCHI는 weight 3
     expect(await screen.findByRole("button", { name: "선호도 3" })).toHaveTextContent("★");
@@ -198,9 +198,94 @@ describe("선호도 별점 접근성", () => {
     const user = userEvent.setup();
     renderWithProviders(<MenusPage />);
 
-    await user.click(await screen.findByRole("button", { name: "수정" }));
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
 
     const group = await screen.findByRole("group", { name: "선호도" });
     expect(group.closest("label")).toBeNull();
+  });
+});
+
+/**
+ * 목록 화면의 접근 가능한 이름.
+ *
+ * <p>NVDA의 요소 목록이나 JAWS의 B 키 순회는 <b>버튼 이름만</b> 늘어놓는다. 이름에 항목명이
+ * 없으면 "수정, 추천에서 제외, 삭제"가 메뉴 수만큼 반복될 뿐이고, 앞의 {@code <strong>}은
+ * 제목이 아니라 일반 텍스트라 항목 단위로 건너뛸 수도 없다. 게다가 "수정"과 "추천에서 제외"는
+ * 확인 단계가 없어 잘못 누르면 그대로 실행된다.
+ */
+describe("목록의 이름", () => {
+  it("액션 버튼 3종이 어느 메뉴의 것인지 이름으로 밝힌다", async () => {
+    renderWithProviders(<MenusPage />);
+
+    expect(await screen.findByRole("button", { name: "김치찌개 수정" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "김치찌개 추천에서 제외" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "김치찌개 삭제" })).toBeInTheDocument();
+  });
+
+  it("읽기 전용 선호도가 별 글자가 아니라 문장으로 읽힌다", async () => {
+    renderWithProviders(<MenusPage />);
+
+    // title은 generic <span>에서 이름으로 노출되지 않는다. 별 글자만 남으면 스크린리더는
+    // "검은 별"을 세 번, "흰 별"을 두 번 읽거나 아무것도 읽지 않는다.
+    expect(await screen.findByText("선호도 5점 만점에 3점")).toBeInTheDocument();
+    expect(screen.getByText("★★★☆☆")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("태그 검색과 카테고리 직접 입력에 이름이 있다 (placeholder만으로는 부족하다)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(newMenuButton());
+
+    expect(await screen.findByRole("textbox", { name: "직접 입력한 카테고리" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "태그 검색" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 목록이 바뀌었다는 사실 자체가 통지되지 않았다.
+ *
+ * <p>역설적으로 <b>실패에는 role="alert"가 있는데 성공은 무음</b>이었다. 삭제하면 항목이
+ * 사라질 뿐이고 초점은 없어진 {@code <li>}와 함께 {@code <body>}로 떨어진다.
+ *
+ * <p>라이브 리전은 <b>내용보다 먼저 DOM에 있어야</b> 동작한다. 내용과 함께 삽입되는 리전은
+ * 스크린리더가 놓치므로, 비어 있는 채로 마운트되는지까지 확인한다.
+ */
+describe("목록 상태 통지", () => {
+  it("리전이 내용보다 먼저, 비어 있는 채로 마운트된다", () => {
+    // 목록이 아직 안 왔을 때(isPending)도 리전 자체는 이미 있어야 한다.
+    fetchMenusMock.mockReturnValue(new Promise(() => {}) as never);
+
+    renderWithProviders(<MenusPage />);
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("몇 개인지 알린다", async () => {
+    renderWithProviders(<MenusPage />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("메뉴 1개"));
+  });
+
+  it("삭제 성공을 이름과 함께 알린다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 삭제" }));
+
+    // 삭제된 뒤에는 목록에서 사라지므로, 이름은 변이 인자에 실려 있어야만 남는다.
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("'김치찌개' 메뉴를 삭제했습니다."),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("빈 상태 안내도 같은 리전 안에서 통지된다", async () => {
+    fetchMenusMock.mockResolvedValue({ menus: [], nextCursor: null, hasNext: false });
+
+    renderWithProviders(<MenusPage />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/등록된 메뉴가 없습니다/));
   });
 });

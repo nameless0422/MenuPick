@@ -151,17 +151,42 @@ export default function KakaoMap({ points, level = 5, ariaLabel }: Props) {
   if (plotted.length === 0) return null;
 
   return (
-    // aria-live="off": 픽 결과는 aria-live 영역 안에 있는데, SDK가 지도를 그리면서
-    // 노드를 수백 개 만든다. 그대로 두면 스크린리더가 그 변화를 전부 읽어 정작 중요한
-    // "무엇이 뽑혔는지"가 묻힌다. 지도 안쪽만 알림에서 빼낸다.
-    <div className="kakao-map" aria-live="off">
+    <div className="kakao-map">
+      {/*
+        role="img": 이 지도는 목록의 대체가 아니라 덧붙임이다(RestaurantsPage.tsx:48,
+        PickPage.tsx:241 주석). 같은 정보가 아래 텍스트 목록에 전부 있으므로 지도는
+        "한 덩어리의 시각 표현"으로 읽히면 충분하고, aria-label 한 줄이 그 이름이 된다.
+
+        role="application"이면 안 된다. NVDA/JAWS는 그 역할을 만나면 가상 커서를 끄고
+        키 입력을 콘텐츠에 그대로 넘긴다 — 화살표 읽기·요소 점프 같은 탐색 수단이 이
+        영역에서 통째로 사라진다. 그 대가는 직접 만든 키보드 조작이 있을 때만 값어치가
+        있는데 이 컴포넌트에는 키 핸들러가 없고 컨테이너는 포커스도 받지 않는다.
+        즉 조작할 수 없는 260px 영역에서 탐색 수단만 빼앗는 꼴이 된다.
+
+        aria-live="off": 픽 결과는 aria-live 영역 안에 있는데(PickPage.tsx:199), SDK가
+        지도를 그리면서 노드를 수백 개 만든다. 그대로 두면 스크린리더가 그 변화를 전부
+        읽어 정작 중요한 "무엇이 뽑혔는지"가 묻힌다. 이 off는 반드시 캔버스에만 걸어야
+        한다 — 바깥 래퍼에 걸면 아래 실패 안내까지 함께 묻힌다(자손의 off가 조상의
+        polite를 덮어쓴다).
+      */}
       <div
         ref={containerRef}
         className={status === "ready" ? "kakao-map-canvas" : "kakao-map-canvas is-hidden"}
-        role="application"
+        role="img"
         aria-label={ariaLabel}
+        aria-live="off"
       />
-      {status !== "ready" && <p className="kakao-map-notice">{NOTICE[status]}</p>}
+      {/*
+        status는 loading에서 missing-key/error로 비동기 전이한다. 포커스 이동 없이 나중에
+        나타나는 상태 메시지라 role="status"가 있어야 통지된다(WCAG 4.1.3). 첫 렌더에
+        이미 "불러오는 중"으로 이 <p>가 존재하므로, 라이브 영역이 내용보다 먼저 DOM에
+        있어야 한다는 전제도 함께 지켜진다.
+      */}
+      {status !== "ready" && (
+        <p className="kakao-map-notice" role="status">
+          {NOTICE[status]}
+        </p>
+      )}
     </div>
   );
 }

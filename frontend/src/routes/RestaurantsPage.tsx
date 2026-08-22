@@ -39,17 +39,26 @@ export default function RestaurantsPage() {
       <PlaceSearch onSaved={invalidate} />
 
       <h2>저장한 식당</h2>
-      {restaurantsQuery.isPending && <p>불러오는 중…</p>}
       {restaurantsQuery.isError && <p className="error" role="alert">{errorMessage(restaurantsQuery.error)}</p>}
-      {restaurantsQuery.isSuccess && restaurants.length === 0 && (
-        <p>저장한 식당이 없습니다. 위에서 장소를 검색해 자주 가는 식당을 저장해 보세요.</p>
-      )}
+
+      {/* 리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
+          삽입되는 라이브 리전은 통지되지 않는다. */}
+      <div role="status">
+        {restaurantsQuery.isPending && <p>불러오는 중…</p>}
+        {restaurantsQuery.isSuccess && restaurants.length === 0 && (
+          <p>저장한 식당이 없습니다. 위에서 장소를 검색해 자주 가는 식당을 저장해 보세요.</p>
+        )}
+        {restaurantsQuery.isSuccess && restaurants.length > 0 && (
+          <p className="sr-only">{`저장한 식당 ${restaurants.length}곳`}</p>
+        )}
+      </div>
 
       {/* 지도는 목록을 대체하지 않고 위에 얹는다 — 좌표가 없거나 지도를 못 띄우는
           상황에서도 식당을 보고 고칠 수 있어야 한다. */}
       <KakaoMap points={restaurants} ariaLabel="저장한 식당 위치" />
 
-      <ul className="card-list">
+      {/* Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지운다. */}
+      <ul className="card-list" role="list">
         {restaurants.map((restaurant) => (
           <RestaurantCard key={restaurant.id} summary={restaurant} onChanged={invalidate} />
         ))}
@@ -88,6 +97,14 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 
   const places = searchQuery.data?.documents ?? [];
 
+  // 조사(을/를)가 받침에 따라 갈리므로 이름 뒤에 "식당"을 두어 이름과 조사를 떼어 놓는다.
+  const saveAnnouncement =
+    saveMutation.isSuccess && saveMutation.variables
+      ? saveMutation.data.created
+        ? `'${saveMutation.variables.place_name}' 식당을 저장했습니다.`
+        : `'${saveMutation.variables.place_name}' 식당은 이미 저장돼 있어요.`
+      : "";
+
   return (
     <section className="menu-form">
       <h2>장소 검색으로 식당 추가</h2>
@@ -98,10 +115,14 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
           setSubmitted(keyword.trim());
         }}
       >
+        {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
+            있고, 타이핑을 시작하면 화면에서도 사라진다. 이 칸은 식당을 추가하는 유일한
+            진입점이라 이름이 없으면 화면 전체가 막힌다. */}
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={100}
+          aria-label="장소 검색어"
           placeholder="상호명이나 지역+메뉴로 검색 (예: 역삼동 김치찌개)"
         />
         <button type="submit" disabled={!keyword.trim() || searchQuery.isFetching}>
@@ -111,12 +132,26 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 
       {searchQuery.isError && <p className="error" role="alert">{errorMessage(searchQuery.error)}</p>}
       {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
-      {searchQuery.isSuccess && places.length === 0 && (
-        <p>'{submitted}' 검색 결과가 없습니다. 다른 키워드로 검색해 보세요.</p>
-      )}
+
+      {/* 검색을 누르면 초점은 "검색" 버튼에 남고 결과만 화면 아래에 조용히 그려진다.
+          몇 건인지·0건인지·아직 도는 중인지 알 방법이 없으면 임의로 Tab을 눌러 더듬어야
+          한다. 검색 → 저장이 이 화면의 핵심 플로우다. */}
+      <div role="status">
+        {searchQuery.isFetching && <p className="sr-only">장소를 검색하는 중…</p>}
+        {searchQuery.isSuccess && !searchQuery.isFetching && places.length === 0 && (
+          <p>'{submitted}' 검색 결과가 없습니다. 다른 키워드로 검색해 보세요.</p>
+        )}
+        {searchQuery.isSuccess && !searchQuery.isFetching && places.length > 0 && (
+          <p className="sr-only">{`${places.length}건의 장소를 찾았습니다.`}</p>
+        )}
+      </div>
+
+      {/* 저장 결과는 검색 리전과 분리한다 — 한 리전에 담으면 aria-atomic 때문에 저장할
+          때마다 검색 건수까지 다시 읽힌다. */}
+      <p role="status" className="sr-only">{saveAnnouncement}</p>
 
       {places.length > 0 && (
-        <ul className="card-list">
+        <ul className="card-list" role="list">
           {places.map((place) => (
             <li key={place.id} className="card">
               <div className="card-main">
@@ -125,8 +160,15 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
               </div>
               <span>{place.road_address_name || place.address_name || "주소 정보 없음"}</span>
               <div className="card-actions">
+                {/* 결과가 15건이면 이름 없는 "저장"이 15개 늘어선다. 어느 가게를 저장하는
+                    버튼인지는 앞의 <strong>에만 있고 버튼 이름에는 없다. */}
                 <button
                   disabled={saveMutation.isPending}
+                  aria-label={
+                    saveMutation.isPending && saveMutation.variables === place
+                      ? `${place.place_name} 저장 중`
+                      : `${place.place_name} 저장`
+                  }
                   onClick={() => saveMutation.mutate(place)}
                 >
                   {saveMutation.isPending && saveMutation.variables === place
@@ -134,10 +176,13 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
                     : "저장"}
                 </button>
                 {/* 이미 갖고 있는 장소면 서버가 새로 만들지 않고 갖고 있던 식당을 준다.
-                    아무 말도 안 하면 목록이 그대로라 저장이 씹힌 것처럼 보인다. */}
+                    아무 말도 안 하면 목록이 그대로라 저장이 씹힌 것처럼 보인다.
+                    여기서는 role="status"를 쓰지 않는다 — 이 <span>은 내용과 함께 처음
+                    나타나므로 라이브 리전으로서는 동작하지 않고, 위의 상시 리전이 같은
+                    말을 이미 통지한다. 눈으로 보는 쪽만 담당한다. */}
                 {saveMutation.variables === place && saveMutation.isSuccess
                   && !saveMutation.data.created && (
-                    <span role="status">이미 저장한 식당이에요.</span>
+                    <span>이미 저장한 식당이에요.</span>
                   )}
               </div>
             </li>
@@ -213,7 +258,14 @@ function RestaurantCard({
       <div className="card-main">
         <strong>{summary.name}</strong>
         {detail?.naverUrl && (
-          <a href={detail.naverUrl} target="_blank" rel="noreferrer">
+          // 새 창으로 열린다는 사실도 이름에 넣는다 — 링크를 따라간 뒤 뒤로 가기가 없어
+          // 원래 자리로 못 돌아오는 상황을 미리 알린다.
+          <a
+            href={detail.naverUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${summary.name} 지도 보기 (새 창)`}
+          >
             지도 보기
           </a>
         )}
@@ -221,16 +273,27 @@ function RestaurantCard({
       <span>{summary.address || "주소 정보 없음"}</span>
       {detail?.phone && <span>{detail.phone}</span>}
       {deleteMutation.isError && <p className="error" role="alert">{errorMessage(deleteMutation.error)}</p>}
+      {/* 버튼 이름에 식당 이름을 넣는다. 없으면 NVDA 요소 목록에서 "수정, 메뉴 연결, 삭제"만
+          반복되어 어느 카드의 것인지 알 수 없다. "수정"과 "메뉴 연결"은 확인 단계도 없다. */}
       <div className="card-actions">
-        <button ref={editButton} disabled={!detail} onClick={() => setMode("edit")}>수정</button>
+        <button
+          ref={editButton}
+          disabled={!detail}
+          aria-label={`${summary.name} 수정`}
+          onClick={() => setMode("edit")}
+        >
+          수정
+        </button>
         <button
           ref={linkButton}
+          aria-label={`${summary.name} ${mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}`}
           onClick={() => (mode === "link" ? closeForm() : setMode("link"))}
         >
           {mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}
         </button>
         <button
           disabled={deleteMutation.isPending}
+          aria-label={`${summary.name} 삭제`}
           onClick={() => {
             if (window.confirm(`'${summary.name}' 식당을 삭제할까요?`)) {
               deleteMutation.mutate();

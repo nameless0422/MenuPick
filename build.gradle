@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '4.0.5'
+	id 'org.springframework.boot' version '4.1.0'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'jacoco'
 }
@@ -42,12 +42,12 @@ dependencies {
 	// Argon2BytesGenerator에 위임하므로, 이 의존성이 없으면 인코더 생성 시점에 NoClassDefFoundError가 난다.
 	// Boot BOM이 관리하지 않는 의존성이라 버전을 직접 지정한다(jjwt·springdoc과 같은 처리).
 	// 암호 라이브러리이므로 취약점 공지가 나면 우선 올릴 것.
-	implementation 'org.bouncycastle:bcprov-jdk18on:1.83'
+	implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2'
 
 	// JWT
-	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 
 	// Flyway (Boot 4부터 자동설정이 spring-boot-flyway 모듈로 분리 — 없으면 마이그레이션이 아예 실행되지 않는다)
 	implementation 'org.springframework.boot:spring-boot-flyway'

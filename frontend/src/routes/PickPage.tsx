@@ -156,8 +156,10 @@ export default function PickPage() {
             내 위치 기준으로 가까운 곳만
             {geo.status === "loading" && <small>위치 확인 중…</small>}
           </label>
+          {/* 최대 10초 뒤에 비동기로 나타나고, 그때 체크박스가 스스로 꺼진다. 알리지 않으면
+              스크린리더 사용자에게는 이유 없이 되돌아간 것으로만 보인다. */}
           {geo.status === "error" && (
-            <p className="pick-geo-error">
+            <p className="pick-geo-error" role="alert">
               위치를 가져오지 못해 거리 필터를 쓸 수 없어요. 브라우저의 위치 권한을 확인해 주세요.
             </p>
           )}
@@ -197,6 +199,9 @@ export default function PickPage() {
       {/* 픽 결과는 화면 일부만 조용히 바뀐다 — 알림이 없으면 스크린리더 사용자는
           버튼을 눌러도 무엇이 뽑혔는지 알 수 없다. 이 앱의 핵심 동작이라 반드시 필요하다. */}
       <div role="status" aria-live="polite">
+        {/* 뽑는 동안 이 리전이 비어 있으면 Enter를 친 뒤 최소 1.2초가 완전한 무음이 된다.
+            돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다. */}
+        {(spinning || pickMutation.isPending) && <p className="sr-only">메뉴를 뽑는 중…</p>}
         {result && <PickResultCard result={result} onRetry={spin} retrying={spinning || pickMutation.isPending} />}
 
         {noCandidates && (
@@ -242,8 +247,13 @@ function PickResultCard({
           어디로 가야 할지는 목록만으로 알 수 있어야 한다. */}
       <KakaoMap points={restaurants} ariaLabel={`${menu.name} 추천 식당 위치`} />
 
+      {/* 지도를 못 보는 사람에게는 이 목록이 유일한 경로다. 몇 곳인지부터 알려야 한다.
+          Safari + VoiceOver는 list-style: none이 걸린 <ul>의 목록 시맨틱을 지우므로
+          role도 명시한다. */}
       {restaurants.length > 0 && (
-        <ul className="pick-restaurants">
+        <>
+        <p className="sr-only">{`추천 식당 ${restaurants.length}곳`}</p>
+        <ul className="pick-restaurants" role="list">
           {restaurants.map((restaurant) => (
             <li key={restaurant.id}>
               <strong>{restaurant.name}</strong>
@@ -254,6 +264,7 @@ function PickResultCard({
             </li>
           ))}
         </ul>
+        </>
       )}
 
       <div className="card-actions">
@@ -301,11 +312,14 @@ function CategoryFilter({
           </button>
         ))}
       </div>
+      {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
+          있고, 타이핑을 시작하면 화면에서도 사라진다. (MenusPage의 CategoryPicker와 같은 처리) */}
       <div className="inline-add">
         <input
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           maxLength={20}
+          aria-label="직접 입력한 카테고리"
           placeholder="직접 입력"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -359,6 +373,7 @@ function TagFilter({
               key={tag.id}
               type="button"
               {...chipToggle(true, "chip-tag")}
+              aria-label={`${tag.name} 태그 선택 해제`}
               title="클릭하면 해제"
               onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
             >
@@ -368,10 +383,14 @@ function TagFilter({
         </div>
       )}
       <div className="inline-add">
+        {/* 이 컴포넌트는 "포함 태그"와 "제외 태그"로 두 번 렌더된다. legend는 fieldset에만
+            붙어 있어 이름 계산에 들어오지 않으므로, 둘을 구분하려면 입력마다 이름이 있어야
+            한다 — 없으면 음성 제어로 어느 쪽을 지목했는지 알 수 없다. */}
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={50}
+          aria-label={`${legend} 검색`}
           placeholder={placeholder}
         />
       </div>

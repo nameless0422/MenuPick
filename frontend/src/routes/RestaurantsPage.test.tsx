@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import RestaurantsPage from "./RestaurantsPage";
 import { fetchRestaurant, fetchRestaurants } from "../api/restaurants";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
+import { searchPlacesByKeyword } from "../api/places";
 
 vi.mock("../api/restaurants", () => ({
   fetchRestaurants: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock("../api/places", () => ({ searchPlacesByKeyword: vi.fn() }));
 vi.mock("../api/menus", () => ({ fetchMenus: vi.fn().mockResolvedValue({ menus: [] }) }));
 vi.mock("../api/menuRestaurants", () => ({ createMenuRestaurant: vi.fn() }));
 
+const searchPlacesMock = vi.mocked(searchPlacesByKeyword);
 const fetchRestaurantsMock = vi.mocked(fetchRestaurants);
 const fetchRestaurantMock = vi.mocked(fetchRestaurant);
 
@@ -82,7 +84,7 @@ describe("메뉴 연결 폼의 별점", () => {
     const user = userEvent.setup();
     renderWithProviders(<RestaurantsPage />);
 
-    await user.click(await screen.findByRole("button", { name: "메뉴 연결" }));
+    await user.click(await screen.findByRole("button", { name: "진주회관 메뉴 연결" }));
 
     const group = await screen.findByRole("group", { name: "별점" });
     await user.click(screen.getByRole("button", { name: "별점 5" }));
@@ -100,9 +102,143 @@ describe("메뉴 연결 폼의 별점", () => {
     const user = userEvent.setup();
     renderWithProviders(<RestaurantsPage />);
 
-    await user.click(await screen.findByRole("button", { name: "메뉴 연결" }));
+    await user.click(await screen.findByRole("button", { name: "진주회관 메뉴 연결" }));
 
     const group = await screen.findByRole("group", { name: "별점" });
     expect(group.closest("label")).toBeNull();
+  });
+});
+
+/**
+ * 이 화면은 "검색해서 저장한다"가 전부인데, 그 두 컨트롤에 이름이 없었다.
+ * 검색 입력은 식당을 추가하는 유일한 진입점이고, 결과의 "저장" 버튼은 결과 수만큼 늘어선다.
+ */
+describe("검색과 목록의 이름", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    searchPlacesMock.mockReset();
+  });
+
+  it("장소 검색 입력에 이름이 있다 (placeholder는 이름 계산의 최후 폴백일 뿐이다)", async () => {
+    fetchRestaurantsMock.mockResolvedValue([]);
+
+    renderWithProviders(<RestaurantsPage />);
+
+    expect(await screen.findByRole("textbox", { name: "장소 검색어" })).toBeInTheDocument();
+  });
+
+  it("저장한 식당의 액션 3종이 어느 식당의 것인지 밝힌다", async () => {
+    fetchRestaurantsMock.mockResolvedValue([
+      { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978 },
+    ]);
+
+    renderWithProviders(<RestaurantsPage />);
+
+    expect(await screen.findByRole("button", { name: "진주회관 수정" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "진주회관 메뉴 연결" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "진주회관 삭제" })).toBeInTheDocument();
+  });
+
+  it("검색 결과의 저장 버튼이 어느 가게를 저장하는지 밝힌다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantsMock.mockResolvedValue([]);
+    searchPlacesMock.mockResolvedValue({
+      meta: { total_count: 2, pageable_count: 2, is_end: true },
+      documents: [
+        place("1", "진주회관"),
+        place("2", "을지면옥"),
+      ],
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.type(await screen.findByRole("textbox", { name: "장소 검색어" }), "중구");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+
+    // 이름이 없으면 "저장, 저장"만 남아 어느 쪽을 눌렀는지 알 수 없다.
+    expect(await screen.findByRole("button", { name: "진주회관 저장" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "을지면옥 저장" })).toBeInTheDocument();
+  });
+});
+
+function place(id: string, name: string) {
+  return {
+    id,
+    place_name: name,
+    address_name: "서울시 중구",
+    road_address_name: null,
+    x: "126.978",
+    y: "37.5665",
+    phone: null,
+    place_url: null,
+    category_name: null,
+    category_group_code: null,
+    category_group_name: null,
+    distance: null,
+  };
+}
+
+/**
+ * 검색 → 저장이 이 화면의 핵심 플로우인데, 둘 다 결과가 통지되지 않았다.
+ * "검색"을 눌러도 초점은 버튼에 남고 결과만 화면 아래에 조용히 그려진다.
+ */
+describe("검색·저장 결과 통지", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    searchPlacesMock.mockReset();
+    fetchRestaurantsMock.mockResolvedValue([]);
+  });
+
+  it("검색 결과 건수를 알린다", async () => {
+    const user = userEvent.setup();
+    searchPlacesMock.mockResolvedValue({
+      meta: { total_count: 2, pageable_count: 2, is_end: true },
+      documents: [place("1", "진주회관"), place("2", "을지면옥")],
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.type(await screen.findByRole("textbox", { name: "장소 검색어" }), "중구");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("2건의 장소를 찾았습니다.")),
+      ).toBe(true),
+    );
+  });
+
+  it("검색 결과가 0건인 것도 알린다", async () => {
+    const user = userEvent.setup();
+    searchPlacesMock.mockResolvedValue({
+      meta: { total_count: 0, pageable_count: 0, is_end: true },
+      documents: [],
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.type(await screen.findByRole("textbox", { name: "장소 검색어" }), "없는키워드");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+
+    // 이 안내는 원래도 화면에 있었지만 라이브 리전 밖이라 통지되지 않았다.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("검색 결과가 없습니다")),
+      ).toBe(true),
+    );
+  });
+
+  it("저장한 식당 수를 알린다", async () => {
+    fetchRestaurantsMock.mockResolvedValue([
+      { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978 },
+    ]);
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("저장한 식당 1곳")),
+      ).toBe(true),
+    );
   });
 });

@@ -69,9 +69,21 @@ export default function MenusPage() {
     onSettled: invalidate,
   });
 
-  const deleteMutation = useMutation({ mutationFn: deleteMenu, onSettled: invalidate });
+  // 삭제가 끝나면 그 메뉴는 목록에서 사라진다 — 성공 안내에 이름을 넣으려면 변이 인자에
+  // 이름을 함께 실어 두는 수밖에 없다.
+  const deleteMutation = useMutation({
+    mutationFn: ({ menuId }: { menuId: number; name: string }) => deleteMenu(menuId),
+    onSettled: invalidate,
+  });
 
   const menus = menusQuery.data?.pages.flatMap((page) => page.menus) ?? [];
+
+  // 조사(을/를)는 받침에 따라 갈리므로 이름 뒤에 "메뉴를"을 붙여 이름과 조사를 떼어 놓는다.
+  const listAnnouncement = menusQuery.isFetchingNextPage
+    ? "메뉴를 더 불러오는 중…"
+    : deleteMutation.isSuccess
+      ? `'${deleteMutation.variables.name}' 메뉴를 삭제했습니다. 메뉴 ${menus.length}개.`
+      : `메뉴 ${menus.length}개`;
 
   return (
     <div className="page">
@@ -89,7 +101,6 @@ export default function MenusPage() {
         <MenuForm onClose={closeForm} onSaved={() => { closeForm(); invalidate(); }} />
       )}
 
-      {menusQuery.isPending && <p>불러오는 중…</p>}
       {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
 
       {/* 삭제·제외 토글은 실패해도 onSettled가 목록을 새로고침해 원래대로 돌아간다.
@@ -100,11 +111,25 @@ export default function MenusPage() {
       {excludeMutation.isError && (
         <p className="error" role="alert">추천 제외 설정을 바꾸지 못했습니다. {errorMessage(excludeMutation.error)}</p>
       )}
-      {menusQuery.isSuccess && menus.length === 0 && (
-        <p>등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요.</p>
-      )}
+      {/* 목록이 바뀌었다는 사실은 화면 아래가 조용히 다시 그려지는 것으로만 나타난다.
+          특히 삭제는 항목이 사라질 뿐 아무 소리도 안 나서, 실패에만 role="alert"가 있고
+          성공은 통지되지 않는 뒤집힌 상태였다.
+          이 리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
+          삽입되는 라이브 리전은 통지되지 않는다. role="status"는 aria-atomic이 기본이라
+          한 번에 문장 하나만 두는 편이 낫다. */}
+      <div role="status">
+        {menusQuery.isPending && <p>불러오는 중…</p>}
+        {menusQuery.isSuccess && menus.length === 0 && (
+          <p>등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요.</p>
+        )}
+        {menusQuery.isSuccess && menus.length > 0 && (
+          <p className="sr-only">{listAnnouncement}</p>
+        )}
+      </div>
 
-      <ul className="card-list">
+      {/* Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지운다.
+          role을 명시하면 "목록, 항목 3개"가 그대로 유지된다. */}
+      <ul className="card-list" role="list">
         {menus.map((menu) =>
           editing === menu.id ? (
             <li key={menu.id} className="card">
@@ -118,10 +143,13 @@ export default function MenusPage() {
             <li key={menu.id} className={`card${menu.isExcluded ? " card-muted" : ""}`}>
               <div className="card-main">
                 <strong>{menu.name}</strong>
-                <span className="weight" title={`선호도 ${menu.weight}`}>
-                  {"★".repeat(menu.weight)}
-                  {"☆".repeat(5 - menu.weight)}
+                {/* title은 generic <span>에서 접근 가능한 이름으로 노출되지 않고, 터치·키보드
+                    사용자에게는 아예 보이지 않는다. 별 글자 자체는 감추고(안 그러면 "검은 별"이
+                    다섯 번 읽힌다) 같은 뜻을 문장 하나로 따로 둔다. */}
+                <span className="weight" aria-hidden="true">
+                  {"★".repeat(menu.weight) + "☆".repeat(5 - menu.weight)}
                 </span>
+                <span className="sr-only">{`선호도 5점 만점에 ${menu.weight}점`}</span>
                 {menu.isExcluded && <span className="chip chip-warn">추천 제외</span>}
               </div>
               {(menu.categories.length > 0 || menu.tags.length > 0) && (
@@ -135,23 +163,31 @@ export default function MenusPage() {
                 </div>
               )}
               <div className="card-actions">
+                {/* 버튼 이름에 메뉴 이름을 넣는다. 이게 없으면 NVDA 요소 목록이나 JAWS의 B 키
+                    순회에서 "수정, 추천에서 제외, 삭제"만 끝없이 반복되어 어느 항목의 것인지
+                    알 수 없다. 앞의 <strong>{menu.name}</strong>은 제목이 아니라 일반 텍스트라
+                    항목 단위로 건너뛸 수도 없다. 특히 "수정"과 "추천에서 제외"는 확인 단계가
+                    없어 잘못 누르면 그대로 실행된다. */}
                 <button
                   ref={(node) => { openers.current.set(menu.id, node); }}
+                  aria-label={`${menu.name} 수정`}
                   onClick={() => setEditing(menu.id)}
                 >
                   수정
                 </button>
                 <button
                   disabled={excludeMutation.isPending}
+                  aria-label={`${menu.name} ${menu.isExcluded ? "추천에 포함" : "추천에서 제외"}`}
                   onClick={() => excludeMutation.mutate({ menuId: menu.id, exclude: !menu.isExcluded })}
                 >
                   {menu.isExcluded ? "추천에 포함" : "추천에서 제외"}
                 </button>
                 <button
                   disabled={deleteMutation.isPending}
+                  aria-label={`${menu.name} 삭제`}
                   onClick={() => {
                     if (window.confirm(`'${menu.name}' 메뉴를 삭제할까요?`)) {
-                      deleteMutation.mutate(menu.id);
+                      deleteMutation.mutate({ menuId: menu.id, name: menu.name });
                     }
                   }}
                 >
@@ -365,11 +401,15 @@ function CategoryPicker({
           </button>
         ))}
       </div>
+      {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
+          있고, 타이핑을 시작하는 순간 화면에서도 사라져 이 칸이 무엇이었는지 되짚을 방법이
+          없다. 음성 제어로 지목할 이름도 필요하다. */}
       <div className="inline-add">
         <input
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           maxLength={20}
+          aria-label="직접 입력한 카테고리"
           placeholder="직접 입력"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -424,6 +464,7 @@ function TagPicker({
               key={tag.id}
               type="button"
               {...chipToggle(true, "chip-tag")}
+              aria-label={`${tag.name} 태그 선택 해제`}
               title="클릭하면 해제"
               onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
             >
@@ -437,6 +478,7 @@ function TagPicker({
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={50}
+          aria-label="태그 검색"
           placeholder="태그 검색 (예: 혼밥)"
         />
         {canCreate && (

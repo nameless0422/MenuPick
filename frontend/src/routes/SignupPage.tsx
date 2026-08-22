@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { signup, resendVerification, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../api/auth";
@@ -113,10 +113,20 @@ export default function SignupPage() {
 /** 가입 직후 화면. 인증을 마쳐야 로그인되므로 다음 할 일을 분명히 알려준다. */
 function VerificationSent({ email }: { email: string }) {
   const resendMutation = useMutation({ mutationFn: () => resendVerification(email) });
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // 가입에 성공하면 폼이 통째로 이 화면으로 갈린다 — 방금 누른 "가입하기" 버튼이 사라져
+  // 브라우저가 초점을 <body>로 되돌리고, 그때부터 Tab은 페이지 맨 위로 간다.
+  // 이 화면은 "메일을 확인해야 로그인된다"는 다음 행동 지시를 담고 있다. 인증을 마쳐야
+  // 로그인이 되는 구조(auth.ts의 EMAIL_NOT_VERIFIED)라, 이 안내를 놓치면 가입 직후
+  // 로그인 실패 루프에 빠진다. 제목으로 초점을 옮겨 화면이 바뀐 사실부터 알린다.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
 
   return (
     <div className="login-page">
-      <h1>메일을 확인해주세요</h1>
+      <h1 ref={headingRef} tabIndex={-1}>메일을 확인해주세요</h1>
       <section className="card login-demo">
         {/* 발송은 서버가 별도 스레드로 처리해 응답 시점에는 아직 나가지 않았을 수 있다.
             실패해도 화면에 뜨지 않으므로 "보냈다"고 단언하지 않고, 재발송 버튼을 항상 함께 둔다. */}
@@ -125,13 +135,22 @@ function VerificationSent({ email }: { email: string }) {
         </p>
         <p className="login-demo-desc">링크는 24시간 동안 유효합니다.</p>
 
-        {resendMutation.isSuccess ? (
-          <p className="auth-notice">인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요.</p>
-        ) : (
-          <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate()}>
-            {resendMutation.isPending ? "보내는 중…" : "메일이 안 왔어요"}
-          </button>
+        {/* 버튼을 성공 문구로 갈아치우면 방금 누른 요소가 사라져 초점이 <body>로 떨어지고,
+            바뀐 문구도 통지되지 않는다. 버튼은 그대로 두고 결과만 덧붙인다.
+            보이는 문구와 통지를 나눈다 — 통지용 리전은 마운트 시점부터 비어 있는 채로
+            자리를 지켜야 하고(내용과 함께 삽입되는 리전은 통지되지 않는다), 같은 말이
+            두 번 읽히지 않도록 보이는 쪽은 감춘다. */}
+        <button disabled={resendMutation.isPending} onClick={() => resendMutation.mutate()}>
+          {resendMutation.isPending ? "보내는 중…" : "메일이 안 왔어요"}
+        </button>
+        {resendMutation.isSuccess && (
+          <p className="auth-notice" aria-hidden="true">
+            인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요.
+          </p>
         )}
+        <p role="status" className="sr-only">
+          {resendMutation.isSuccess ? "인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요." : ""}
+        </p>
         {resendMutation.isError && <p className="error" role="alert">{apiErrorMessage(resendMutation.error)}</p>}
       </section>
 
