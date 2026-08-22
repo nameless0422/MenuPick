@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import HistoryPage from "./HistoryPage";
@@ -86,5 +86,65 @@ describe("히스토리 목록의 이름", () => {
     expect(await screen.findByRole("button", { name: /삭제된 메뉴 픽 기록 삭제/ })).toBeInTheDocument();
     // VisitAction은 menuName이 null이면 "이 픽"으로 부른다 — 빈 이름을 만들지 않는다.
     expect(screen.getByRole("button", { name: "이 픽 방문했어요" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 기간 필터를 바꾸면 목록이 통째로 갈리는데, 화면 아래가 조용히 다시 그려질 뿐이었다.
+ * 삭제도 마찬가지로 항목만 사라지고 아무 소리가 나지 않았다.
+ */
+describe("목록 상태 통지", () => {
+  it("몇 개인지 알린다", async () => {
+    renderWithProviders(<HistoryPage />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("픽 기록 1개"));
+  });
+
+  it("삭제 성공을 이름과 함께 알린다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<HistoryPage />);
+
+    await user.click(await screen.findByRole("button", { name: /김치찌개 픽 기록 삭제/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("'김치찌개' 픽 기록을 삭제했습니다."),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("결과가 0건이면 빈 목록을 남기지 않는다", async () => {
+    fetchHistoriesMock.mockResolvedValue({ histories: [], nextCursor: null, hasNext: false });
+
+    renderWithProviders(<HistoryPage />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/아직 픽 기록이 없어요/));
+    // 빈 <ul>이 남으면 "목록, 항목 0개"로 읽혀 위 안내와 어긋난다.
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 날짜는 기계가 읽을 수 있는 형태로도 남겨야 하고, "전체"(3650일) 필터에서는 연도가 없으면
+ * 작년 기록과 올해 기록이 똑같이 읽힌다.
+ */
+describe("날짜 표기", () => {
+  it("<time datetime>으로 원본 시각을 남긴다", async () => {
+    renderWithProviders(<HistoryPage />);
+
+    const time = (await screen.findByText(/8월 21일/)).closest("time");
+    expect(time).toHaveAttribute("datetime", "2026-08-21T19:30:00");
+  });
+
+  it("올해가 아닌 기록에는 연도를 붙인다", async () => {
+    fetchHistoriesMock.mockResolvedValue({
+      histories: [{ ...KIMCHI_PICK, recommendedAt: "2019-03-04T12:00:00" }],
+      nextCursor: null,
+      hasNext: false,
+    });
+
+    renderWithProviders(<HistoryPage />);
+
+    expect(await screen.findByText(/2019년 3월 4일/)).toBeInTheDocument();
   });
 });

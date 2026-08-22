@@ -241,3 +241,51 @@ describe("목록의 이름", () => {
     expect(screen.getByRole("textbox", { name: "태그 검색" })).toBeInTheDocument();
   });
 });
+
+/**
+ * 목록이 바뀌었다는 사실 자체가 통지되지 않았다.
+ *
+ * <p>역설적으로 <b>실패에는 role="alert"가 있는데 성공은 무음</b>이었다. 삭제하면 항목이
+ * 사라질 뿐이고 초점은 없어진 {@code <li>}와 함께 {@code <body>}로 떨어진다.
+ *
+ * <p>라이브 리전은 <b>내용보다 먼저 DOM에 있어야</b> 동작한다. 내용과 함께 삽입되는 리전은
+ * 스크린리더가 놓치므로, 비어 있는 채로 마운트되는지까지 확인한다.
+ */
+describe("목록 상태 통지", () => {
+  it("리전이 내용보다 먼저, 비어 있는 채로 마운트된다", () => {
+    // 목록이 아직 안 왔을 때(isPending)도 리전 자체는 이미 있어야 한다.
+    fetchMenusMock.mockReturnValue(new Promise(() => {}) as never);
+
+    renderWithProviders(<MenusPage />);
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("몇 개인지 알린다", async () => {
+    renderWithProviders(<MenusPage />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("메뉴 1개"));
+  });
+
+  it("삭제 성공을 이름과 함께 알린다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 삭제" }));
+
+    // 삭제된 뒤에는 목록에서 사라지므로, 이름은 변이 인자에 실려 있어야만 남는다.
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("'김치찌개' 메뉴를 삭제했습니다."),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("빈 상태 안내도 같은 리전 안에서 통지된다", async () => {
+    fetchMenusMock.mockResolvedValue({ menus: [], nextCursor: null, hasNext: false });
+
+    renderWithProviders(<MenusPage />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/등록된 메뉴가 없습니다/));
+  });
+});

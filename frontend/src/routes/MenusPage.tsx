@@ -69,9 +69,21 @@ export default function MenusPage() {
     onSettled: invalidate,
   });
 
-  const deleteMutation = useMutation({ mutationFn: deleteMenu, onSettled: invalidate });
+  // 삭제가 끝나면 그 메뉴는 목록에서 사라진다 — 성공 안내에 이름을 넣으려면 변이 인자에
+  // 이름을 함께 실어 두는 수밖에 없다.
+  const deleteMutation = useMutation({
+    mutationFn: ({ menuId }: { menuId: number; name: string }) => deleteMenu(menuId),
+    onSettled: invalidate,
+  });
 
   const menus = menusQuery.data?.pages.flatMap((page) => page.menus) ?? [];
+
+  // 조사(을/를)는 받침에 따라 갈리므로 이름 뒤에 "메뉴를"을 붙여 이름과 조사를 떼어 놓는다.
+  const listAnnouncement = menusQuery.isFetchingNextPage
+    ? "메뉴를 더 불러오는 중…"
+    : deleteMutation.isSuccess
+      ? `'${deleteMutation.variables.name}' 메뉴를 삭제했습니다. 메뉴 ${menus.length}개.`
+      : `메뉴 ${menus.length}개`;
 
   return (
     <div className="page">
@@ -89,7 +101,6 @@ export default function MenusPage() {
         <MenuForm onClose={closeForm} onSaved={() => { closeForm(); invalidate(); }} />
       )}
 
-      {menusQuery.isPending && <p>불러오는 중…</p>}
       {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
 
       {/* 삭제·제외 토글은 실패해도 onSettled가 목록을 새로고침해 원래대로 돌아간다.
@@ -100,11 +111,25 @@ export default function MenusPage() {
       {excludeMutation.isError && (
         <p className="error" role="alert">추천 제외 설정을 바꾸지 못했습니다. {errorMessage(excludeMutation.error)}</p>
       )}
-      {menusQuery.isSuccess && menus.length === 0 && (
-        <p>등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요.</p>
-      )}
+      {/* 목록이 바뀌었다는 사실은 화면 아래가 조용히 다시 그려지는 것으로만 나타난다.
+          특히 삭제는 항목이 사라질 뿐 아무 소리도 안 나서, 실패에만 role="alert"가 있고
+          성공은 통지되지 않는 뒤집힌 상태였다.
+          이 리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
+          삽입되는 라이브 리전은 통지되지 않는다. role="status"는 aria-atomic이 기본이라
+          한 번에 문장 하나만 두는 편이 낫다. */}
+      <div role="status">
+        {menusQuery.isPending && <p>불러오는 중…</p>}
+        {menusQuery.isSuccess && menus.length === 0 && (
+          <p>등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요.</p>
+        )}
+        {menusQuery.isSuccess && menus.length > 0 && (
+          <p className="sr-only">{listAnnouncement}</p>
+        )}
+      </div>
 
-      <ul className="card-list">
+      {/* Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지운다.
+          role을 명시하면 "목록, 항목 3개"가 그대로 유지된다. */}
+      <ul className="card-list" role="list">
         {menus.map((menu) =>
           editing === menu.id ? (
             <li key={menu.id} className="card">
@@ -162,7 +187,7 @@ export default function MenusPage() {
                   aria-label={`${menu.name} 삭제`}
                   onClick={() => {
                     if (window.confirm(`'${menu.name}' 메뉴를 삭제할까요?`)) {
-                      deleteMutation.mutate(menu.id);
+                      deleteMutation.mutate({ menuId: menu.id, name: menu.name });
                     }
                   }}
                 >
