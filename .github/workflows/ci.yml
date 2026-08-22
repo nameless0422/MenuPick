@@ -61,7 +61,7 @@ jobs:
           java-version: '17'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Run tests
         # test가 아니라 check를 부른다 — 커버리지 하한(jacocoTestCoverageVerification)까지 함께 돈다.
