@@ -119,10 +119,13 @@ export default function HistoryPage() {
       )}
 
       <ul className="card-list">
-        {histories.map((history) => (
+        {histories.map((history) => {
+          // 화면에 보이는 이름, 버튼 이름, 확인 대화상자가 전부 같은 말을 쓰게 한 번만 만든다.
+          const label = history.menuName ?? "삭제된 메뉴";
+          return (
           <li key={history.id} className="card">
             <div className="card-main">
-              <strong>{history.menuName ?? "삭제된 메뉴"}</strong>
+              <strong>{label}</strong>
               <span className="history-time">{formatDateTime(history.recommendedAt)}</span>
               {history.isVisited ? (
                 <span className="chip chip-tag">방문완료</span>
@@ -157,10 +160,14 @@ export default function HistoryPage() {
                   onVisited={invalidate}
                 />
               )}
+              {/* 이름 없는 "삭제"가 기록 수만큼 늘어서고, 확인 대화상자마저 무엇을 지우는지
+                  말하지 않아 되돌릴 수 없는 동작을 눈으로 확인할 방법이 없었다. 같은 메뉴를
+                  여러 번 뽑을 수 있으므로 시각까지 넣어야 항목이 서로 구분된다. */}
               <button
                 disabled={deleteMutation.isPending}
+                aria-label={`${label} 픽 기록 삭제 (${formatDateTime(history.recommendedAt)})`}
                 onClick={() => {
-                  if (window.confirm("이 픽 기록을 삭제할까요?")) {
+                  if (window.confirm(`'${label}' 픽 기록을 삭제할까요?`)) {
                     deleteMutation.mutate(history.id);
                   }
                 }}
@@ -169,7 +176,8 @@ export default function HistoryPage() {
               </button>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       {historyQuery.hasNextPage && (
@@ -225,13 +233,16 @@ function VisitAction({
     }
   };
 
+  // 한 카드에 방문 확정·취소·삭제 버튼이 함께 있어, 이름이 없으면 각 컨트롤이 무엇을
+  // 하는 것인지 알 수 없다. 히스토리 항목이 여러 개면 서로 구분되지도 않는다.
+  // 콤보박스에만 있던 이 처리를 같은 카드의 버튼들에도 똑같이 적용한다.
+  const label = history.menuName ?? "이 픽";
+
   if (candidates) {
     return (
       <span className="visit-choice">
-        {/* 한 카드에 방문 확정·취소·삭제 버튼이 함께 있어, 이름이 없으면 이 콤보박스가
-            무엇을 고르는 것인지 알 수 없다. 히스토리 항목이 여러 개면 서로 구분되지도 않는다. */}
         <select
-          aria-label={`${history.menuName ?? "이 픽"} 방문 식당 선택`}
+          aria-label={`${label} 방문 식당 선택`}
           value={selectedRestaurantId}
           onChange={(e) => setSelectedRestaurantId(Number(e.target.value))}
         >
@@ -243,18 +254,29 @@ function VisitAction({
         </select>
         <button
           disabled={visitMutation.isPending}
+          aria-label={`${label} ${visitMutation.isPending ? "처리 중" : "선택한 식당으로 방문 확정"}`}
           onClick={() => visitMutation.mutate(selectedRestaurantId)}
         >
           {visitMutation.isPending ? "처리 중…" : "이 식당으로 방문 확정"}
         </button>
-        <button type="button" onClick={() => setCandidates(null)}>취소</button>
+        <button
+          type="button"
+          aria-label={`${label} 방문 식당 선택 취소`}
+          onClick={() => setCandidates(null)}
+        >
+          취소
+        </button>
       </span>
     );
   }
 
   return (
     <span className="visit-action">
-      <button disabled={loadingCandidates || visitMutation.isPending} onClick={startVisit}>
+      <button
+        disabled={loadingCandidates || visitMutation.isPending}
+        aria-label={`${label} ${loadingCandidates || visitMutation.isPending ? "처리 중" : "방문했어요"}`}
+        onClick={startVisit}
+      >
         {loadingCandidates || visitMutation.isPending ? "처리 중…" : "방문했어요"}
       </button>
       {(loadError || visitMutation.isError) && (

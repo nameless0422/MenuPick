@@ -204,3 +204,23 @@ describe("PickPage 결과 지도", () => {
     expect(screen.getByText("120m")).toBeInTheDocument();
   });
 });
+
+/**
+ * TagFilter는 "포함 태그"와 "제외 태그"로 <b>두 번</b> 렌더된다. legend는 fieldset에만 붙어
+ * 있어 입력의 이름 계산에 들어오지 않으므로, 입력마다 이름이 없으면 음성 제어로 어느 쪽을
+ * 지목했는지 알 수 없고 스크린리더에도 똑같은 칸 두 개로만 보인다.
+ */
+describe("필터 입력의 이름", () => {
+  it("포함/제외 태그 검색 입력이 서로 구분되는 이름을 갖는다", async () => {
+    renderWithProviders(<PickPage />);
+
+    expect(await screen.findByRole("textbox", { name: "포함 태그 검색" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "제외 태그 검색" })).toBeInTheDocument();
+  });
+
+  it("카테고리 직접 입력에 이름이 있다", async () => {
+    renderWithProviders(<PickPage />);
+
+    expect(await screen.findByRole("textbox", { name: "직접 입력한 카테고리" })).toBeInTheDocument();
+  });
+});

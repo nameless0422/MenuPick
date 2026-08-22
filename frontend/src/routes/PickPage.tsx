@@ -301,11 +301,14 @@ function CategoryFilter({
           </button>
         ))}
       </div>
+      {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
+          있고, 타이핑을 시작하면 화면에서도 사라진다. (MenusPage의 CategoryPicker와 같은 처리) */}
       <div className="inline-add">
         <input
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           maxLength={20}
+          aria-label="직접 입력한 카테고리"
           placeholder="직접 입력"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -359,6 +362,7 @@ function TagFilter({
               key={tag.id}
               type="button"
               {...chipToggle(true, "chip-tag")}
+              aria-label={`${tag.name} 태그 선택 해제`}
               title="클릭하면 해제"
               onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
             >
@@ -368,10 +372,14 @@ function TagFilter({
         </div>
       )}
       <div className="inline-add">
+        {/* 이 컴포넌트는 "포함 태그"와 "제외 태그"로 두 번 렌더된다. legend는 fieldset에만
+            붙어 있어 이름 계산에 들어오지 않으므로, 둘을 구분하려면 입력마다 이름이 있어야
+            한다 — 없으면 음성 제어로 어느 쪽을 지목했는지 알 수 없다. */}
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={50}
+          aria-label={`${legend} 검색`}
           placeholder={placeholder}
         />
       </div>

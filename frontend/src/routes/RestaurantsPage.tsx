@@ -98,10 +98,14 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
           setSubmitted(keyword.trim());
         }}
       >
+        {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
+            있고, 타이핑을 시작하면 화면에서도 사라진다. 이 칸은 식당을 추가하는 유일한
+            진입점이라 이름이 없으면 화면 전체가 막힌다. */}
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={100}
+          aria-label="장소 검색어"
           placeholder="상호명이나 지역+메뉴로 검색 (예: 역삼동 김치찌개)"
         />
         <button type="submit" disabled={!keyword.trim() || searchQuery.isFetching}>
@@ -125,8 +129,15 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
               </div>
               <span>{place.road_address_name || place.address_name || "주소 정보 없음"}</span>
               <div className="card-actions">
+                {/* 결과가 15건이면 이름 없는 "저장"이 15개 늘어선다. 어느 가게를 저장하는
+                    버튼인지는 앞의 <strong>에만 있고 버튼 이름에는 없다. */}
                 <button
                   disabled={saveMutation.isPending}
+                  aria-label={
+                    saveMutation.isPending && saveMutation.variables === place
+                      ? `${place.place_name} 저장 중`
+                      : `${place.place_name} 저장`
+                  }
                   onClick={() => saveMutation.mutate(place)}
                 >
                   {saveMutation.isPending && saveMutation.variables === place
@@ -213,7 +224,14 @@ function RestaurantCard({
       <div className="card-main">
         <strong>{summary.name}</strong>
         {detail?.naverUrl && (
-          <a href={detail.naverUrl} target="_blank" rel="noreferrer">
+          // 새 창으로 열린다는 사실도 이름에 넣는다 — 링크를 따라간 뒤 뒤로 가기가 없어
+          // 원래 자리로 못 돌아오는 상황을 미리 알린다.
+          <a
+            href={detail.naverUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${summary.name} 지도 보기 (새 창)`}
+          >
             지도 보기
           </a>
         )}
@@ -221,16 +239,27 @@ function RestaurantCard({
       <span>{summary.address || "주소 정보 없음"}</span>
       {detail?.phone && <span>{detail.phone}</span>}
       {deleteMutation.isError && <p className="error" role="alert">{errorMessage(deleteMutation.error)}</p>}
+      {/* 버튼 이름에 식당 이름을 넣는다. 없으면 NVDA 요소 목록에서 "수정, 메뉴 연결, 삭제"만
+          반복되어 어느 카드의 것인지 알 수 없다. "수정"과 "메뉴 연결"은 확인 단계도 없다. */}
       <div className="card-actions">
-        <button ref={editButton} disabled={!detail} onClick={() => setMode("edit")}>수정</button>
+        <button
+          ref={editButton}
+          disabled={!detail}
+          aria-label={`${summary.name} 수정`}
+          onClick={() => setMode("edit")}
+        >
+          수정
+        </button>
         <button
           ref={linkButton}
+          aria-label={`${summary.name} ${mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}`}
           onClick={() => (mode === "link" ? closeForm() : setMode("link"))}
         >
           {mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}
         </button>
         <button
           disabled={deleteMutation.isPending}
+          aria-label={`${summary.name} 삭제`}
           onClick={() => {
             if (window.confirm(`'${summary.name}' 식당을 삭제할까요?`)) {
               deleteMutation.mutate();
