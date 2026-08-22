@@ -36,7 +36,7 @@ dependencies {
 	// springdoc 2.x는 Spring Boot 3/Framework 6 라인이라 Boot 4에서는 기동 시점에 깨진다.
 	// 3.0.3은 spring-boot-starter-parent 4.0.5(= 이 프로젝트의 Boot 버전)로 빌드된 릴리스다.
 	// 3.1.x는 Boot 4.1 라인이므로 Boot를 올릴 때 함께 올린다. (이슈 #19)
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
 
 	// Argon2 비밀번호 해싱. Spring Security의 Argon2PasswordEncoder는 구현을 BouncyCastle의
 	// Argon2BytesGenerator에 위임하므로, 이 의존성이 없으면 인코더 생성 시점에 NoClassDefFoundError가 난다.
@@ -67,7 +67,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.security:spring-security-test'
-	testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+	testImplementation 'com.squareup.okhttp3:mockwebserver:5.5.0'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
