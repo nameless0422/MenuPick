@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
@@ -26,6 +26,26 @@ export default function SettingsPage() {
   // 확인 패널을 연 뒤 유예 정책 동의 체크까지 마쳐야 실제 요청이 나간다.
   const [confirming, setConfirming] = useState(false);
   const [agreed, setAgreed] = useState(false);
+
+  // 확인 패널은 "회원 탈퇴" 버튼을 통째로 대체한다 — 방금 누른 버튼이 사라져 초점이
+  // <body>로 떨어지고, 되돌릴 수 없는 동작의 확인 패널이 열린 사실 자체가 전달되지 않는다.
+  // 취소도 마찬가지로 패널이 사라지며 초점을 잃는다. 이 처리는 MenusPage·RestaurantsPage에
+  // 이미 있는 것과 같다 — 이 화면만 빠져 있었다.
+  const confirmPanel = useRef<HTMLDivElement>(null);
+  const withdrawOpener = useRef<HTMLButtonElement>(null);
+  const [focusOpenerAfterCancel, setFocusOpenerAfterCancel] = useState(false);
+
+  useEffect(() => {
+    if (confirming) confirmPanel.current?.focus();
+  }, [confirming]);
+
+  useEffect(() => {
+    if (!focusOpenerAfterCancel) return;
+    // 취소하면 "회원 탈퇴" 버튼이 새로 마운트된다 — 닫기 전에 잡아 둔 참조로는 갈 수 없어
+    // 다시 그려진 뒤에 찾는다.
+    withdrawOpener.current?.focus();
+    setFocusOpenerAfterCancel(false);
+  }, [focusOpenerAfterCancel]);
 
   const logoutMutation = useMutation({ mutationFn: logout });
 
@@ -76,7 +96,13 @@ export default function SettingsPage() {
         </ul>
 
         {confirming ? (
-          <div className="settings-confirm">
+          <div
+            className="settings-confirm"
+            ref={confirmPanel}
+            tabIndex={-1}
+            role="group"
+            aria-label="회원 탈퇴 확인"
+          >
             <p className="settings-desc">
               정말 탈퇴할까요? 30일이 지나면 되돌릴 수 없습니다.
             </p>
@@ -103,6 +129,7 @@ export default function SettingsPage() {
                 onClick={() => {
                   setConfirming(false);
                   setAgreed(false);
+                  setFocusOpenerAfterCancel(true);
                 }}
               >
                 취소
@@ -111,7 +138,12 @@ export default function SettingsPage() {
           </div>
         ) : (
           <div className="card-actions">
-            <button type="button" disabled={busy} onClick={() => setConfirming(true)}>
+            <button
+              type="button"
+              ref={withdrawOpener}
+              disabled={busy}
+              onClick={() => setConfirming(true)}
+            >
               회원 탈퇴
             </button>
           </div>

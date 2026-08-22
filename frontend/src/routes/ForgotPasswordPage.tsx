@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { requestPasswordReset } from "../api/auth";
@@ -10,12 +10,22 @@ export default function ForgotPasswordPage() {
 
   const resetMutation = useMutation({ mutationFn: () => requestPasswordReset(email.trim()) });
 
+  // 발송에 성공하면 폼이 통째로 안내 화면으로 갈린다 — 방금 누른 버튼이 사라져 초점이
+  // <body>로 떨어진다. <h1>은 "비밀번호 재설정" 그대로라 제목만으로는 화면이 바뀐 것을
+  // 알 방법조차 없다. 그래서 안내 화면에 제목을 따로 두고 그리로 초점을 옮긴다.
+  const sentHeading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (resetMutation.isSuccess) sentHeading.current?.focus();
+  }, [resetMutation.isSuccess]);
+
   return (
     <div className="login-page">
       <h1>비밀번호 재설정</h1>
 
       {resetMutation.isSuccess ? (
         <section className="card login-demo">
+          <h2 ref={sentHeading} tabIndex={-1}>메일을 확인해주세요</h2>
           {/* 서버는 가입 여부와 무관하게 성공을 준다(계정 존재 여부를 흘리지 않기 위해).
               화면 문구도 "보냈다"가 아니라 "가입돼 있다면 보냈다"여야 사실과 맞는다. */}
           <p className="login-demo-desc">
