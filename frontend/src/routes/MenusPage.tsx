@@ -118,10 +118,13 @@ export default function MenusPage() {
             <li key={menu.id} className={`card${menu.isExcluded ? " card-muted" : ""}`}>
               <div className="card-main">
                 <strong>{menu.name}</strong>
-                <span className="weight" title={`선호도 ${menu.weight}`}>
-                  {"★".repeat(menu.weight)}
-                  {"☆".repeat(5 - menu.weight)}
+                {/* title은 generic <span>에서 접근 가능한 이름으로 노출되지 않고, 터치·키보드
+                    사용자에게는 아예 보이지 않는다. 별 글자 자체는 감추고(안 그러면 "검은 별"이
+                    다섯 번 읽힌다) 같은 뜻을 문장 하나로 따로 둔다. */}
+                <span className="weight" aria-hidden="true">
+                  {"★".repeat(menu.weight) + "☆".repeat(5 - menu.weight)}
                 </span>
+                <span className="sr-only">{`선호도 5점 만점에 ${menu.weight}점`}</span>
                 {menu.isExcluded && <span className="chip chip-warn">추천 제외</span>}
               </div>
               {(menu.categories.length > 0 || menu.tags.length > 0) && (
@@ -135,20 +138,28 @@ export default function MenusPage() {
                 </div>
               )}
               <div className="card-actions">
+                {/* 버튼 이름에 메뉴 이름을 넣는다. 이게 없으면 NVDA 요소 목록이나 JAWS의 B 키
+                    순회에서 "수정, 추천에서 제외, 삭제"만 끝없이 반복되어 어느 항목의 것인지
+                    알 수 없다. 앞의 <strong>{menu.name}</strong>은 제목이 아니라 일반 텍스트라
+                    항목 단위로 건너뛸 수도 없다. 특히 "수정"과 "추천에서 제외"는 확인 단계가
+                    없어 잘못 누르면 그대로 실행된다. */}
                 <button
                   ref={(node) => { openers.current.set(menu.id, node); }}
+                  aria-label={`${menu.name} 수정`}
                   onClick={() => setEditing(menu.id)}
                 >
                   수정
                 </button>
                 <button
                   disabled={excludeMutation.isPending}
+                  aria-label={`${menu.name} ${menu.isExcluded ? "추천에 포함" : "추천에서 제외"}`}
                   onClick={() => excludeMutation.mutate({ menuId: menu.id, exclude: !menu.isExcluded })}
                 >
                   {menu.isExcluded ? "추천에 포함" : "추천에서 제외"}
                 </button>
                 <button
                   disabled={deleteMutation.isPending}
+                  aria-label={`${menu.name} 삭제`}
                   onClick={() => {
                     if (window.confirm(`'${menu.name}' 메뉴를 삭제할까요?`)) {
                       deleteMutation.mutate(menu.id);
@@ -365,11 +376,15 @@ function CategoryPicker({
           </button>
         ))}
       </div>
+      {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
+          있고, 타이핑을 시작하는 순간 화면에서도 사라져 이 칸이 무엇이었는지 되짚을 방법이
+          없다. 음성 제어로 지목할 이름도 필요하다. */}
       <div className="inline-add">
         <input
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           maxLength={20}
+          aria-label="직접 입력한 카테고리"
           placeholder="직접 입력"
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -424,6 +439,7 @@ function TagPicker({
               key={tag.id}
               type="button"
               {...chipToggle(true, "chip-tag")}
+              aria-label={`${tag.name} 태그 선택 해제`}
               title="클릭하면 해제"
               onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
             >
@@ -437,6 +453,7 @@ function TagPicker({
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={50}
+          aria-label="태그 검색"
           placeholder="태그 검색 (예: 혼밥)"
         />
         {canCreate && (
