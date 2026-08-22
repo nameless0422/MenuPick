@@ -142,20 +142,30 @@ function EmailLoginForm() {
         <p className="error" role="alert">{apiErrorMessage(loginMutation.error)}</p>
       )}
 
+      {/* 버튼을 성공 문구로 갈아치우면 방금 누른 요소가 사라져 초점이 <body>로 떨어지고,
+          바뀐 문구도 통지되지 않는다. 여기는 이미 로그인에 실패해 막힌 사용자의 마지막
+          탈출구라, 눌러도 결과를 알 수 없으면 그대로 무한 재시도가 된다.
+          버튼은 그대로 두고 결과만 덧붙인다. 통지용 리전은 마운트 시점부터 비어 있는 채로
+          자리를 지켜야 하고(내용과 함께 삽입되는 리전은 통지되지 않는다), 같은 말이 두 번
+          읽히지 않도록 보이는 쪽은 감춘다. */}
       {needsVerification && (
         <p className="auth-notice">
-          {resendMutation.isSuccess ? (
-            "인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요."
-          ) : (
-            <button
-              type="button"
-              className="auth-inline-button"
-              disabled={resendMutation.isPending}
-              onClick={() => resendMutation.mutate()}
-            >
-              {resendMutation.isPending ? "보내는 중…" : "인증 메일 다시 보내기"}
-            </button>
+          <button
+            type="button"
+            className="auth-inline-button"
+            disabled={resendMutation.isPending}
+            onClick={() => resendMutation.mutate()}
+          >
+            {resendMutation.isPending ? "보내는 중…" : "인증 메일 다시 보내기"}
+          </button>
+          {resendMutation.isSuccess && (
+            <span aria-hidden="true"> 인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요.</span>
           )}
+        </p>
+      )}
+      {needsVerification && (
+        <p role="status" className="sr-only">
+          {resendMutation.isSuccess ? "인증 메일을 다시 보냈어요. 잠시 후에도 안 오면 다시 눌러주세요." : ""}
         </p>
       )}
       {resendMutation.isError && <p className="error" role="alert">{apiErrorMessage(resendMutation.error)}</p>}

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import LoginPage from "./LoginPage";
-import { login } from "../api/auth";
+import { login, resendVerification } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
 vi.mock("../api/pick", () => ({ requestDemoPick: vi.fn() }));
@@ -105,5 +105,55 @@ describe("LoginPage 실패 통지", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/올바르지 않습니다/);
+  });
+});
+
+/**
+ * 재발송 버튼이 자기 자신을 성공 문구로 갈아치우고 있었다.
+ *
+ * <p>포커스 소실과 문구 미고지가 동시에 일어난다. 여기는 <b>이미 로그인에 실패해 막힌
+ * 사용자의 마지막 탈출구</b>인데, 눌러도 결과를 알 수 없으니 그대로 무한 재시도가 된다.
+ */
+describe("LoginPage 인증 메일 재발송", () => {
+  async function failWithUnverified() {
+    const user = userEvent.setup();
+    vi.mocked(login).mockRejectedValue({
+      isAxiosError: true,
+      response: { data: { errorCode: "EMAIL_NOT_VERIFIED", message: "이메일 인증이 필요합니다." } },
+    });
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com");
+    await user.type(screen.getByLabelText("비밀번호"), "password123");
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    return user;
+  }
+
+  it("재발송에 성공해도 버튼이 사라지지 않는다 — 초점이 그대로 남는다", async () => {
+    vi.mocked(resendVerification).mockResolvedValue(undefined as never);
+    const user = await failWithUnverified();
+
+    const resend = await screen.findByRole("button", { name: "인증 메일 다시 보내기" });
+    await user.click(resend);
+
+    // 버튼이 문구로 갈리면 방금 누른 요소가 사라져 초점이 <body>로 떨어진다.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "인증 메일 다시 보내기" })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "인증 메일 다시 보내기" })).toHaveFocus();
+  });
+
+  it("재발송 결과를 통지한다", async () => {
+    vi.mocked(resendVerification).mockResolvedValue(undefined as never);
+    const user = await failWithUnverified();
+
+    await user.click(await screen.findByRole("button", { name: "인증 메일 다시 보내기" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("인증 메일을 다시 보냈어요")),
+      ).toBe(true),
+    );
   });
 });

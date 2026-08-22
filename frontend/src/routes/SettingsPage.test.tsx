@@ -173,3 +173,37 @@ describe("SettingsPage 소셜 계정 연동", () => {
     expect(await screen.findByText("카카오 계정을 연동했습니다.")).toBeInTheDocument();
   });
 });
+
+/**
+ * 회원 탈퇴 확인 패널은 "회원 탈퇴" 버튼을 통째로 대체한다 — 방금 누른 버튼이 사라져
+ * 초점이 {@code <body>}로 떨어지고, <b>되돌릴 수 없는 동작의 확인 패널이 열린 사실 자체가
+ * 전달되지 않는다.</b> 취소도 마찬가지로 패널이 사라지며 초점을 잃었다.
+ *
+ * <p>같은 처리가 MenusPage·RestaurantsPage에는 이미 있었고 이 화면만 빠져 있었다.
+ */
+describe("회원 탈퇴 확인 패널의 초점", () => {
+  beforeEach(() => {
+    fetchMeMock.mockResolvedValue(me());
+  });
+
+  it("패널이 열리면 초점이 패널로 간다", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
+
+    const panel = await screen.findByRole("group", { name: "회원 탈퇴 확인" });
+    await waitFor(() => expect(panel).toHaveFocus());
+  });
+
+  it("취소하면 초점이 '회원 탈퇴' 버튼으로 돌아온다", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
+    await user.click(await screen.findByRole("button", { name: "취소" }));
+
+    // 취소하면 버튼이 새로 마운트된다 — 닫기 전에 잡아 둔 참조로는 갈 수 없다.
+    await waitFor(() => expect(screen.getByRole("button", { name: "회원 탈퇴" })).toHaveFocus());
+  });
+});
