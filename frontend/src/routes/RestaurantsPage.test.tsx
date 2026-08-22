@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import RestaurantsPage from "./RestaurantsPage";
@@ -177,3 +177,68 @@ function place(id: string, name: string) {
     distance: null,
   };
 }
+
+/**
+ * 검색 → 저장이 이 화면의 핵심 플로우인데, 둘 다 결과가 통지되지 않았다.
+ * "검색"을 눌러도 초점은 버튼에 남고 결과만 화면 아래에 조용히 그려진다.
+ */
+describe("검색·저장 결과 통지", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    searchPlacesMock.mockReset();
+    fetchRestaurantsMock.mockResolvedValue([]);
+  });
+
+  it("검색 결과 건수를 알린다", async () => {
+    const user = userEvent.setup();
+    searchPlacesMock.mockResolvedValue({
+      meta: { total_count: 2, pageable_count: 2, is_end: true },
+      documents: [place("1", "진주회관"), place("2", "을지면옥")],
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.type(await screen.findByRole("textbox", { name: "장소 검색어" }), "중구");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("2건의 장소를 찾았습니다.")),
+      ).toBe(true),
+    );
+  });
+
+  it("검색 결과가 0건인 것도 알린다", async () => {
+    const user = userEvent.setup();
+    searchPlacesMock.mockResolvedValue({
+      meta: { total_count: 0, pageable_count: 0, is_end: true },
+      documents: [],
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.type(await screen.findByRole("textbox", { name: "장소 검색어" }), "없는키워드");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+
+    // 이 안내는 원래도 화면에 있었지만 라이브 리전 밖이라 통지되지 않았다.
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("검색 결과가 없습니다")),
+      ).toBe(true),
+    );
+  });
+
+  it("저장한 식당 수를 알린다", async () => {
+    fetchRestaurantsMock.mockResolvedValue([
+      { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978 },
+    ]);
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("status").some((r) => r.textContent?.includes("저장한 식당 1곳")),
+      ).toBe(true),
+    );
+  });
+});

@@ -24,11 +24,14 @@ const DAYS_OPTIONS: { label: string; value: number }[] = [
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
+// "전체"는 3650일이라 작년 기록이 그대로 섞인다. 연도를 늘 붙이면 최근 기록이 장황해지므로
+// 올해가 아닐 때만 붙인다 — 그래야 "8월 21일"이 어느 해의 것인지 헷갈리지 않는다.
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]}) ${hh}:${mm}`;
+  const year = d.getFullYear() === new Date().getFullYear() ? "" : `${d.getFullYear()}년 `;
+  return `${year}${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]}) ${hh}:${mm}`;
 }
 
 function filterLabel(condition: HistoryFilterCondition): string {
@@ -79,9 +82,21 @@ export default function HistoryPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["history"] });
 
-  const deleteMutation = useMutation({ mutationFn: deleteHistory, onSettled: invalidate });
+  // 삭제가 끝나면 그 기록은 목록에서 사라진다 — 성공 안내에 이름을 넣으려면 변이 인자에
+  // 이름을 함께 실어 두는 수밖에 없다.
+  const deleteMutation = useMutation({
+    mutationFn: ({ id }: { id: number; label: string }) => deleteHistory(id),
+    onSettled: invalidate,
+  });
 
   const histories = historyQuery.data?.pages.flatMap((page) => page.histories) ?? [];
+
+  // 조사(을/를)는 받침에 따라 갈리므로 이름 뒤에 "픽 기록을"을 붙여 이름과 조사를 떼어 놓는다.
+  const listAnnouncement = historyQuery.isFetchingNextPage
+    ? "픽 기록을 더 불러오는 중…"
+    : deleteMutation.isSuccess
+      ? `'${deleteMutation.variables.label}' 픽 기록을 삭제했습니다. 픽 기록 ${histories.length}개.`
+      : `픽 기록 ${histories.length}개`;
 
   return (
     <div className="page">
@@ -105,20 +120,32 @@ export default function HistoryPage() {
         ))}
       </div>
 
-      {historyQuery.isPending && <p>불러오는 중…</p>}
       {historyQuery.isError && <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>}
 
       {/* 삭제 실패 시 목록만 새로고침되어 항목이 그대로 남는다 — 이유를 알려야 한다 */}
       {deleteMutation.isError && (
         <p className="error" role="alert">삭제하지 못했습니다. {errorMessage(deleteMutation.error)}</p>
       )}
-      {historyQuery.isSuccess && histories.length === 0 && (
-        <p>
-          아직 픽 기록이 없어요. <Link to="/pick">오늘 뭐 먹을지 골라볼까요?</Link>
-        </p>
-      )}
+      {/* 기간 필터를 바꾸면 목록이 통째로 갈리는데 화면 아래가 조용히 다시 그려질 뿐이다.
+          리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
+          삽입되는 라이브 리전은 통지되지 않는다. */}
+      <div role="status">
+        {historyQuery.isPending && <p>불러오는 중…</p>}
+        {historyQuery.isSuccess && histories.length === 0 && (
+          <p>
+            아직 픽 기록이 없어요. <Link to="/pick">오늘 뭐 먹을지 골라볼까요?</Link>
+          </p>
+        )}
+        {historyQuery.isSuccess && histories.length > 0 && (
+          <p className="sr-only">{listAnnouncement}</p>
+        )}
+      </div>
 
-      <ul className="card-list">
+      {/* 결과가 0건일 때 빈 <ul>을 남기면 "목록, 항목 0개"로 읽혀 위 안내와 어긋난다.
+          Safari + VoiceOver는 list-style: none이 걸린 <ul>의 목록 시맨틱을 지우므로
+          role도 명시한다. */}
+      {histories.length > 0 && (
+      <ul className="card-list" role="list">
         {histories.map((history) => {
           // 화면에 보이는 이름, 버튼 이름, 확인 대화상자가 전부 같은 말을 쓰게 한 번만 만든다.
           const label = history.menuName ?? "삭제된 메뉴";
@@ -126,7 +153,9 @@ export default function HistoryPage() {
           <li key={history.id} className="card">
             <div className="card-main">
               <strong>{label}</strong>
-              <span className="history-time">{formatDateTime(history.recommendedAt)}</span>
+              <time className="history-time" dateTime={history.recommendedAt}>
+                {formatDateTime(history.recommendedAt)}
+              </time>
               {history.isVisited ? (
                 <span className="chip chip-tag">방문완료</span>
               ) : (
@@ -151,7 +180,10 @@ export default function HistoryPage() {
             <div className="card-actions">
               {history.isVisited ? (
                 history.visitedAt && (
-                  <span className="history-visited-at">방문 시각 {formatDateTime(history.visitedAt)}</span>
+                  <span className="history-visited-at">
+                  방문 시각{" "}
+                  <time dateTime={history.visitedAt}>{formatDateTime(history.visitedAt)}</time>
+                </span>
                 )
               ) : (
                 <VisitAction
@@ -168,7 +200,7 @@ export default function HistoryPage() {
                 aria-label={`${label} 픽 기록 삭제 (${formatDateTime(history.recommendedAt)})`}
                 onClick={() => {
                   if (window.confirm(`'${label}' 픽 기록을 삭제할까요?`)) {
-                    deleteMutation.mutate(history.id);
+                    deleteMutation.mutate({ id: history.id, label });
                   }
                 }}
               >
@@ -179,6 +211,7 @@ export default function HistoryPage() {
           );
         })}
       </ul>
+      )}
 
       {historyQuery.hasNextPage && (
         <button

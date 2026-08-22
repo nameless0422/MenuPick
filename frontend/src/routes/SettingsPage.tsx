@@ -164,7 +164,8 @@ function SocialLinkSection({ me }: { me: Me }) {
         </p>
       )}
 
-      <ul className="settings-links">
+      {/* Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지운다. */}
+      <ul className="settings-links" role="list">
         {PROVIDERS.map((provider) => (
           <SocialLinkRow
             key={provider}
