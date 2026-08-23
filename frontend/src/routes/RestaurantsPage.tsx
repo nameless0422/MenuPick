@@ -36,20 +36,13 @@ export default function RestaurantsPage() {
   // 자리는 카드보다 오래 사는 이쪽(부모)에 둔다. (HistoryPage와 같은 처리)
   const listRef = useRef<HTMLUListElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const [focusAfterDelete, setFocusAfterDelete] = useState<"list" | "heading" | null>(null);
-
-  useEffect(() => {
-    if (focusAfterDelete == null) return;
-    (focusAfterDelete === "heading" ? headingRef : listRef).current?.focus();
-    // 비워 두지 않으면 다음 삭제 때 값이 그대로라 effect가 다시 돌지 않는다.
-    setFocusAfterDelete(null);
-  }, [focusAfterDelete]);
-
-  // 목적지는 refetch가 끝나기를 기다리지 않고 "삭제된 순간"의 개수로 정한다. 목록이 다시
-  // 그려진 뒤에 세면 초점 이동과 refetch가 서로를 기다리는 경쟁이 된다.
-  // 남는 식당이 있으면 <ul>은 refetch 뒤에도 같은 요소라 초점이 그대로 유지되고,
-  // 마지막 하나였으면 <ul>이 통째로 사라지므로 그 전에 제목으로 빠져 나와야 한다.
-  const handleDeleted = () => setFocusAfterDelete(restaurants.length <= 1 ? "heading" : "list");
+  // <ul>과 <h1>은 목록이 refetch로 다시 그려져도 같은 요소로 남는다 — 초점을 옮기려고
+  // 렌더를 한 번 더 기다릴 이유가 없어 삭제가 성공한 그 자리에서 바로 옮긴다.
+  // (폼을 닫을 때 쓰는 focusAfterClose가 state와 effect를 거치는 것은 목적지인 "수정"
+  //  버튼이 다시 마운트되기를 기다려야 하기 때문이고, 여기는 그럴 필요가 없다.)
+  // 목적지는 "삭제된 순간"의 개수로 정한다: 남는 식당이 있으면 <ul>이
+  // 그대로 있고, 마지막 하나였으면 <ul>이 곧 사라지므로 그 전에 제목으로 빠져나와야 한다.
+  const handleDeleted = () => (restaurants.length <= 1 ? headingRef : listRef).current?.focus();
 
   return (
     <div className="page">
