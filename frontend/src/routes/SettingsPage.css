@@ -55,7 +55,9 @@
   color: var(--danger);
   border-color: var(--danger);
 }
-.settings-withdraw:hover:not(:disabled) {
+/* aria-*로 잠근 버튼은 :disabled가 아니라서 이 hover가 그대로 걸린다 — 누를 수 없는
+   탈퇴 버튼이 붉게 물들며 눌릴 것처럼 반응하지 않도록 함께 걸러낸다. */
+.settings-withdraw:hover:not(:disabled):not([aria-disabled="true"]):not([aria-busy="true"]) {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
@@ -96,18 +98,26 @@
   flex-basis: 100%;
 }
 
-/* 해제 버튼은 disabled 대신 aria-disabled·aria-busy로 잠근다(초점을 잃지 않으려고).
+/* 이 화면의 버튼은 disabled 대신 aria-disabled·aria-busy로 잠근다(초점을 잃지 않으려고).
    그러면 전역 button:disabled의 흐린 표시가 걸리지 않아 못 누르는 버튼이 멀쩡해 보인다 —
-   같은 시각 효과를 여기서 다시 준다. 이 파일도 결국 전역에 얹히므로 이 행 안으로만 한정한다. */
-.settings-link-row button[aria-disabled="true"],
-.settings-link-row button[aria-busy="true"] {
+   같은 시각 효과를 여기서 다시 준다. 이 파일도 결국 전역에 얹히므로 설정 카드 안으로만
+   한정한다(해제·로그아웃·탈퇴하기·비밀번호 변경이 모두 여기 들어온다). */
+.settings-section button[aria-disabled="true"],
+.settings-section button[aria-busy="true"] {
   opacity: 0.5;
   cursor: default;
 }
 
 /* 전역 button:hover:not(:disabled)는 더 이상 걸러내지 못한다 — 누를 수 없는 버튼이
    테두리를 밝히며 눌릴 것처럼 반응하지 않도록 되돌린다. */
-.settings-link-row button[aria-disabled="true"]:hover,
-.settings-link-row button[aria-busy="true"]:hover {
+.settings-section button[aria-disabled="true"]:hover,
+.settings-section button[aria-busy="true"]:hover {
   border-color: var(--field-border);
+}
+
+/* 탈퇴 버튼만 평상시 테두리가 danger다 — 위 규칙이 그 색까지 지우면 잠긴 사이에만
+   테두리 색이 바뀌어, 아무 일도 없는데 상태가 변한 것처럼 보인다. */
+.settings-section .settings-withdraw[aria-disabled="true"]:hover,
+.settings-section .settings-withdraw[aria-busy="true"]:hover {
+  border-color: var(--danger);
 }
