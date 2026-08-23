@@ -123,6 +123,13 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 
   const places = searchQuery.data?.documents ?? [];
 
+  // 검색어를 비운 채 누른 뒤에만 사유를 그린다 — 화면에 들어오자마자 빈 칸을 지적할 일은
+  // 아니다. 다시 채우면 사유도 함께 사라진다.
+  const keywordInput = useRef<HTMLInputElement>(null);
+  const keywordErrorId = useId();
+  const [keywordMissing, setKeywordMissing] = useState(false);
+  const showKeywordError = keywordMissing && !keyword.trim();
+
   // 조사(을/를)가 받침에 따라 갈리므로 이름 뒤에 "식당"을 두어 이름과 조사를 떼어 놓는다.
   const saveAnnouncement =
     saveMutation.isSuccess && saveMutation.variables
@@ -138,23 +145,46 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
         className="inline-add"
         onSubmit={(e) => {
           e.preventDefault();
-          setSubmitted(keyword.trim());
+          if (searchQuery.isFetching) return;
+          const trimmed = keyword.trim();
+          if (!trimmed) {
+            // 검색어가 없다고 알린 뒤 칠 자리로 초점을 옮긴다. 이 칸은 식당을 추가하는
+            // 유일한 진입점이라, 눌러도 아무 일이 없으면 화면 전체가 막힌 것처럼 보인다.
+            setKeywordMissing(true);
+            keywordInput.current?.focus();
+            return;
+          }
+          setKeywordMissing(false);
+          setSubmitted(trimmed);
         }}
       >
         {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
             있고, 타이핑을 시작하면 화면에서도 사라진다. 이 칸은 식당을 추가하는 유일한
             진입점이라 이름이 없으면 화면 전체가 막힌다. */}
         <input
+          ref={keywordInput}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={100}
           aria-label="장소 검색어"
+          aria-invalid={showKeywordError || undefined}
+          aria-describedby={showKeywordError ? keywordErrorId : undefined}
           placeholder="상호명이나 지역+메뉴로 검색 (예: 역삼동 김치찌개)"
         />
-        <button type="submit" disabled={!keyword.trim() || searchQuery.isFetching}>
+        {/* 검색어 미입력으로 disabled를 걸면 이 버튼이 Tab 순회에서 빠져, 화면에 검색
+            수단이 있다는 사실 자체가 전달되지 않는다. 잠근 채로 두되 초점은 남긴다. */}
+        <button
+          type="submit"
+          aria-busy={searchQuery.isFetching}
+          aria-disabled={!keyword.trim() || searchQuery.isFetching || undefined}
+          aria-describedby={showKeywordError ? keywordErrorId : undefined}
+        >
           {searchQuery.isFetching ? "검색 중…" : "검색"}
         </button>
       </form>
+      {showKeywordError && (
+        <p className="error" role="alert" id={keywordErrorId}>검색어를 입력해주세요.</p>
+      )}
 
       {searchQuery.isError && <p className="error" role="alert">{errorMessage(searchQuery.error)}</p>}
       {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
@@ -359,6 +389,13 @@ function RestaurantEditForm({
   const [phone, setPhone] = useState(detail.phone ?? "");
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
 
+  // 이름이 비어 제출을 막았을 때 초점을 돌려보낼 칸과, 그 사유를 버튼·입력에 묶을 id.
+  const nameRef = useRef<HTMLInputElement>(null);
+  const nameErrorId = useId();
+  // 누르기 전에는 오류를 띄우지 않는다 — 이름을 지우는 도중부터 빨간 문구가 따라다니면
+  // 아직 하지도 않은 실수를 지적하는 꼴이 된다. (MenusPage의 메뉴 폼과 같은 처리)
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
   const saveMutation = useMutation({
     mutationFn: () =>
       updateRestaurant(detail.id, {
@@ -373,24 +410,53 @@ function RestaurantEditForm({
     onSuccess: onSaved,
   });
 
+  // "이름이 비었다"와 "요청이 나가 있다"는 성격이 다르다. 앞은 사용자가 무엇을 더 해야
+  // 하는 조건이라 사유가 버튼까지 닿아야 하고, 뒤는 기다리면 풀리는 진행 상태다.
+  const nameMissing = !name.trim();
+  const submitBlocked = saveMutation.isPending || nameMissing;
+  // 이름을 다시 채우면 사유가 없어진다 — 한 번 눌렀다는 이유로 해결된 오류가 남으면 안 된다.
+  const showNameError = submitAttempted && nameMissing;
+
   return (
     <form
       className="menu-form"
+      // 브라우저 기본 검증을 끈다. required는 "필수"라는 표시로 남기되, 빈 칸을 알리는 일은
+      // 핸들러가 맡는다 — 기본 말풍선은 다음 입력에 사라져 화면에 남지 않고 낭독 여부도
+      // 브라우저마다 달라, 오류가 전달됐는지를 이쪽에서 보장할 수 없다. 무엇보다 이걸 켜 두면
+      // "완전히 빈 칸"과 "공백만 친 칸"이 서로 다른 방식으로 지적되어, 사용자에게는 같은
+      // 실수인데 화면이 다르게 반응한다. (인증 화면들과 같은 처리)
+      noValidate
+      // 제출 경로가 버튼 클릭만이 아니다 — 이름·주소·전화 칸에서 Enter를 쳐도 여기로 온다.
+      // 버튼에서 disabled를 뗀 이상 막는 자리는 클릭 핸들러가 아니라 여기다.
       onSubmit={(e) => {
         e.preventDefault();
-        if (name.trim()) saveMutation.mutate();
+        if (saveMutation.isPending) return;
+        if (nameMissing) {
+          // 사유를 role="alert"로 알린 뒤 고칠 수 있는 자리로 초점을 옮긴다 — 초점이 버튼에
+          // 남으면 그 칸까지 가는 길은 사용자가 직접 찾아야 한다.
+          setSubmitAttempted(true);
+          nameRef.current?.focus();
+          return;
+        }
+        saveMutation.mutate();
       }}
     >
       <h2 ref={headingRef} tabIndex={-1}>식당 수정</h2>
       <label>
         식당 이름
         <input
+          ref={nameRef}
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={200}
           required
+          aria-invalid={showNameError || undefined}
+          aria-describedby={showNameError ? nameErrorId : undefined}
         />
       </label>
+      {showNameError && (
+        <p className="error" role="alert" id={nameErrorId}>식당 이름을 입력해주세요.</p>
+      )}
       <label>
         주소
         <input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} />
@@ -404,7 +470,18 @@ function RestaurantEditForm({
       {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
 
       <div className="card-actions">
-        <button type="submit" disabled={saveMutation.isPending || !name.trim()}>
+        {/* disabled를 쓰지 않는 이유가 두 조건에서 서로 다르다.
+            - 이름 미입력: disabled면 버튼이 Tab 순회에서 빠져, 키보드·스크린리더 사용자는
+              저장 버튼이 있다는 것도 왜 눌리지 않는지도 알 수 없다.
+            - 저장 중: 누르는 순간 초점이 <body>로 떨어지고 요청이 끝나도 돌아오지 않는다.
+            aria-*는 표시일 뿐 클릭을 막지 않는다 — 막는 일은 위 onSubmit이 한다. */}
+        <button
+          type="submit"
+          aria-busy={saveMutation.isPending}
+          aria-disabled={submitBlocked || undefined}
+          // 사유 <p>는 눌러 본 뒤에만 그려진다 — 없는 id를 가리키면 참조가 끊긴다.
+          aria-describedby={showNameError ? nameErrorId : undefined}
+        >
           {saveMutation.isPending ? "저장 중…" : "저장"}
         </button>
         <button type="button" onClick={onClose}>취소</button>
@@ -440,12 +517,45 @@ function MenuLinkForm({
     onSuccess: onClose,
   });
 
+  // menuId == null 하나가 성격이 다른 두 상황을 덮고 있다. 목록을 받아 봐야 갈리므로
+  // 판단 기준은 "조회가 성공했는데 메뉴가 0개인가"다(아직 안 온 것과 정말 없는 것은 다르다).
+  // - 등록된 메뉴가 아예 없다: 이 폼에서 사용자가 할 수 있는 일이 없다. 다른 화면에서
+  //   메뉴를 먼저 만들어야 하므로 안내는 누르기 전부터 상시로 떠 있어야 하고, 옮길 초점도
+  //   없다. 이미 그리고 있던 "등록된 메뉴가 없습니다" 안내를 버튼에 묶기만 하면 된다.
+  // - 메뉴는 있는데 아직 고르지 않았다: 지금 여기서 풀 수 있는 조건이라, 눌렀을 때 이유를
+  //   알리고 고르는 자리(첫 칩)로 초점을 옮긴다.
+  const noMenus = menusQuery.isSuccess && menus.length === 0;
+  const selectionMissing = menuId == null;
+  const submitBlocked = linkMutation.isPending || selectionMissing;
+
+  const noMenusNoteId = useId();
+  const pickErrorId = useId();
+  const firstMenuChip = useRef<HTMLButtonElement>(null);
+  // 눌러 보기 전에는 오류를 띄우지 않는다 — 폼을 열자마자 아무것도 고르지 않은 것은
+  // 실수가 아니다. 고를 칩이 있을 때만 성립하는 안내이기도 하다("고르라"고 해도 목록이
+  // 비어 있으면 할 수 있는 일이 없다).
+  const [pickAttempted, setPickAttempted] = useState(false);
+  const showPickError = pickAttempted && selectionMissing && menus.length > 0;
+
+  // 상시 안내(메뉴 없음)와 눌러야 뜨는 오류(선택 안 함)는 동시에 성립하지 않는다.
+  const blockedReasonId = noMenus ? noMenusNoteId : showPickError ? pickErrorId : undefined;
+
   return (
     <form
       className="menu-form"
+      // 이 폼에는 텍스트 입력이 없어 Enter로 새어 나갈 경로가 지금은 없지만, 막는 자리는
+      // 그래도 여기다 — 나중에 입력 한 칸만 늘어도 클릭 핸들러의 방어는 그대로 뚫린다.
       onSubmit={(e) => {
         e.preventDefault();
-        if (menuId != null) linkMutation.mutate();
+        if (linkMutation.isPending) return;
+        if (selectionMissing) {
+          setPickAttempted(true);
+          // 등록된 메뉴가 없으면 옮겨 갈 칩 자체가 없다 — 초점은 버튼에 두고, 버튼에
+          // 묶어 둔 상시 안내가 사유를 대신한다.
+          firstMenuChip.current?.focus();
+          return;
+        }
+        linkMutation.mutate();
       }}
     >
       <h2 ref={headingRef} tabIndex={-1}>메뉴 연결</h2>
@@ -454,14 +564,17 @@ function MenuLinkForm({
         <legend>메뉴 선택</legend>
         {menusQuery.isPending && <p>불러오는 중…</p>}
         {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
-        {menusQuery.isSuccess && menus.length === 0 && (
-          <p>등록된 메뉴가 없습니다. 먼저 메뉴를 등록해 주세요.</p>
+        {noMenus && (
+          <p id={noMenusNoteId}>등록된 메뉴가 없습니다. 먼저 메뉴를 등록해 주세요.</p>
         )}
         <div className="chip-row">
-          {menus.map((menu) => (
+          {menus.map((menu, index) => (
             <button
               key={menu.id}
               type="button"
+              // 고르지 않은 채 눌렀을 때 초점을 보낼 곳. 칩은 골라도 언마운트되지 않아
+              // 첫 칩 하나만 잡아 두면 된다.
+              ref={index === 0 ? firstMenuChip : undefined}
               {...chipToggle(menu.id === menuId)}
               onClick={() => setMenuId(menu.id === menuId ? null : menu.id)}
             >
@@ -469,6 +582,9 @@ function MenuLinkForm({
             </button>
           ))}
         </div>
+        {showPickError && (
+          <p className="error" role="alert" id={pickErrorId}>연결할 메뉴를 먼저 선택해주세요.</p>
+        )}
       </fieldset>
 
       {/* <label>로 감싸지 않는 이유는 MenusPage의 선호도 위젯과 같다 —
@@ -506,7 +622,15 @@ function MenuLinkForm({
       {linkMutation.isError && <p className="error" role="alert">{errorMessage(linkMutation.error)}</p>}
 
       <div className="card-actions">
-        <button type="submit" disabled={linkMutation.isPending || menuId == null}>
+        {/* 저장 버튼과 같은 이유로 disabled를 쓰지 않는다 — 특히 여기서는 "고를 메뉴가
+            하나도 없다"가 사용자가 이 화면에서 풀 수 없는 조건이라, 버튼이 Tab 순회에서
+            빠지면 왜 막혔는지 알 길이 영영 없어진다. */}
+        <button
+          type="submit"
+          aria-busy={linkMutation.isPending}
+          aria-disabled={submitBlocked || undefined}
+          aria-describedby={blockedReasonId}
+        >
           {linkMutation.isPending ? "연결 중…" : "연결"}
         </button>
         <button type="button" onClick={onClose}>취소</button>
