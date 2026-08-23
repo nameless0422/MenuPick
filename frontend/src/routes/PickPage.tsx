@@ -34,20 +34,22 @@ export default function PickPage() {
   const spinStartRef = useRef(0);
   const spinTimerRef = useRef<number | undefined>(undefined);
 
+  // 초당 12.5회 이모지 교체는 전정기관이 민감한 사용자에게 불필요한 부하다. 연출만 빼고
+  // 최소 대기(SPIN_MS)와 "메뉴를 뽑는 중…" 통지는 그대로 두므로 흐름은 달라지지 않는다.
+  // 이 앱의 유일한 모션이라 CSS 쪽에는 대응할 것이 없다.
+  // 마운트할 때 한 번만 읽는다 — 렌더마다 matchMedia를 부를 이유가 없고, 세션 도중
+  // 설정을 바꾸는 일은 드물다(바꾸면 새로고침으로 반영된다).
+  const [reduceMotion] = useState(
+    () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  );
+
   useEffect(() => {
-    if (!spinning) return;
-    // 초당 12.5회 이모지 교체는 전정기관이 민감한 사용자에게 불필요한 부하다. 연출만 빼고
-    // 최소 대기(SPIN_MS)와 "메뉴를 뽑는 중…" 통지는 그대로 두므로 흐름은 달라지지 않는다.
-    // 이 앱의 유일한 모션이라 CSS 쪽에는 대응할 것이 없다.
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      setSlot("🎲");
-      return;
-    }
+    if (!spinning || reduceMotion) return;
     const id = window.setInterval(() => {
       setSlot(SLOT_EMOJIS[Math.floor(Math.random() * SLOT_EMOJIS.length)]);
     }, 80);
     return () => window.clearInterval(id);
-  }, [spinning]);
+  }, [spinning, reduceMotion]);
 
   // 언마운트 시 결과 공개 타이머 정리
   useEffect(() => () => window.clearTimeout(spinTimerRef.current), []);
@@ -212,7 +214,7 @@ export default function PickPage() {
         >
           {busy ? (
             <>
-              <span className="pick-slot" aria-hidden="true">{slot}</span>
+              <span className="pick-slot" aria-hidden="true">{reduceMotion ? "🎲" : slot}</span>
               <span className="sr-only">오늘의 메뉴 뽑기</span>
             </>
           ) : (
