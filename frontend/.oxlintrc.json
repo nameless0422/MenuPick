@@ -5,6 +5,14 @@
   "plugins": ["react", "typescript", "oxc", "jsx-a11y"],
   "rules": {
     "react/rules-of-hooks": "error",
+    // oxlint 1.79가 새로 넣은 react 규칙 3종. 기본이 warn인데 ci.yml의 lint 단계는
+    // 경고로 빌드를 막지 않으므로, 그대로 두면 새 위반이 기존 경고에 묻혀 그대로 머지된다.
+    // #155에서 적발 8건을 0으로 만든 뒤 올린다 — jsx-a11y 규칙들과 같은 논리다.
+    // 정당한 예외(1회성 소비를 렌더로 못 올리는 OAuth 콜백, 마운트 기준 시각을 렌더에서
+    // 읽어야 하는 MenusPage)는 줄 단위 oxlint-disable-next-line + 근거 주석으로 못박았다.
+    "react/set-state-in-effect": "error",
+    "react/purity": "error",
+    "react/refs": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }],
 
     // 아래 둘은 이 코드베이스에서 오탐만 낸다. 끄지 않으면 경고 8건이 상시로 깔려
