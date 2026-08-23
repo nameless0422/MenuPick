@@ -311,6 +311,13 @@ function MenuFormFields({
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
   const weightLabelId = useId();
 
+  // 이름이 비어 제출을 막았을 때 초점을 돌려보낼 칸과, 그 사유를 버튼·입력에 묶을 id.
+  const nameRef = useRef<HTMLInputElement>(null);
+  const nameErrorId = useId();
+  // 누르기 전에는 오류를 띄우지 않는다 — 새 메뉴 폼은 빈 칸에서 시작하므로, 타이핑을
+  // 시작하기도 전에 빨간 문구가 떠 있으면 아직 하지도 않은 실수를 지적하는 꼴이 된다.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
   const saveMutation = useMutation({
     mutationFn: () => {
       const base = { name: name.trim(), memo, weight, categories, tagIds: tags.map((t) => t.id) };
@@ -321,12 +328,37 @@ function MenuFormFields({
     onSuccess: onSaved,
   });
 
+  // "이름이 아직 없다"와 "요청이 나가 있다"는 성격이 다르다. 앞은 사용자가 무엇을 더 해야
+  // 하는 조건이라 사유가 버튼까지 닿아야 하고, 뒤는 잠깐 기다리면 풀리는 진행 상태다.
+  // 둘 다 disabled로 뭉뚱그리면 어느 쪽이든 초점만 잃는다.
+  const nameMissing = !name.trim();
+  const submitBlocked = saveMutation.isPending || nameMissing;
+  // 이름을 채우는 순간 사유가 없어지므로 nameMissing을 함께 본다 — 한 번 눌렀다는 이유로
+  // 이미 해결된 오류가 남아 있으면 안 된다.
+  const showNameError = submitAttempted && nameMissing;
+
   return (
     <form
       className="menu-form"
+      // 브라우저 기본 검증을 끈다. required는 "필수"라는 표시로 남기되, 빈 칸을 알리는 일은
+      // 핸들러가 맡는다 — 기본 말풍선은 다음 입력에 사라져 화면에 남지 않고 낭독 여부도
+      // 브라우저마다 달라, 오류가 전달됐는지를 이쪽에서 보장할 수 없다. 무엇보다 이걸 켜 두면
+      // "완전히 빈 칸"과 "공백만 친 칸"이 서로 다른 방식으로 지적되어, 사용자에게는 같은
+      // 실수인데 화면이 다르게 반응한다. (인증 화면들과 같은 처리)
+      noValidate
+      // 제출 경로가 버튼 클릭만이 아니다 — 이름 칸에서 Enter를 쳐도 여기로 온다.
+      // 버튼에서 disabled를 뗀 이상 막는 자리는 클릭 핸들러가 아니라 여기다.
       onSubmit={(e) => {
         e.preventDefault();
-        if (name.trim()) saveMutation.mutate();
+        if (saveMutation.isPending) return;
+        if (nameMissing) {
+          // 사유를 role="alert"로 알린 뒤 고칠 수 있는 자리로 초점을 옮긴다. 초점이 버튼에
+          // 남으면 "무엇이 문제인지"는 읽혀도 그 칸까지 가는 길은 사용자가 직접 찾아야 한다.
+          setSubmitAttempted(true);
+          nameRef.current?.focus();
+          return;
+        }
+        saveMutation.mutate();
       }}
     >
       <h2 ref={headingRef} tabIndex={-1}>{menuId != null ? "메뉴 수정" : "새 메뉴"}</h2>
@@ -334,13 +366,19 @@ function MenuFormFields({
       <label>
         메뉴 이름
         <input
+          ref={nameRef}
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={100}
           placeholder="예: 김치찌개"
           required
+          aria-invalid={showNameError || undefined}
+          aria-describedby={showNameError ? nameErrorId : undefined}
         />
       </label>
+      {showNameError && (
+        <p className="error" role="alert" id={nameErrorId}>메뉴 이름을 입력해주세요.</p>
+      )}
 
       <label>
         메모
@@ -394,7 +432,23 @@ function MenuFormFields({
       {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
 
       <div className="card-actions">
-        <button type="submit" disabled={saveMutation.isPending || !name.trim()}>
+        {/* disabled를 쓰지 않는 이유가 두 조건에서 서로 다르다.
+            - 이름 미입력: disabled면 버튼이 Tab 순회에서 통째로 빠져, 키보드·스크린리더
+              사용자는 저장 버튼이 있다는 사실도, 왜 눌리지 않는지도 알 수 없다.
+              aria-disabled면 초점은 받되 "사용 불가"가 함께 읽힌다.
+            - 저장 중: 누르는 순간 disabled가 걸리면 방금 누른 버튼에서 초점이 <body>로
+              떨어지고, 요청이 끝나 다시 활성화돼도 돌아오지 않는다. aria-busy는 초점을
+              뺏지 않는다.
+            다만 aria-*는 표시일 뿐 클릭을 막지 않는다 — 막는 일은 위 onSubmit이 한다. */}
+        <button
+          type="submit"
+          aria-busy={saveMutation.isPending}
+          aria-disabled={submitBlocked || undefined}
+          // 사유 <p>는 눌러 본 뒤에만 그려진다 — 없는 id를 가리키면 참조가 끊겨
+          // 스크린리더가 빈 설명을 읽는다. (아직 아무것도 안 적은 상태에는 띄울 메시지가
+          // 없다. 빈 칸은 required로 이미 드러난다.)
+          aria-describedby={showNameError ? nameErrorId : undefined}
+        >
           {saveMutation.isPending ? "저장 중…" : "저장"}
         </button>
         <button type="button" onClick={onClose}>취소</button>
