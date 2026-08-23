@@ -123,6 +123,13 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 
   const places = searchQuery.data?.documents ?? [];
 
+  // 검색어를 비운 채 누른 뒤에만 사유를 그린다 — 화면에 들어오자마자 빈 칸을 지적할 일은
+  // 아니다. 다시 채우면 사유도 함께 사라진다.
+  const keywordInput = useRef<HTMLInputElement>(null);
+  const keywordErrorId = useId();
+  const [keywordMissing, setKeywordMissing] = useState(false);
+  const showKeywordError = keywordMissing && !keyword.trim();
+
   // 조사(을/를)가 받침에 따라 갈리므로 이름 뒤에 "식당"을 두어 이름과 조사를 떼어 놓는다.
   const saveAnnouncement =
     saveMutation.isSuccess && saveMutation.variables
@@ -138,23 +145,46 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
         className="inline-add"
         onSubmit={(e) => {
           e.preventDefault();
-          setSubmitted(keyword.trim());
+          if (searchQuery.isFetching) return;
+          const trimmed = keyword.trim();
+          if (!trimmed) {
+            // 검색어가 없다고 알린 뒤 칠 자리로 초점을 옮긴다. 이 칸은 식당을 추가하는
+            // 유일한 진입점이라, 눌러도 아무 일이 없으면 화면 전체가 막힌 것처럼 보인다.
+            setKeywordMissing(true);
+            keywordInput.current?.focus();
+            return;
+          }
+          setKeywordMissing(false);
+          setSubmitted(trimmed);
         }}
       >
         {/* aria-label: placeholder는 접근 가능한 이름 계산의 최후 폴백이라 읽히지 않는 구현이
             있고, 타이핑을 시작하면 화면에서도 사라진다. 이 칸은 식당을 추가하는 유일한
             진입점이라 이름이 없으면 화면 전체가 막힌다. */}
         <input
+          ref={keywordInput}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={100}
           aria-label="장소 검색어"
+          aria-invalid={showKeywordError || undefined}
+          aria-describedby={showKeywordError ? keywordErrorId : undefined}
           placeholder="상호명이나 지역+메뉴로 검색 (예: 역삼동 김치찌개)"
         />
-        <button type="submit" disabled={!keyword.trim() || searchQuery.isFetching}>
+        {/* 검색어 미입력으로 disabled를 걸면 이 버튼이 Tab 순회에서 빠져, 화면에 검색
+            수단이 있다는 사실 자체가 전달되지 않는다. 잠근 채로 두되 초점은 남긴다. */}
+        <button
+          type="submit"
+          aria-busy={searchQuery.isFetching}
+          aria-disabled={!keyword.trim() || searchQuery.isFetching || undefined}
+          aria-describedby={showKeywordError ? keywordErrorId : undefined}
+        >
           {searchQuery.isFetching ? "검색 중…" : "검색"}
         </button>
       </form>
+      {showKeywordError && (
+        <p className="error" role="alert" id={keywordErrorId}>검색어를 입력해주세요.</p>
+      )}
 
       {searchQuery.isError && <p className="error" role="alert">{errorMessage(searchQuery.error)}</p>}
       {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}

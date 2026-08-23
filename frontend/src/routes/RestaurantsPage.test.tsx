@@ -380,6 +380,23 @@ describe("식당 수정 폼 저장 버튼", () => {
     expect(submit).toHaveFocus();
   });
 
+  // 검색은 이 화면에서 식당을 추가하는 유일한 진입점이다. 검색어 미입력으로 disabled를
+  // 걸면 그 버튼이 Tab 순회에서 통째로 빠져, 검색 수단이 있다는 사실조차 전달되지 않는다.
+  it("검색어를 안 넣어도 검색 버튼이 초점을 받고, 누르면 이유가 통지된다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+
+    const search = await screen.findByRole("button", { name: "검색" });
+    expect(search).toBeEnabled();
+    expect(search).toHaveAttribute("aria-disabled", "true");
+
+    await user.click(search);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("검색어를 입력해주세요.");
+    expect(screen.getByRole("textbox", { name: "장소 검색어" })).toHaveFocus();
+    expect(searchPlacesMock).not.toHaveBeenCalled();
+  });
+
   // 폼이 noValidate라 완전히 빈 칸도 브라우저가 가로채지 않고 우리 핸들러까지 온다.
   // 켜 두면 "완전히 빈 칸"은 브라우저 말풍선, "공백만 남긴 칸"은 우리 알림으로 갈려
   // 같은 실수인데 화면이 다르게 반응했다.
