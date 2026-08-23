@@ -242,3 +242,76 @@ describe("검색·저장 결과 통지", () => {
     );
   });
 });
+
+/**
+ * 삭제 버튼을 누른 그 카드가 사라진다. window.confirm은 브라우저가 원래 버튼으로 초점을
+ * 되돌려 주지만, 삭제가 성공하는 순간 그 버튼이 DOM에서 없어져 초점은 결국 {@code <body>}로
+ * 떨어진다. 삭제 변이가 카드 안에 있어 <b>카드가 스스로를 언마운트한다</b> — 초점을 받을
+ * 자리는 카드보다 오래 사는 부모에 있어야 한다. (HistoryPage와 같은 처리)
+ */
+describe("RestaurantsPage 삭제 후 초점", () => {
+  const JINJU = { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978 };
+  const EULJI = { id: 2, name: "을지면옥", address: "서울시 중구", latitude: 37.566, longitude: 126.99 };
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+  });
+
+  it("식당이 남아 있으면 초점이 목록으로 간다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchRestaurantsMock.mockResolvedValueOnce([JINJU, EULJI]);
+    // 삭제 뒤 다시 불러오면 한 곳만 남는다.
+    fetchRestaurantsMock.mockResolvedValue([EULJI]);
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "진주회관 삭제" }));
+
+    await waitFor(() => expect(screen.getByRole("list")).toHaveFocus());
+    // 목록이 다시 그려져도 같은 <ul>이라 초점은 그대로 남아 있어야 한다.
+    await waitFor(() => expect(screen.queryByText("진주회관")).not.toBeInTheDocument());
+    expect(screen.getByRole("list")).toHaveFocus();
+    confirmSpy.mockRestore();
+  });
+
+  it("마지막 식당을 지우면 초점이 제목으로 간다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchRestaurantsMock.mockResolvedValueOnce([JINJU]);
+    fetchRestaurantsMock.mockResolvedValue([]);
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "진주회관 삭제" }));
+
+    // 빈 목록("목록, 항목 0개")은 초점을 둘 자리가 못 된다.
+    await waitFor(() => expect(screen.getByRole("heading", { name: "내 식당" })).toHaveFocus());
+    await waitFor(() => expect(screen.queryByText("진주회관")).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "내 식당" })).toHaveFocus();
+    confirmSpy.mockRestore();
+  });
+
+  it("수정 저장은 목록으로 초점을 끌어가지 않는다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantsMock.mockResolvedValue([JINJU]);
+    fetchRestaurantMock.mockResolvedValue({
+      ...JINJU,
+      phone: null,
+      naverUrl: null,
+      kakaoPlaceId: null,
+      createdAt: "2026-01-01T00:00:00",
+      updatedAt: "2026-01-01T00:00:00",
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+    await user.click(await screen.findByRole("button", { name: "저장" }));
+
+    // 수정도 저장도 목록을 새로 불러오지만 카드는 그대로 남는다. 삭제 신호(onDeleted)를
+    // onChanged와 구분하지 않으면 여기서도 초점이 목록으로 끌려가, 방금 고친 식당이
+    // 어디였는지 잃는다.
+    await waitFor(() => expect(screen.getByRole("button", { name: "진주회관 수정" })).toHaveFocus());
+  });
+});

@@ -36,6 +36,13 @@ export default function PickPage() {
 
   useEffect(() => {
     if (!spinning) return;
+    // 초당 12.5회 이모지 교체는 전정기관이 민감한 사용자에게 불필요한 부하다. 연출만 빼고
+    // 최소 대기(SPIN_MS)와 "메뉴를 뽑는 중…" 통지는 그대로 두므로 흐름은 달라지지 않는다.
+    // 이 앱의 유일한 모션이라 CSS 쪽에는 대응할 것이 없다.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setSlot("🎲");
+      return;
+    }
     const id = window.setInterval(() => {
       setSlot(SLOT_EMOJIS[Math.floor(Math.random() * SLOT_EMOJIS.length)]);
     }, 80);
@@ -55,6 +62,11 @@ export default function PickPage() {
     },
   });
 
+  // 돌리는 중인지. disabled 대신 이 값으로 aria-busy/aria-disabled를 주고 핸들러에서
+  // 조기 반환한다 — disabled는 초점을 받지 못해 누른 그 버튼에서 <body>로 떨어뜨린다.
+  const busy = spinning || pickMutation.isPending;
+  const pickButton = useRef<HTMLButtonElement>(null);
+
   const buildRequest = (): PickRequest => ({
     ...(categories.length > 0 && { categories }),
     ...(includeTags.length > 0 && { tagIds: includeTags.map((t) => t.id) }),
@@ -67,7 +79,13 @@ export default function PickPage() {
   });
 
   const spin = () => {
-    if (spinning) return;
+    // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 이 조기 반환이 실제 방어선이다.
+    if (busy) return;
+    // "다시 돌리기"는 결과 카드 안에 있는데, 돌리기 시작하면 결과가 감춰지며 그 카드가
+    // 통째로 사라진다 — 누른 버튼이 없어져 초점이 <body>로 떨어진다. 지금 돌아가는 픽
+    // 버튼으로 옮기면 진행 상태가 그대로 읽히고, 끝난 자리에서 바로 다시 돌릴 수 있다.
+    // 픽 버튼에서 눌렀다면 이미 그 버튼이므로 아무 일도 일어나지 않는다.
+    pickButton.current?.focus();
     spinStartRef.current = Date.now();
     setSpinning(true);
     pickMutation.mutate(buildRequest());
@@ -117,7 +135,7 @@ export default function PickPage() {
     );
   };
 
-  const revealed = !spinning && !pickMutation.isPending;
+  const revealed = !busy;
   const result = revealed && pickMutation.isSuccess ? pickMutation.data : null;
   const error = revealed && pickMutation.isError ? pickMutation.error : null;
   const noCandidates = error != null && apiErrorCode(error) === "NO_PICK_CANDIDATES";
@@ -181,9 +199,22 @@ export default function PickPage() {
       </section>
 
       <div className="pick-stage">
-        <button className="pick-button" onClick={spin} disabled={spinning || pickMutation.isPending}>
-          {spinning || pickMutation.isPending ? (
-            <span className="pick-slot" aria-hidden>{slot}</span>
+        {/* 돌리는 동안 유일한 자식이 aria-hidden이라 접근 가능한 이름이 빈 문자열이 됐다.
+            이름은 "지금 무엇을 하는 버튼인가"이므로 상태에 따라 바뀌면 안 된다 — 눈에만
+            안 보이게 남겨 두면 돌아가는 중에도 같은 버튼으로 읽힌다. 진행 여부는 이름이
+            아니라 aria-busy가 알린다. */}
+        <button
+          ref={pickButton}
+          className="pick-button"
+          onClick={spin}
+          aria-busy={busy}
+          aria-disabled={busy}
+        >
+          {busy ? (
+            <>
+              <span className="pick-slot" aria-hidden="true">{slot}</span>
+              <span className="sr-only">오늘의 메뉴 뽑기</span>
+            </>
           ) : (
             <>🎲 오늘의 메뉴 뽑기</>
           )}
@@ -202,7 +233,7 @@ export default function PickPage() {
         {/* 뽑는 동안 이 리전이 비어 있으면 Enter를 친 뒤 최소 1.2초가 완전한 무음이 된다.
             돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다. */}
         {(spinning || pickMutation.isPending) && <p className="sr-only">메뉴를 뽑는 중…</p>}
-        {result && <PickResultCard result={result} onRetry={spin} retrying={spinning || pickMutation.isPending} />}
+        {result && <PickResultCard result={result} onRetry={spin} />}
 
         {noCandidates && (
           <div className="card pick-empty">
@@ -216,14 +247,14 @@ export default function PickPage() {
   );
 }
 
+// retrying prop이 있었지만 늘 false였다 — 돌리기 시작하면 result가 null이 되어 이 카드가
+// 먼저 사라지기 때문이다. 초점은 대신 spin()이 픽 버튼으로 옮긴다.
 function PickResultCard({
   result,
   onRetry,
-  retrying,
 }: {
   result: PickResult;
   onRetry: () => void;
-  retrying: boolean;
 }) {
   const { menu, restaurants } = result;
   return (
@@ -268,7 +299,7 @@ function PickResultCard({
       )}
 
       <div className="card-actions">
-        <button onClick={onRetry} disabled={retrying}>🔁 다시 돌리기</button>
+        <button onClick={onRetry}>🔁 다시 돌리기</button>
         <Link to="/history">히스토리 보기 →</Link>
       </div>
     </div>
@@ -283,6 +314,12 @@ function CategoryFilter({
   onChange: (categories: string[]) => void;
 }) {
   const [custom, setCustom] = useState("");
+  // 직접 입력한 카테고리는 selected에만 존재해서, 칩을 눌러 해제하는 순간 목록에서 영구히
+  // 사라졌다 — 다시 쓰려면 처음부터 타이핑해야 하고, 방금 누른 버튼이 없어지니 초점도
+  // <body>로 떨어졌다. 입력한 값을 따로 기억해 두면 칩이 언마운트되지 않으므로 두 문제가
+  // 회피가 아니라 소멸로 해결된다. 프리셋 칩은 원래 목록에 남아 있어 같은 문제가 없다.
+  const [customs, setCustoms] = useState<string[]>([]);
+  const customInput = useRef<HTMLInputElement>(null);
 
   const toggle = (category: string) =>
     onChange(
@@ -293,15 +330,21 @@ function CategoryFilter({
 
   const addCustom = () => {
     const value = custom.trim();
-    if (value && !selected.includes(value)) onChange([...selected, value]);
     setCustom("");
+    // "추가"를 누르면 입력이 비어 그 버튼이 곧바로 disabled가 된다 — 방금 누른 버튼이
+    // 초점을 받을 수 없게 되면서 초점이 <body>로 떨어진다. 다음 행동(다른 카테고리 입력)이
+    // 시작되는 입력으로 옮기면 그 자리에서 이어서 칠 수 있다.
+    customInput.current?.focus();
+    if (!value) return;
+    setCustoms((prev) => (prev.includes(value) ? prev : [...prev, value]));
+    if (!selected.includes(value)) onChange([...selected, value]);
   };
 
   return (
     <fieldset>
       <legend>카테고리</legend>
       <div className="chip-row">
-        {[...new Set([...CATEGORY_PRESETS, ...selected])].map((category) => (
+        {[...new Set([...CATEGORY_PRESETS, ...customs, ...selected])].map((category) => (
           <button
             key={category}
             type="button"
@@ -316,6 +359,7 @@ function CategoryFilter({
           있고, 타이핑을 시작하면 화면에서도 사라진다. (MenusPage의 CategoryPicker와 같은 처리) */}
       <div className="inline-add">
         <input
+          ref={customInput}
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           maxLength={20}
@@ -351,6 +395,7 @@ function TagFilter({
 }) {
   const [keyword, setKeyword] = useState("");
   const deferredKeyword = useDeferredValue(keyword);
+  const searchInput = useRef<HTMLInputElement>(null);
 
   const tagsQuery = useQuery({
     queryKey: ["tags", deferredKeyword],
@@ -362,6 +407,15 @@ function TagFilter({
       !selected.some((s) => s.id === tag.id) &&
       !disabledTags.some((d) => d.id === tag.id),
   );
+
+  // 태그는 고르든 풀든 누른 버튼이 사라진다 — 제안 칩은 선택 행으로 옮겨가고, 선택 칩은
+  // 제안 행으로 돌아간다. 돌아갈 자리가 없으므로 초점을 검색 입력으로 모은다: 이 컨트롤의
+  // 허브이고 다음 행동(다른 태그 검색)이 시작되는 곳이다. 이게 없으면 태그를 하나 고를
+  // 때마다 페이지 맨 위에서 Tab을 다시 눌러 내려와야 한다.
+  const selectTags = (next: TagSummary[]) => {
+    onChange(next);
+    searchInput.current?.focus();
+  };
 
   return (
     <fieldset>
@@ -375,7 +429,7 @@ function TagFilter({
               {...chipToggle(true, "chip-tag")}
               aria-label={`${tag.name} 태그 선택 해제`}
               title="클릭하면 해제"
-              onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
+              onClick={() => selectTags(selected.filter((s) => s.id !== tag.id))}
             >
               #{tag.name} ✕
             </button>
@@ -387,6 +441,7 @@ function TagFilter({
             붙어 있어 이름 계산에 들어오지 않으므로, 둘을 구분하려면 입력마다 이름이 있어야
             한다 — 없으면 음성 제어로 어느 쪽을 지목했는지 알 수 없다. */}
         <input
+          ref={searchInput}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={50}
@@ -402,7 +457,7 @@ function TagFilter({
               key={tag.id}
               type="button"
               {...chipToggle(false, "chip-tag")}
-              onClick={() => onChange([...selected, { id: tag.id, name: tag.name }])}
+              onClick={() => selectTags([...selected, { id: tag.id, name: tag.name }])}
             >
               #{tag.name}
             </button>

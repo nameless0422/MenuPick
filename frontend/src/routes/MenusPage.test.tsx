@@ -3,7 +3,8 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import MenusPage from "./MenusPage";
-import { fetchMenu, fetchMenus } from "../api/menus";
+import { deleteMenu, fetchMenu, fetchMenus, type MenuDetail } from "../api/menus";
+import { searchTags } from "../api/tags";
 
 vi.mock("../api/menus", () => ({
   fetchMenus: vi.fn(),
@@ -20,6 +21,8 @@ vi.mock("../api/tags", () => ({
 
 const fetchMenusMock = vi.mocked(fetchMenus);
 const fetchMenuMock = vi.mocked(fetchMenu);
+const deleteMenuMock = vi.mocked(deleteMenu);
+const searchTagsMock = vi.mocked(searchTags);
 
 const KIMCHI = {
   id: 1,
@@ -30,16 +33,36 @@ const KIMCHI = {
   tags: [],
 };
 
+const BIBIM = {
+  id: 2,
+  name: "비빔밥",
+  weight: 4,
+  isExcluded: false,
+  categories: [],
+  tags: [],
+};
+
+const HONBAP = { id: 10, name: "혼밥", createdAt: "2026-01-01T00:00:00" };
+
+/** 상세 조회 응답. 목록(MenuSummary)에 없는 memo까지 채워야 수정 폼이 열린다. */
+const detail = (overrides: Partial<MenuDetail> = {}): MenuDetail => ({
+  ...KIMCHI,
+  memo: null,
+  createdAt: "2026-01-01T00:00:00",
+  updatedAt: "2026-01-01T00:00:00",
+  ...overrides,
+});
+
 beforeEach(() => {
   fetchMenusMock.mockReset();
   fetchMenuMock.mockReset();
+  deleteMenuMock.mockReset();
+  searchTagsMock.mockReset();
   fetchMenusMock.mockResolvedValue({ menus: [KIMCHI], nextCursor: null, hasNext: false });
-  fetchMenuMock.mockResolvedValue({
-    ...KIMCHI,
-    memo: null,
-    createdAt: "2026-01-01T00:00:00",
-    updatedAt: "2026-01-01T00:00:00",
-  });
+  fetchMenuMock.mockResolvedValue(detail());
+  deleteMenuMock.mockResolvedValue(undefined);
+  // 제안 태그가 필요한 테스트만 따로 채운다 — 기본은 빈 결과다.
+  searchTagsMock.mockResolvedValue([]);
 });
 
 const editButton = () => screen.getByRole("button", { name: "김치찌개 수정" });
@@ -287,5 +310,130 @@ describe("목록 상태 통지", () => {
     renderWithProviders(<MenusPage />);
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/등록된 메뉴가 없습니다/));
+  });
+});
+
+/**
+ * 패턴 3 — 칩이 클릭되면 언마운트되어 초점이 사라진다.
+ *
+ * <p>칩은 누르는 순간 다른 행으로 옮겨가거나(태그) 목록에서 통째로 빠진다(사용자 정의
+ * 카테고리). 방금 누른 버튼이 없어지면 브라우저는 초점을 {@code <body>}로 되돌리므로,
+ * 태그를 두 개 고르려면 매번 페이지 맨 위에서 Tab을 눌러 내려와야 한다.
+ */
+describe("칩 조작 후 초점", () => {
+  /**
+   * 칩 목록을 프리셋과 선택값만으로 합성하면, 직접 입력한 카테고리는 해제하는 순간
+   * 선택값에서 빠지며 <b>목록에서 영구히 사라진다.</b> 잘못 눌렀을 때 되돌릴 방법이
+   * 타이핑을 처음부터 다시 하는 것뿐이라는 뜻이다 — 초점 소실은 그 결과에 딸려 온다.
+   */
+  it("직접 입력한 카테고리는 해제해도 칩이 남고 초점도 그 칩에 머문다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(newMenuButton());
+    await user.type(
+      await screen.findByRole("textbox", { name: "직접 입력한 카테고리" }),
+      "야식",
+    );
+    await user.click(screen.getByRole("button", { name: "추가" }));
+
+    const chip = screen.getByRole("button", { name: "야식" });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(chip);
+
+    // 같은 요소가 그대로 남으므로 초점은 옮길 필요조차 없다.
+    expect(screen.getByRole("button", { name: "야식" })).toHaveAttribute("aria-pressed", "false");
+    expect(chip).toHaveFocus();
+  });
+
+  // 입력이 비는 순간 "추가"가 disabled가 되어, 방금 누른 그 버튼이 초점을 받을 수 없게 된다.
+  it("카테고리를 추가하면 초점이 입력으로 돌아온다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(newMenuButton());
+    const input = await screen.findByRole("textbox", { name: "직접 입력한 카테고리" });
+    await user.type(input, "야식");
+    await user.click(screen.getByRole("button", { name: "추가" }));
+
+    expect(input).toHaveFocus();
+  });
+
+  it("제안된 태그를 고르면 초점이 태그 검색 입력으로 간다", async () => {
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(newMenuButton());
+    await user.click(await screen.findByRole("button", { name: "#혼밥" }));
+
+    // 고른 태그는 제안 행에서 사라져 선택 행으로 옮겨간다 — 돌아갈 버튼이 없다.
+    expect(screen.getByRole("button", { name: "혼밥 태그 선택 해제" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "태그 검색" })).toHaveFocus();
+  });
+
+  it("선택한 태그를 해제하면 초점이 태그 검색 입력으로 간다", async () => {
+    fetchMenuMock.mockResolvedValue(detail({ tags: [{ id: HONBAP.id, name: HONBAP.name }] }));
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
+
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 선택 해제" }));
+
+    expect(screen.getByRole("textbox", { name: "태그 검색" })).toHaveFocus();
+  });
+});
+
+/**
+ * 패턴 5 — 삭제 후 초점이 사라진다.
+ *
+ * <p>{@code window.confirm}은 원래 눌렀던 버튼으로 초점을 되돌려 주지만, 삭제가 성공하면
+ * 그 {@code <li>}가 통째로 언마운트되어 결국 {@code <body>}로 떨어진다. 연달아 지우려면
+ * 매번 페이지 맨 위에서 Tab을 눌러 내려와야 한다.
+ */
+describe("삭제 후 초점", () => {
+  it("메뉴가 남아 있으면 초점이 목록으로 간다", async () => {
+    fetchMenusMock.mockResolvedValue({ menus: [KIMCHI, BIBIM], nextCursor: null, hasNext: false });
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 삭제" }));
+
+    // <ul>은 refetch 뒤에도 같은 요소라 초점이 유지된다 — "목록, 항목 1개"가 읽힌다.
+    await waitFor(() => expect(screen.getByRole("list")).toHaveFocus());
+    confirmSpy.mockRestore();
+  });
+
+  it("마지막 메뉴를 지우면 초점이 제목으로 가고, 목록이 사라진 뒤에도 유지된다", async () => {
+    fetchMenusMock
+      .mockResolvedValueOnce({ menus: [KIMCHI], nextCursor: null, hasNext: false })
+      .mockResolvedValue({ menus: [], nextCursor: null, hasNext: false });
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 삭제" }));
+
+    const heading = screen.getByRole("heading", { name: "내 메뉴" });
+    await waitFor(() => expect(heading).toHaveFocus());
+
+    // 목록이 통째로 사라지는 것은 refetch가 끝난 뒤다. 목적지를 삭제 시점에 정해 두지
+    // 않으면 여기서 초점이 <body>로 떨어진다.
+    await waitFor(() => expect(screen.queryByRole("list")).not.toBeInTheDocument());
+    expect(heading).toHaveFocus();
+    confirmSpy.mockRestore();
+  });
+
+  it("메뉴가 0개면 빈 목록을 남기지 않는다", async () => {
+    // 빈 <ul>은 "목록, 항목 0개"로 읽혀 바로 위 안내("등록된 메뉴가 없습니다")와 어긋난다.
+    fetchMenusMock.mockResolvedValue({ menus: [], nextCursor: null, hasNext: false });
+
+    renderWithProviders(<MenusPage />);
+
+    await screen.findByText(/등록된 메뉴가 없습니다/);
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });
 });

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
-import { fetchMe, unlinkSocialAccount, type Me } from "../api/auth";
+import { fetchMe, unlinkSocialAccount, type Me, type Provider } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
 // 실제 모듈의 상수(PROVIDERS·PROVIDER_LABELS·PASSWORD_MIN_LENGTH)는 화면이 그대로 쓰므로
@@ -120,13 +120,63 @@ describe("SettingsPage 소셜 계정 연동", () => {
   // 통과시키면 그 계정에는 영원히 들어갈 수 없고, 탈퇴조차 못 해 데이터만 남는다.
   // 서버도 LAST_LOGIN_METHOD로 막지만, 누르면 반드시 실패할 버튼을 열어두면
   // 사용자는 왜 안 되는지 모른 채 에러만 본다.
+  // 잠금은 disabled가 아니라 aria-disabled로 건다 — disabled면 버튼이 Tab 순회에서 통째로
+  // 빠져 키보드·스크린리더 사용자는 해제 버튼의 존재조차 모르고, 아래 사유도 영영 닿지 않는다.
   it("마지막 로그인 수단이면 해제 버튼을 잠그고 이유를 알려준다", async () => {
     fetchMeMock.mockResolvedValue(me({ hasPassword: false, linkedProviders: ["kakao"] }));
 
     renderSettings();
 
-    expect(await screen.findByRole("button", { name: "카카오 연동 해제" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "카카오 연동 해제" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(screen.getByText(/마지막 로그인 수단이라 해제할 수 없어요/)).toBeInTheDocument();
+  });
+
+  it("잠긴 해제 버튼도 초점을 받고, 초점이 닿으면 사유가 함께 읽힌다", async () => {
+    fetchMeMock.mockResolvedValue(me({ hasPassword: false, linkedProviders: ["kakao"] }));
+
+    renderSettings();
+    const unlink = await screen.findByRole("button", { name: "카카오 연동 해제" });
+
+    unlink.focus();
+    expect(unlink).toHaveFocus();
+    // 사유 <p>가 버튼과 이어져 있지 않으면 초점이 닿아도 "왜 못 쓰는지"는 낭독되지 않는다.
+    expect(unlink).toHaveAccessibleDescription(/마지막 로그인 수단이라 해제할 수 없어요/);
+  });
+
+  // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 핸들러가 조기 반환하지 않으면 버튼이
+  // 실제로 눌려 LAST_LOGIN_METHOD 에러만 돌아온다 — 화면이 막아주던 것이 사라진다.
+  it("잠긴 해제 버튼을 눌러도 해제 요청이 나가지 않는다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me({ hasPassword: false, linkedProviders: ["kakao"] }));
+
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "카카오 연동 해제" }));
+
+    expect(unlinkMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // 진행 중에 disabled를 걸면 방금 누른 버튼에서 초점이 <body>로 떨어지고, 요청이 끝나
+  // 다시 활성화돼도 돌아오지 않는다. aria-busy는 초점을 뺏지 않으면서 진행 중임을 알린다.
+  it("해제 요청 중에도 버튼이 초점을 지키고 진행 중임을 알린다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me({ hasPassword: true, linkedProviders: ["kakao"] }));
+    // 응답을 붙잡아 두어야 "요청 중" 상태를 멈춰 세워 놓고 볼 수 있다.
+    unlinkMock.mockReturnValue(new Promise<Provider[]>(() => {}));
+
+    renderSettings();
+    const unlink = await screen.findByRole("button", { name: "카카오 연동 해제" });
+    await user.click(unlink);
+
+    await waitFor(() => expect(unlink).toHaveAttribute("aria-busy", "true"));
+    expect(unlink).toHaveFocus();
+
+    // 초점이 남아 있으니 연타가 가능해졌다 — 조기 반환이 없으면 같은 요청이 겹쳐 나간다.
+    await user.click(unlink);
+    expect(unlinkMock).toHaveBeenCalledTimes(1);
   });
 
   it("비밀번호가 있으면 마지막 소셜 연동이어도 해제할 수 있다", async () => {
