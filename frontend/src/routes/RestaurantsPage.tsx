@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRestaurant,
@@ -236,19 +236,21 @@ function RestaurantCard({
   const [mode, setMode] = useState<"edit" | "link" | null>(null);
 
   // 수정 폼은 카드 전체를 대체하므로 폼을 닫으면 눌렀던 버튼이 새로 마운트된다 —
-  // 초점이 <body>로 떨어지지 않도록 다시 그려진 버튼을 찾아 돌려준다. (MenusPage와 같은 처리)
-  const editButton = useRef<HTMLButtonElement>(null);
-  const linkButton = useRef<HTMLButtonElement>(null);
-  const [focusAfterClose, setFocusAfterClose] = useState<"edit" | "link" | null>(null);
+  // 초점이 <body>로 떨어지지 않도록 "어느 버튼으로 돌아갈지"를 예약해 두고, 그 버튼이
+  // 다시 DOM에 붙는 ref 콜백에서 초점을 옮긴다. 화면에 그려지는 값이 아니라 다음 커밋까지만
+  // 남는 예약이라 state가 아니라 ref이고, 그래서 렌더를 한 번 더 돌리지 않는다.
+  // (MenusPage와 같은 처리)
+  const focusAfterClose = useRef<"edit" | "link" | null>(null);
 
-  useEffect(() => {
-    if (focusAfterClose == null) return;
-    (focusAfterClose === "edit" ? editButton : linkButton).current?.focus();
-    setFocusAfterClose(null);
-  }, [focusAfterClose]);
+  const opener = (kind: "edit" | "link") => (node: HTMLButtonElement | null) => {
+    if (node && focusAfterClose.current === kind) {
+      focusAfterClose.current = null;
+      node.focus();
+    }
+  };
 
   const closeForm = () => {
-    setFocusAfterClose(mode);
+    focusAfterClose.current = mode;
     setMode(null);
   };
 
@@ -308,7 +310,7 @@ function RestaurantCard({
           반복되어 어느 카드의 것인지 알 수 없다. "수정"과 "메뉴 연결"은 확인 단계도 없다. */}
       <div className="card-actions">
         <button
-          ref={editButton}
+          ref={opener("edit")}
           disabled={!detail}
           aria-label={`${summary.name} 수정`}
           onClick={() => setMode("edit")}
@@ -316,7 +318,7 @@ function RestaurantCard({
           수정
         </button>
         <button
-          ref={linkButton}
+          ref={opener("link")}
           aria-label={`${summary.name} ${mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}`}
           onClick={() => (mode === "link" ? closeForm() : setMode("link"))}
         >

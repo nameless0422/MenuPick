@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
+import { useDeferredValue, useId, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -30,22 +30,27 @@ export default function MenusPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Editing | null>(null);
 
-  // 폼을 닫을 때 초점을 돌려줄 버튼들. 수정 폼은 카드를 통째로 대체하므로, 폼이 닫히면
+  // 폼을 닫을 때 초점을 돌려줄 곳. 수정 폼은 카드를 통째로 대체하므로, 폼이 닫히면
   // "수정" 버튼이 새로 마운트된다 — 닫기 전에 잡아 둔 DOM 참조로는 돌아갈 수 없어
-  // "무엇으로 돌아갈지"를 키로 기억했다가 다시 그려진 뒤에 찾는다.
-  const openers = useRef(new Map<Editing, HTMLButtonElement | null>());
-  const [focusAfterClose, setFocusAfterClose] = useState<Editing | null>(null);
+  // "무엇으로 돌아갈지"를 키로 예약해 두고, 그 버튼이 다시 붙는 순간에 옮긴다.
+  // 화면에 그려지는 값이 아니라 다음 커밋까지만 남는 예약이라 state가 아니라 ref다.
+  const focusAfterClose = useRef<Editing | null>(null);
 
-  useEffect(() => {
-    if (focusAfterClose == null) return;
-    openers.current.get(focusAfterClose)?.focus();
-    setFocusAfterClose(null);
-  }, [focusAfterClose]);
+  // ref 콜백은 요소가 DOM에 붙는 바로 그 시점에 불린다 — 예약해 둔 목적지가 맞으면
+  // 여기서 초점을 옮기면 되고, "다시 그려지기를 기다리려고" 렌더를 한 번 더 돌릴 필요가 없다.
+  // (인라인 콜백이라 매 렌더 다시 붙으므로, 애초에 언마운트되지 않는 "+ 새 메뉴" 버튼도
+  //  같은 경로로 예약을 받는다.)
+  const opener = (key: Editing) => (node: HTMLButtonElement | null) => {
+    if (node && focusAfterClose.current === key) {
+      focusAfterClose.current = null;
+      node.focus();
+    }
+  };
 
   // 폼을 닫으면 초점이 사라진 폼과 함께 <body>로 떨어진다. 방금 편집한 항목으로 돌려놓지
   // 않으면 키보드 사용자는 Tab을 눌러 목록 처음부터 다시 내려와야 한다.
   const closeForm = () => {
-    setFocusAfterClose(editing);
+    focusAfterClose.current = editing;
     setEditing(null);
   };
 
@@ -55,8 +60,8 @@ export default function MenusPage() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   // <ul>과 <h1>은 목록이 refetch로 다시 그려져도 같은 요소로 남는다 — 초점을 옮기려고
   // 렌더를 한 번 더 기다릴 이유가 없어 삭제가 성공한 그 자리에서 바로 옮긴다.
-  // (폼을 닫을 때 쓰는 focusAfterClose가 state와 effect를 거치는 것은 목적지인 "수정"
-  //  버튼이 다시 마운트되기를 기다려야 하기 때문이고, 여기는 그럴 필요가 없다.)
+  // (폼을 닫을 때 쓰는 focusAfterClose가 예약을 거치는 것은 목적지인 "수정" 버튼이
+  //  다시 마운트되기를 기다려야 하기 때문이고, 여기는 그럴 필요가 없다.)
   // 목적지는 "삭제된 순간"의 개수로 정한다: 남는 메뉴가 있으면 <ul>이
   // 그대로 있고, 마지막 하나였으면 <ul>이 곧 사라지므로 그 전에 제목으로 빠져나와야 한다.
   const focusAfterDelete = () => (menus.length <= 1 ? headingRef : listRef).current?.focus();
@@ -110,7 +115,7 @@ export default function MenusPage() {
             끼지 않는다. */}
         <h1 ref={headingRef} tabIndex={-1}>내 메뉴</h1>
         <button
-          ref={(node) => { openers.current.set("new", node); }}
+          ref={opener("new")}
           onClick={() => setEditing("new")}
         >
           + 새 메뉴
@@ -195,7 +200,7 @@ export default function MenusPage() {
                     항목 단위로 건너뛸 수도 없다. 특히 "수정"과 "추천에서 제외"는 확인 단계가
                     없어 잘못 누르면 그대로 실행된다. */}
                 <button
-                  ref={(node) => { openers.current.set(menu.id, node); }}
+                  ref={opener(menu.id)}
                   aria-label={`${menu.name} 수정`}
                   onClick={() => setEditing(menu.id)}
                 >
@@ -259,7 +264,14 @@ function MenuForm({
   // 한 번만 초기화되므로 뒤늦게 새 값이 도착해도 반영되지 않기 때문이다.
   // 그래서 "이번에 마운트한 뒤 도착한 응답"이 생긴 다음에야 폼을 만든다.
   // 이미 만든 뒤의 배경 refetch는 폼을 다시 만들지 않는다 — 편집 중인 입력이 날아간다.
+  // 아래 두 규칙은 렌더 중 Date.now()나 ref를 읽으면 렌더마다 값이 달라져 화면이 예상대로
+  // 갱신되지 않는 상황을 걱정한다. 여기서 필요한 것은 정확히 그 반대다 — "이 폼이 마운트된
+  // 시각"은 컴포넌트가 사는 동안 한 번 정해지고 다시 렌더돼도 바뀌지 않아야 하는 기준값이라
+  // 오히려 ref여야 한다. 옮길 자리도 없다: state로 두면 첫 렌더 뒤에야 값이 생겨 그 사이
+  // 낡은 캐시로 폼이 만들어지고, effect로 미루면 폼이 이미 초기화된 뒤다.
+  // oxlint-disable-next-line react/purity
   const mountedAt = useRef(Date.now());
+  // oxlint-disable-next-line react/refs
   const hasFreshDetail = detailQuery.isSuccess && detailQuery.dataUpdatedAt >= mountedAt.current;
 
   if (menuId != null && !hasFreshDetail) {

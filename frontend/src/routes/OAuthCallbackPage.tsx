@@ -38,7 +38,13 @@ export default function OAuthCallbackPage({ provider }: { provider: Provider }) 
     // state를 먼저 대조한다 — 우리가 시작하지 않은 로그인(로그인 CSRF)이면
     // 인가 코드를 서버로 보내지 않고 여기서 끊는다. 통과하면 시작할 때의 모드를 돌려준다.
     const mode = consumeOAuthRequest(provider, searchParams.get("state"));
+    // 규칙(set-state-in-effect)은 "렌더에서 파생하라"고 하지만 여기서는 그럴 수 없다.
+    // consumeOAuthRequest는 이름 그대로 1회성 소비라 렌더 중에 부르면 StrictMode의 이중
+    // 렌더에서 두 번 소비돼 멀쩡한 로그인이 CSRF로 오인돼 끊긴다. 아래 인가 코드 검사도
+    // 같은 이유로 못 올라간다 — state 대조를 통과한 뒤에야 볼 값이라 순서가 곧 의미다.
+    // 마운트 시 한 번 돌리는 외부 작업의 실패 분기이므로 effect가 맞는 자리다.
     if (!mode) {
+      // oxlint-disable-next-line react/set-state-in-effect
       setError(INVALID_REQUEST_MESSAGE);
       return;
     }
