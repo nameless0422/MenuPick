@@ -3,7 +3,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import MenusPage from "./MenusPage";
-import { deleteMenu, fetchMenu, fetchMenus, type MenuDetail } from "../api/menus";
+import { createMenu, deleteMenu, fetchMenu, fetchMenus, type MenuDetail } from "../api/menus";
 import { searchTags } from "../api/tags";
 
 vi.mock("../api/menus", () => ({
@@ -21,8 +21,14 @@ vi.mock("../api/tags", () => ({
 
 const fetchMenusMock = vi.mocked(fetchMenus);
 const fetchMenuMock = vi.mocked(fetchMenu);
+const createMenuMock = vi.mocked(createMenu);
 const deleteMenuMock = vi.mocked(deleteMenu);
 const searchTagsMock = vi.mocked(searchTags);
+
+/** 끝나지 않는 요청. "요청이 나가 있는 동안"의 화면을 붙잡아 두려면 이게 필요하다. */
+function pendingForever<T>() {
+  return new Promise<T>(() => {});
+}
 
 const KIMCHI = {
   id: 1,
@@ -56,10 +62,12 @@ const detail = (overrides: Partial<MenuDetail> = {}): MenuDetail => ({
 beforeEach(() => {
   fetchMenusMock.mockReset();
   fetchMenuMock.mockReset();
+  createMenuMock.mockReset();
   deleteMenuMock.mockReset();
   searchTagsMock.mockReset();
   fetchMenusMock.mockResolvedValue({ menus: [KIMCHI], nextCursor: null, hasNext: false });
   fetchMenuMock.mockResolvedValue(detail());
+  createMenuMock.mockResolvedValue(detail());
   deleteMenuMock.mockResolvedValue(undefined);
   // 제안 태그가 필요한 테스트만 따로 채운다 — 기본은 빈 결과다.
   searchTagsMock.mockResolvedValue([]);
@@ -435,5 +443,127 @@ describe("삭제 후 초점", () => {
 
     await screen.findByText(/등록된 메뉴가 없습니다/);
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 메뉴 폼의 저장 버튼은 {@code disabled={isPending || !name.trim()}}이었다.
+ *
+ * <p>이름을 적기 전에는 처음부터 disabled라 <b>버튼이 Tab 순회에서 통째로 빠진다.</b>
+ * 키보드·스크린리더 사용자는 저장 버튼이 있다는 사실도, 왜 눌리지 않는지도 알 수 없다.
+ * 저장을 누른 뒤에는 방금 누른 버튼이 disabled가 되며 초점이 {@code <body>}로 떨어지고,
+ * 요청이 끝나 다시 활성화돼도 돌아오지 않는다.
+ *
+ * <p>aria-disabled·aria-busy는 초점을 뺏지 않는 대신 <b>클릭도 막지 못한다.</b> 조기 반환을
+ * form onSubmit에 두지 않으면 잠긴 것처럼 보이는 버튼이 실제로 눌려 요청이 나간다.
+ */
+describe("메뉴 폼 저장 버튼", () => {
+  /** 새 메뉴 폼을 열고 저장 버튼을 돌려준다. */
+  async function openNewForm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(newMenuButton());
+    await screen.findByRole("heading", { name: "새 메뉴" });
+    return screen.getByRole("button", { name: "저장" });
+  }
+
+  it("이름을 적기 전에도 초점을 받고 '사용 불가'로 읽힌다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    const submit = await openNewForm(user);
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+
+    // disabled였다면 focus()가 조용히 무시되어 초점이 <body>에 남는다.
+    submit.focus();
+    expect(submit).toHaveFocus();
+  });
+
+  // 폼이 noValidate라 완전히 빈 칸도 브라우저가 가로채지 않고 우리 핸들러까지 온다.
+  // 켜 두면 "완전히 빈 칸"은 브라우저 말풍선, "공백만 친 칸"은 우리 알림으로 갈려
+  // 같은 실수인데 화면이 다르게 반응했다.
+  it("아무것도 안 넣고 누르면 같은 안내가 나오고 요청도 나가지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    const submit = await openNewForm(user);
+    await user.click(submit);
+
+    expect(createMenuMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("메뉴 이름을 입력해주세요.");
+    expect(screen.getByLabelText("메뉴 이름")).toHaveFocus();
+  });
+
+  // required는 빈 칸만 잡는다. 공백만 친 값은 required를 통과하지만 name.trim()에는
+  // 걸리므로, 우리가 알리지 않으면 눌러도 아무 일이 없는 것처럼 보인다.
+  it("공백만 넣고 누르면 저장 요청이 나가지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    const submit = await openNewForm(user);
+    await user.type(screen.getByLabelText("메뉴 이름"), "   ");
+    await user.click(submit);
+
+    expect(createMenuMock).not.toHaveBeenCalled();
+  });
+
+  it("공백만 넣고 누르면 이유가 통지되고 초점이 이름 칸으로 간다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    const submit = await openNewForm(user);
+    const nameInput = screen.getByLabelText("메뉴 이름");
+    await user.type(nameInput, "   ");
+    await user.click(submit);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("메뉴 이름을 입력해주세요.");
+    // 이유만 읽히고 초점이 버튼에 남으면, 고칠 칸까지 가는 길은 사용자가 직접 찾아야 한다.
+    expect(nameInput).toHaveFocus();
+    expect(submit).toHaveAccessibleDescription("메뉴 이름을 입력해주세요.");
+  });
+
+  // 제출 경로가 버튼 클릭만이 아니다 — 이름 칸에서 Enter를 쳐도 같은 form이 제출된다.
+  // 버튼 onClick에만 조기 반환을 두면 이 경로로 그대로 새어 나간다.
+  it("공백만 넣고 이름 칸에서 Enter를 쳐도 저장 요청이 나가지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    await openNewForm(user);
+    await user.type(screen.getByLabelText("메뉴 이름"), "   {Enter}");
+
+    expect(createMenuMock).not.toHaveBeenCalled();
+    // 알림이 떴다는 것은 제출이 실제로 일어났고 form 쪽에서 막혔다는 뜻이다.
+    expect(await screen.findByRole("alert")).toHaveTextContent("메뉴 이름을 입력해주세요.");
+  });
+
+  it("이름을 채우면 잠금이 풀리고 저장할 수 있다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    const submit = await openNewForm(user);
+    await user.type(screen.getByLabelText("메뉴 이름"), "된장찌개");
+
+    expect(submit).not.toHaveAttribute("aria-disabled");
+    // 사유가 사라진 뒤에도 참조가 남아 있으면 스크린리더가 빈 설명을 읽는다.
+    expect(submit).not.toHaveAttribute("aria-describedby");
+
+    await user.click(submit);
+    await waitFor(() => expect(createMenuMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("저장 중에도 초점을 지키고 연타되지 않는다", async () => {
+    const user = userEvent.setup();
+    createMenuMock.mockReturnValue(pendingForever<MenuDetail>());
+    renderWithProviders(<MenusPage />);
+
+    const submit = await openNewForm(user);
+    await user.type(screen.getByLabelText("메뉴 이름"), "된장찌개");
+    await user.click(submit);
+
+    const busyButton = await screen.findByRole("button", { name: "저장 중…" });
+    expect(busyButton).toHaveAttribute("aria-busy", "true");
+    expect(busyButton).toHaveFocus();
+
+    // 초점이 남아 있으니 연타가 가능해졌다 — 조기 반환이 없으면 그대로 두 번 나간다.
+    await user.click(busyButton);
+    expect(createMenuMock).toHaveBeenCalledTimes(1);
   });
 });

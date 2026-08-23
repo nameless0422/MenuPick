@@ -227,10 +227,16 @@ button {
   padding: 6px 12px;
   cursor: pointer;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--accent-border);
 }
-button:disabled {
+/* 진행 중이거나 조건이 안 맞는 버튼을 disabled로 잠그면 초점을 받지 못해 Tab 순회에서
+   통째로 빠진다 — 버튼이 있다는 사실도, 왜 못 쓰는지도 전달되지 않는다. 그래서 이 리포는
+   aria-disabled + 핸들러 조기 반환으로 옮겨가는 중이다(#124, #118). 보이는 모습은 그대로
+   여야 하므로 같은 흐림 처리를 여기서 함께 건다 — 이게 없으면 못 누르는 버튼이 멀쩡해
+   보인다. */
+button:disabled,
+button[aria-disabled="true"] {
   opacity: 0.5;
   cursor: default;
 }

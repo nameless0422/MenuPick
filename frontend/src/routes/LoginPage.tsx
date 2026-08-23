@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { loginAuthorizeUrl } from "../auth/oauthUrls";
@@ -108,35 +108,83 @@ function EmailLoginForm() {
 
   const resendMutation = useMutation({ mutationFn: () => resendVerification(email.trim()) });
 
+  // 눌러 보기 전까지는 빈 칸을 오류로 부르지 않는다. 아직 타이핑도 시작하지 않은 화면에
+  // 빨간 문구부터 떠 있으면 안내가 아니라 방해다 — 제출을 눌러 막힌 다음부터 이유를 말한다.
+  const [submitted, setSubmitted] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const emailEmptyId = useId();
+  const passwordEmptyId = useId();
+
+  const emailEmpty = !email.trim();
+  const passwordEmpty = !password;
+  // 초점은 위에서 아래로 — 화면에서 처음 만나는 빈 칸이 사용자가 먼저 채워야 할 칸이다.
+  const firstEmpty = emailEmpty ? emailRef : passwordEmpty ? passwordRef : null;
+  const emailError = submitted && emailEmpty;
+  const passwordError = submitted && passwordEmpty;
+
+  // 여기서 버튼을 잠그는 것은 "요청이 나가 있다"뿐이다. 미입력으로는 잠그지 않는다 —
+  // 잠그는 순간 왜 못 누르는지 말할 자리가 사라진다. 다른 화면(SignupPage 등)은 잠긴
+  // 이유가 이미 화면에 떠 있어 버튼에 이어 붙일 수 있지만, 여기는 "아직 안 채웠다"뿐이라
+  // 붙일 문구 자체가 없다. 대신 눌렀을 때 무엇이 비었는지 알리고 그 칸으로 초점을 옮긴다.
+  const submitBlocked = loginMutation.isPending;
+
   return (
     <form
       className="menu-form"
+      // 브라우저 기본 검증을 끈다. required는 "필수"라는 표시로 남기되, 빈 칸을 알리는 일은
+      // 핸들러가 맡는다 — 기본 말풍선은 다음 입력에 사라져 화면에 남지 않고 낭독 여부도
+      // 브라우저마다 달라, 오류가 전달됐는지를 이쪽에서 보장할 수 없다.
+      noValidate
+      // 제출 경로가 버튼 클릭만이 아니다 — 입력칸에서 Enter를 쳐도 여기로 온다.
+      // 버튼에서 disabled를 뗀 이상 막는 자리는 클릭 핸들러가 아니라 여기다.
       onSubmit={(e) => {
         e.preventDefault();
+        if (submitBlocked) return;
+        if (firstEmpty) {
+          setSubmitted(true);
+          firstEmpty.current?.focus();
+          return;
+        }
         loginMutation.mutate();
       }}
     >
       <label>
         이메일
         <input
+          ref={emailRef}
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           maxLength={255}
           autoComplete="email"
           required
+          aria-invalid={emailError || undefined}
+          aria-describedby={emailError ? emailEmptyId : undefined}
         />
       </label>
+      {/* 이 메시지는 SignupPage의 길이·불일치 안내와 달리 role="alert"를 쓴다. 타이핑 도중이
+          아니라 제출을 누른 순간에만 나타나므로 낭독을 가로챌 일이 없고, 오히려 그 순간
+          알리지 않으면 초점만 옮겨 가 왜 옮겨졌는지 모른 채 서 있게 된다. */}
+      {emailError && (
+        <p className="error" role="alert" id={emailEmptyId}>이메일을 입력해주세요.</p>
+      )}
       <label>
         비밀번호
         <input
+          ref={passwordRef}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
           required
+          aria-invalid={passwordError || undefined}
+          aria-describedby={passwordError ? passwordEmptyId : undefined}
         />
       </label>
+      {passwordError && (
+        <p className="error" role="alert" id={passwordEmptyId}>비밀번호를 입력해주세요.</p>
+      )}
 
       {loginMutation.isError && (
         <p className="error" role="alert">{apiErrorMessage(loginMutation.error)}</p>
@@ -170,7 +218,16 @@ function EmailLoginForm() {
       )}
       {resendMutation.isError && <p className="error" role="alert">{apiErrorMessage(resendMutation.error)}</p>}
 
-      <button type="submit" disabled={loginMutation.isPending || !email.trim() || !password}>
+      {/* 누르는 순간 disabled가 걸리면 방금 누른 버튼에서 초점이 <body>로 떨어지고,
+          요청이 끝나 다시 활성화돼도 돌아오지 않는다. 그러면 뒤이어 렌더되는 실패 문구도
+          "지금 어디에 서 있는지" 모르는 채로 듣게 된다. aria-busy는 초점을 뺏지 않는다.
+          진행 중에도 aria-disabled를 함께 건다 — 흐리게 보이고 눌러도 아무 일이 없는데
+          "사용 불가"라고 말하지 않으면 보이는 모습과 읽히는 상태가 어긋난다. */}
+      <button
+        type="submit"
+        aria-busy={loginMutation.isPending}
+        aria-disabled={submitBlocked || undefined}
+      >
         {loginMutation.isPending ? "로그인 중…" : "로그인"}
       </button>
 

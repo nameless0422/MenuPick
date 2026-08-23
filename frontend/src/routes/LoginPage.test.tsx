@@ -157,3 +157,125 @@ describe("LoginPage 인증 메일 재발송", () => {
     );
   });
 });
+
+/** 응답이 오지 않는 요청 — "진행 중" 상태를 붙잡아 두기 위한 것이다. */
+function pendingForever<T>() {
+  return new Promise<T>(() => {});
+}
+
+/**
+ * 제출 버튼은 {@code disabled={isPending || !email.trim() || !password}}였다.
+ *
+ * <p>미입력이면 처음부터 disabled라 Tab 순회에서 통째로 빠진다 — 스크린리더 사용자는
+ * 로그인 버튼이 있다는 것도, 왜 로그인이 안 되는지도 알 수 없다. 게다가 입력의 required는
+ * 버튼이 disabled인 한 <b>브라우저 기본 검증조차 트리거하지 못해</b>, "이메일을 채우라"는
+ * 말이 영영 나오지 않았다. 막혀 있는데 이유를 말해주는 장치가 하나도 없는 상태다.
+ *
+ * <p>미입력으로는 더 이상 잠그지 않는다. 눌렀을 때 무엇이 비었는지 role="alert"로 알리고
+ * 그 칸으로 초점을 옮긴다 — 원래 required가 하려던 일을 이쪽에서 직접 한다.
+ */
+describe("LoginPage 제출 버튼", () => {
+  // 이 파일의 다른 describe들은 호출 횟수를 보지 않아 mock을 비우지 않고 지나간다.
+  // 여기서는 "요청이 나갔는가"가 판정 기준이라 앞 테스트의 호출이 섞이면 안 된다.
+  beforeEach(() => {
+    vi.mocked(login).mockClear();
+  });
+
+  it("미입력이어도 버튼이 초점을 받는다", () => {
+    renderLogin();
+
+    const submit = screen.getByRole("button", { name: "로그인" });
+    expect(submit).not.toBeDisabled();
+    expect(submit).not.toHaveAttribute("aria-disabled");
+
+    submit.focus();
+    expect(submit).toHaveFocus();
+  });
+
+  it("빈 채로 누르면 무엇을 채워야 하는지 알리고 그 칸으로 초점을 옮긴다", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    // 비어 있는 칸을 모두 알린다 — 하나씩 알리면 고칠 때마다 다시 눌러 보게 된다.
+    expect(screen.getAllByRole("alert").map((el) => el.textContent)).toEqual([
+      "이메일을 입력해주세요.",
+      "비밀번호를 입력해주세요.",
+    ]);
+    // 초점은 위에서 아래로 — 처음 만나는 빈 칸이 먼저 채워야 할 칸이다.
+    expect(screen.getByLabelText("이메일")).toHaveFocus();
+    // 초점만 옮기고 이유를 칸에 묶지 않으면, 나중에 그 칸으로 되돌아왔을 때 다시 들을 길이 없다.
+    expect(screen.getByLabelText("이메일")).toHaveAccessibleDescription("이메일을 입력해주세요.");
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("이메일만 채우고 누르면 비밀번호 칸으로 초점이 간다", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com");
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("비밀번호를 입력해주세요.");
+    expect(screen.getByLabelText("비밀번호")).toHaveFocus();
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  // 제출 경로가 버튼 클릭만이 아니다 — 입력칸에서 Enter를 쳐도 같은 form이 제출된다.
+  // 검사를 버튼 쪽에만 두면 이 경로로 그대로 새어 나간다.
+  it("입력칸에서 Enter를 쳐도 빈 칸이 있으면 로그인 요청이 나가지 않는다", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com{Enter}");
+
+    expect(login).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("비밀번호를 입력해주세요.");
+    expect(screen.getByLabelText("비밀번호")).toHaveFocus();
+  });
+
+  // 채우기 전부터 빨간 문구가 떠 있으면 안내가 아니라 방해다.
+  it("누르기 전에는 빈 칸을 오류로 부르지 않는다", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com");
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("비밀번호")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("다 채우면 눌러서 로그인할 수 있다", async () => {
+    const user = userEvent.setup();
+    vi.mocked(login).mockResolvedValue("token" as never);
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com");
+    await user.type(screen.getByLabelText("비밀번호"), "password123");
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  // 누르는 순간 disabled가 걸리면 방금 누른 버튼에서 초점이 <body>로 떨어져, 뒤이어 오는
+  // 실패 문구를 "어디에 서 있는지" 모르는 채로 듣게 된다. aria-busy는 초점을 뺏지 않는다.
+  it("요청 중에도 초점을 지키고 연타되지 않는다", async () => {
+    const user = userEvent.setup();
+    vi.mocked(login).mockReturnValue(pendingForever<string>());
+    renderLogin();
+
+    await user.type(screen.getByLabelText("이메일"), "a@b.com");
+    await user.type(screen.getByLabelText("비밀번호"), "password123");
+    await user.click(screen.getByRole("button", { name: "로그인" }));
+
+    const busyButton = await screen.findByRole("button", { name: "로그인 중…" });
+    expect(busyButton).toHaveAttribute("aria-busy", "true");
+    expect(busyButton).toHaveAttribute("aria-disabled", "true");
+    expect(busyButton).toHaveFocus();
+
+    // aria-disabled는 표시일 뿐 클릭을 막지 않는다 — 조기 반환이 없으면 같은 요청이 겹쳐 나간다.
+    await user.click(busyButton);
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+});
