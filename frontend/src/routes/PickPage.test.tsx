@@ -4,12 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
+import { searchTags } from "../api/tags";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 
 vi.mock("../api/pick", () => ({ requestPick: vi.fn() }));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]) }));
 
 const requestPickMock = vi.mocked(requestPick);
+const searchTagsMock = vi.mocked(searchTags);
+const HONBAP = { id: 7, name: "혼밥", createdAt: "2026-01-01T00:00:00" };
 
 /**
  * 위치 요청을 붙잡아 두는 스텁.
@@ -42,6 +45,8 @@ beforeEach(() => {
   resetKakaoSdkForTest();
   delete window.kakao;
   requestPickMock.mockReset();
+  // 태그 제안을 쓰는 테스트가 뒤 테스트로 새지 않게 매번 빈 목록으로 되돌린다.
+  searchTagsMock.mockResolvedValue([]);
   // 이 파일이 보는 것은 픽 요청에 무엇이 실려 나가는지이므로 응답은 최소 형태로 고정한다.
   requestPickMock.mockResolvedValue({
     historyId: 1,
@@ -279,5 +284,151 @@ describe("픽 진행·결과 통지", () => {
 
     // 최대 10초 뒤에 비동기로 나타난다. role이 없으면 "이유 없이 되돌아간 것"으로만 보인다.
     expect(await screen.findByRole("alert")).toHaveTextContent(/위치를 가져오지 못해/);
+  });
+});
+
+/**
+ * disabled인 요소는 초점을 받지 못한다 — 누르는 순간 초점이 그 버튼에서 {@code <body>}로
+ * 떨어지고, 요청이 끝나 다시 활성화돼도 돌아오지 않는다. 픽 버튼은 여기에 더해 돌리는 동안
+ * 유일한 자식이 aria-hidden이라 <b>접근 가능한 이름이 빈 문자열</b>이 됐다. 즉 Enter를 친
+ * 뒤 1.2초 동안 버튼은 이름도 없고 초점도 없는 상태였고, 다시 돌리려면 페이지 맨 위에서
+ * Tab을 눌러 내려와야 했다.
+ */
+describe("픽 버튼 — disabled 대신 aria-busy", () => {
+  it("돌리는 동안에도 버튼 이름이 그대로 남는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    // 이름은 "무엇을 하는 버튼인가"이므로 진행 상태에 따라 바뀌면 안 된다.
+    const button = await screen.findByRole("button", { name: "오늘의 메뉴 뽑기" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    // disabled면 초점을 잃는다. 진행 중임은 aria-disabled/aria-busy로만 알린다.
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("돌리는 동안 눌러도 픽 요청이 겹쳐 나가지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    // aria-disabled는 표시일 뿐 클릭을 막지 않는다 — 핸들러의 조기 반환이 실제 방어선이다.
+    await user.click(spinButton());
+    await user.click(spinButton());
+
+    expect(requestPickMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("결과 카드의 다시 돌리기를 누르면 초점이 픽 버튼으로 옮겨간다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+    // 슬롯 연출이 최소 1.2초라 기본 대기(1초)로는 결과가 아직 안 나온다.
+    const retry = await screen.findByRole("button", { name: /다시 돌리기/ }, { timeout: 3000 });
+    await user.click(retry);
+
+    // 다시 돌리기는 결과 카드 안에 있어 누르는 순간 카드째 사라진다 — 갈 곳을 주지 않으면
+    // 초점이 <body>로 떨어진다.
+    expect(spinButton()).toHaveFocus();
+  });
+});
+
+/**
+ * 칩은 누르면 다른 행으로 옮겨가며 언마운트된다. 매번 초점이 {@code <body>}로 떨어져
+ * 태그를 연달아 고르는 것이 사실상 불가능했다.
+ */
+describe("필터 칩 — 눌러도 갈 곳이 남는다", () => {
+  it("직접 입력한 카테고리는 해제해도 목록에서 사라지지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.type(await screen.findByRole("textbox", { name: "직접 입력한 카테고리" }), "떡볶이");
+    await user.click(screen.getByRole("button", { name: "추가" }));
+
+    const chip = await screen.findByRole("button", { name: "떡볶이" });
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(chip);
+
+    // 해제하면 selected에서 빠지는데, 그것만으로 목록을 만들면 칩이 영영 사라져
+    // 다시 쓰려면 처음부터 타이핑해야 했다.
+    const stillThere = screen.getByRole("button", { name: "떡볶이" });
+    expect(stillThere).toHaveAttribute("aria-pressed", "false");
+    expect(stillThere).toHaveFocus();
+  });
+
+  // 입력이 비는 순간 "추가"가 disabled가 되어, 방금 누른 그 버튼이 초점을 받을 수 없게 된다.
+  it("카테고리를 추가하면 초점이 입력으로 돌아온다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    const input = await screen.findByRole("textbox", { name: "직접 입력한 카테고리" });
+    await user.type(input, "떡볶이");
+    await user.click(screen.getByRole("button", { name: "추가" }));
+
+    expect(input).toHaveFocus();
+  });
+
+  it("태그를 고르면 초점이 그 태그 검색 입력으로 간다", async () => {
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    // 포함/제외 두 필터가 같은 키로 조회하므로 제안 칩도 두 벌 나온다 — 앞쪽이 포함 태그다.
+    const suggestions = await screen.findAllByRole("button", { name: "#혼밥" });
+    await user.click(suggestions[0]);
+
+    // 고른 칩은 제안 행에서 사라져 돌아갈 자리가 없다. 다음 행동이 시작되는 곳으로 모은다.
+    expect(screen.getByRole("textbox", { name: "포함 태그 검색" })).toHaveFocus();
+  });
+
+  it("선택한 태그를 해제해도 초점이 검색 입력에 남는다", async () => {
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click((await screen.findAllByRole("button", { name: "#혼밥" }))[0]);
+    await user.click(screen.getByRole("button", { name: "혼밥 태그 선택 해제" }));
+
+    expect(screen.getByRole("textbox", { name: "포함 태그 검색" })).toHaveFocus();
+  });
+});
+
+/**
+ * 슬롯 연출은 80ms(초당 12.5회) 간격으로 이모지를 최소 1.2초 교체한다. 2.2.2(5초 초과)
+ * 대상도 아니고 섬광도 아니지만, 전정기관이 민감한 사용자에게는 불필요한 부하다.
+ * 이 앱의 유일한 모션이라 CSS에는 대응할 것이 없고 이 인터벌만 막으면 된다.
+ */
+describe("모션 최소화", () => {
+  it("prefers-reduced-motion이면 이모지를 바꾸지 않는다", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+
+    try {
+      const user = userEvent.setup();
+      renderWithProviders(<PickPage />);
+
+      await user.click(spinButton());
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("메뉴를 뽑는 중…"));
+
+      // 80ms 간격이라 이 사이에 세 번은 바뀌었어야 한다. SLOT_EMOJIS에 🎲는 없으므로
+      // 한 번이라도 돌았다면 이 조회는 실패한다.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(screen.getByText("🎲")).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });

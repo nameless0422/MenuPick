@@ -148,3 +148,60 @@ describe("날짜 표기", () => {
     expect(await screen.findByText(/2019년 3월 4일/)).toBeInTheDocument();
   });
 });
+
+/**
+ * 삭제 버튼을 누른 그 <li>가 사라진다. window.confirm은 브라우저가 원래 버튼으로 초점을
+ * 되돌려 주지만, 삭제가 성공하는 순간 그 버튼이 DOM에서 없어져 초점은 결국 {@code <body>}로
+ * 떨어진다. 화면만 보면 아무 문제가 없어 보이고, 키보드 사용자만 다음 기록을 지우려고
+ * 페이지 맨 위에서 Tab을 다시 눌러 내려와야 한다.
+ */
+describe("HistoryPage 삭제 후 초점", () => {
+  const OTHER_PICK = { ...KIMCHI_PICK, id: 11, menuName: "된장찌개" };
+
+  it("기록이 남아 있으면 초점이 목록으로 간다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchHistoriesMock.mockResolvedValueOnce({
+      histories: [KIMCHI_PICK, OTHER_PICK],
+      nextCursor: null,
+      hasNext: false,
+    });
+    // 삭제 뒤 다시 불러오면 한 건만 남는다.
+    fetchHistoriesMock.mockResolvedValue({
+      histories: [OTHER_PICK],
+      nextCursor: null,
+      hasNext: false,
+    });
+
+    renderWithProviders(<HistoryPage />);
+
+    await user.click(await screen.findByRole("button", { name: /김치찌개 픽 기록 삭제/ }));
+
+    await waitFor(() => expect(screen.getByRole("list")).toHaveFocus());
+    // 목록이 다시 그려져도 같은 <ul>이라 초점은 그대로 남아 있어야 한다.
+    await waitFor(() => expect(screen.queryByText("김치찌개")).not.toBeInTheDocument());
+    expect(screen.getByRole("list")).toHaveFocus();
+    confirmSpy.mockRestore();
+  });
+
+  it("마지막 기록을 지우면 목록이 사라지므로 초점이 제목으로 간다", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchHistoriesMock.mockResolvedValueOnce({
+      histories: [KIMCHI_PICK],
+      nextCursor: null,
+      hasNext: false,
+    });
+    fetchHistoriesMock.mockResolvedValue({ histories: [], nextCursor: null, hasNext: false });
+
+    renderWithProviders(<HistoryPage />);
+
+    await user.click(await screen.findByRole("button", { name: /김치찌개 픽 기록 삭제/ }));
+
+    // <ul>로 보냈다면 목록이 언마운트되는 순간 초점이 다시 <body>로 떨어진다.
+    await waitFor(() => expect(screen.getByRole("heading", { name: "픽 히스토리" })).toHaveFocus());
+    await waitFor(() => expect(screen.queryByRole("list")).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "픽 히스토리" })).toHaveFocus();
+    confirmSpy.mockRestore();
+  });
+});

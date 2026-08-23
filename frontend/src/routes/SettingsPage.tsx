@@ -232,6 +232,19 @@ function SocialLinkRow({
   // "해제한 뒤에도 들어올 문이 하나는 남는가". 비밀번호가 있거나, 다른 소셜 연동이 남으면 된다.
   const lastLoginMethod = linked && !me.hasPassword && me.linkedProviders.length === 1;
 
+  // 해제 불가 사유를 버튼에 aria-describedby로 묶기 위한 id. 비밀번호 폼의 검증 메시지와
+  // 같은 방식이다 — 초점이 버튼에 닿는 순간 이름 뒤에 이유가 이어서 읽힌다.
+  const noteId = useId();
+
+  // 둘 다 disabled를 쓰지 않지만, 쓰지 않는 이유가 서로 다르다.
+  // - lastLoginMethod: disabled면 버튼이 Tab 순회에서 통째로 빠져 키보드·스크린리더
+  //   사용자는 해제 버튼이 있다는 것도, 왜 못 쓰는지도 알 수 없다. aria-disabled로 두면
+  //   초점은 받되 "사용 불가"와 사유가 함께 읽힌다.
+  // - busy: 누르는 순간 disabled가 걸리면 방금 누른 버튼에서 초점이 <body>로 떨어지고
+  //   요청이 끝나 다시 활성화돼도 돌아오지 않는다. aria-busy는 초점을 뺏지 않는다.
+  // 다만 aria-*는 표시일 뿐 클릭을 막지 않는다 — 막는 일은 핸들러가 직접 해야 한다.
+  const blocked = busy || lastLoginMethod;
+
   return (
     <li className="settings-link-row">
       {/* 제공자 이름과 상태를 각각 제 요소에 둔다 — 한 덩어리로 묶으면 화면에서도
@@ -242,7 +255,20 @@ function SocialLinkRow({
       {/* 버튼 이름에 제공자를 넣는다. 한 화면에 제공자 수만큼 놓이므로 "연동하기"만으로는
           스크린리더 사용자가 어느 쪽 버튼인지 구분할 수 없다. */}
       {linked ? (
-        <button type="button" disabled={busy || lastLoginMethod} onClick={onUnlink}>
+        <button
+          type="button"
+          aria-busy={busy}
+          // 진행 중에도 aria-disabled를 건다. 흐리게 보이고 눌러도 아무 일이 없는데
+          // "사용 불가"라고 말하지 않으면, 보이는 모습과 읽히는 상태가 어긋난다.
+          aria-disabled={blocked || undefined}
+          // 사유 <p>는 lastLoginMethod일 때만 그려진다 — 없는 id를 가리키면 참조가 끊겨
+          // 스크린리더가 아무것도 읽지 못한다.
+          aria-describedby={lastLoginMethod ? noteId : undefined}
+          onClick={() => {
+            if (blocked) return;
+            onUnlink();
+          }}
+        >
           {PROVIDER_LABELS[provider]} 연동 해제
         </button>
       ) : (
@@ -257,7 +283,7 @@ function SocialLinkRow({
       )}
 
       {lastLoginMethod && (
-        <p className="settings-desc settings-link-note">
+        <p className="settings-desc settings-link-note" id={noteId}>
           마지막 로그인 수단이라 해제할 수 없어요. 비밀번호를 먼저 설정해주세요.
         </p>
       )}

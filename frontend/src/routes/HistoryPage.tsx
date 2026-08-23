@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -82,14 +82,33 @@ export default function HistoryPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["history"] });
 
+  const histories = historyQuery.data?.pages.flatMap((page) => page.histories) ?? [];
+
+  // 삭제를 누른 버튼은 그 <li>와 함께 사라진다 — window.confirm이 초점을 버튼으로 되돌려
+  // 놓아도 결국 <body>로 떨어져, 다음 기록을 지우려면 페이지 맨 위에서 Tab을 다시 눌러
+  // 내려와야 한다. 그래서 남은 목록으로 초점을 옮긴다.
+  const listRef = useRef<HTMLUListElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [focusAfterDelete, setFocusAfterDelete] = useState<"list" | "heading" | null>(null);
+
+  useEffect(() => {
+    if (focusAfterDelete == null) return;
+    (focusAfterDelete === "heading" ? headingRef : listRef).current?.focus();
+    // 비워 두지 않으면 다음 삭제 때 값이 그대로라 effect가 다시 돌지 않는다.
+    setFocusAfterDelete(null);
+  }, [focusAfterDelete]);
+
   // 삭제가 끝나면 그 기록은 목록에서 사라진다 — 성공 안내에 이름을 넣으려면 변이 인자에
   // 이름을 함께 실어 두는 수밖에 없다.
   const deleteMutation = useMutation({
     mutationFn: ({ id }: { id: number; label: string }) => deleteHistory(id),
+    // 목적지는 refetch가 끝나기를 기다리지 않고 "삭제된 순간"의 개수로 정한다. 목록이 다시
+    // 그려진 뒤에 세면 초점 이동과 refetch가 서로를 기다리는 경쟁이 된다.
+    // 남는 기록이 있으면 <ul>은 refetch 뒤에도 같은 요소라 초점이 그대로 유지되고,
+    // 마지막 하나였으면 <ul>이 통째로 사라지므로 그 전에 제목으로 빠져 나와야 한다.
+    onSuccess: () => setFocusAfterDelete(histories.length <= 1 ? "heading" : "list"),
     onSettled: invalidate,
   });
-
-  const histories = historyQuery.data?.pages.flatMap((page) => page.histories) ?? [];
 
   // 조사(을/를)는 받침에 따라 갈리므로 이름 뒤에 "픽 기록을"을 붙여 이름과 조사를 떼어 놓는다.
   const listAnnouncement = historyQuery.isFetchingNextPage
@@ -101,7 +120,10 @@ export default function HistoryPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>픽 히스토리</h1>
+        {/* 마지막 기록을 지우면 <ul>이 사라져 초점을 둘 곳이 없다 — 제목이 그 폴백이다.
+            제목은 원래 초점을 받지 않는 요소라 tabIndex={-1}이 없으면 focus()가 조용히
+            무시된다. -1이므로 Tab 순서에는 끼지 않는다. */}
+        <h1 ref={headingRef} tabIndex={-1}>픽 히스토리</h1>
       </header>
 
       <div className="days-filter">
@@ -145,7 +167,7 @@ export default function HistoryPage() {
           Safari + VoiceOver는 list-style: none이 걸린 <ul>의 목록 시맨틱을 지우므로
           role도 명시한다. */}
       {histories.length > 0 && (
-      <ul className="card-list" role="list">
+      <ul ref={listRef} tabIndex={-1} className="card-list" role="list">
         {histories.map((history) => {
           // 화면에 보이는 이름, 버튼 이름, 확인 대화상자가 전부 같은 말을 쓰게 한 번만 만든다.
           const label = history.menuName ?? "삭제된 메뉴";
