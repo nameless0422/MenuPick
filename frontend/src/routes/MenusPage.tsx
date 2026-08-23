@@ -53,15 +53,13 @@ export default function MenusPage() {
   // 함께 없어지므로 결국 <body>로 떨어진다 — 갈 곳을 미리 정해 두어야 한다.
   const listRef = useRef<HTMLUListElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const [focusAfterDelete, setFocusAfterDelete] = useState<"list" | "heading" | null>(null);
-
-  useEffect(() => {
-    if (focusAfterDelete == null) return;
-    (focusAfterDelete === "heading" ? headingRef : listRef).current?.focus();
-    // 다음 삭제에서도 effect가 다시 돌도록 되돌린다. 같은 값이 연속으로 들어오면
-    // 의존성이 변하지 않아 초점 이동이 한 번만 일어난다.
-    setFocusAfterDelete(null);
-  }, [focusAfterDelete]);
+  // <ul>과 <h1>은 목록이 refetch로 다시 그려져도 같은 요소로 남는다 — 초점을 옮기려고
+  // 렌더를 한 번 더 기다릴 이유가 없어 삭제가 성공한 그 자리에서 바로 옮긴다.
+  // (폼을 닫을 때 쓰는 focusAfterClose가 state와 effect를 거치는 것은 목적지인 "수정"
+  //  버튼이 다시 마운트되기를 기다려야 하기 때문이고, 여기는 그럴 필요가 없다.)
+  // 목적지는 "삭제된 순간"의 개수로 정한다: 남는 메뉴가 있으면 <ul>이
+  // 그대로 있고, 마지막 하나였으면 <ul>이 곧 사라지므로 그 전에 제목으로 빠져나와야 한다.
+  const focusAfterDelete = () => (menus.length <= 1 ? headingRef : listRef).current?.focus();
 
   const menusQuery = useInfiniteQuery({
     queryKey: ["menus"],
@@ -91,7 +89,7 @@ export default function MenusPage() {
     // 시점을 기다리면 <li>가 사라지는 타이밍과 경쟁이 붙는다. 남는 메뉴가 있으면 <ul>은
     // refetch 뒤에도 같은 요소라 초점이 그대로 유지되고, 마지막 하나였다면 <ul>이 통째로
     // 사라지므로 그 전에 <h1>으로 빠져나가 둔다.
-    onSuccess: () => setFocusAfterDelete(menus.length <= 1 ? "heading" : "list"),
+    onSuccess: focusAfterDelete,
     onSettled: invalidate,
   });
 
