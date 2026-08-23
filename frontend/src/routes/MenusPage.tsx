@@ -49,6 +49,20 @@ export default function MenusPage() {
     setEditing(null);
   };
 
+  // 삭제한 <li>는 사라진다. window.confirm이 원래 "삭제" 버튼으로 초점을 돌려줘도 그 버튼이
+  // 함께 없어지므로 결국 <body>로 떨어진다 — 갈 곳을 미리 정해 두어야 한다.
+  const listRef = useRef<HTMLUListElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [focusAfterDelete, setFocusAfterDelete] = useState<"list" | "heading" | null>(null);
+
+  useEffect(() => {
+    if (focusAfterDelete == null) return;
+    (focusAfterDelete === "heading" ? headingRef : listRef).current?.focus();
+    // 다음 삭제에서도 effect가 다시 돌도록 되돌린다. 같은 값이 연속으로 들어오면
+    // 의존성이 변하지 않아 초점 이동이 한 번만 일어난다.
+    setFocusAfterDelete(null);
+  }, [focusAfterDelete]);
+
   const menusQuery = useInfiniteQuery({
     queryKey: ["menus"],
     queryFn: ({ pageParam }) => fetchMenus(pageParam),
@@ -73,6 +87,11 @@ export default function MenusPage() {
   // 이름을 함께 실어 두는 수밖에 없다.
   const deleteMutation = useMutation({
     mutationFn: ({ menuId }: { menuId: number; name: string }) => deleteMenu(menuId),
+    // 목적지를 refetch가 끝난 뒤가 아니라 "삭제한 순간"의 개수로 정한다. 새 목록이 도착하는
+    // 시점을 기다리면 <li>가 사라지는 타이밍과 경쟁이 붙는다. 남는 메뉴가 있으면 <ul>은
+    // refetch 뒤에도 같은 요소라 초점이 그대로 유지되고, 마지막 하나였다면 <ul>이 통째로
+    // 사라지므로 그 전에 <h1>으로 빠져나가 둔다.
+    onSuccess: () => setFocusAfterDelete(menus.length <= 1 ? "heading" : "list"),
     onSettled: invalidate,
   });
 
@@ -88,7 +107,10 @@ export default function MenusPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>내 메뉴</h1>
+        {/* 마지막 메뉴를 지우면 <ul>까지 사라져 돌아갈 목록이 없다 — 그때의 폴백 목적지다.
+            제목은 원래 초점을 받지 않으므로 tabIndex={-1}이 필요하고, 음수라 Tab 순서에는
+            끼지 않는다. */}
+        <h1 ref={headingRef} tabIndex={-1}>내 메뉴</h1>
         <button
           ref={(node) => { openers.current.set("new", node); }}
           onClick={() => setEditing("new")}
@@ -127,9 +149,15 @@ export default function MenusPage() {
         )}
       </div>
 
-      {/* Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지운다.
-          role을 명시하면 "목록, 항목 3개"가 그대로 유지된다. */}
-      <ul className="card-list" role="list">
+      {/* 메뉴가 0개일 때 빈 <ul>을 남기면 "목록, 항목 0개"로 읽혀 바로 위 role="status"의
+          "등록된 메뉴가 없습니다" 안내와 어긋난다.
+          Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지우므로
+          role도 명시한다 — 그래야 "목록, 항목 3개"가 유지된다.
+          tabIndex={-1}은 삭제 후 초점을 받기 위한 것이다. 이때 읽히는 "목록, 항목 3개"가
+          role="status"의 "'김치찌개' 메뉴를 삭제했습니다"와 겹칠 수 있지만, 개수가 줄어든
+          목록이 다시 읽히므로 삭제됐다는 사실 자체는 어느 쪽으로든 전달된다. */}
+      {menus.length > 0 && (
+      <ul className="card-list" role="list" ref={listRef} tabIndex={-1}>
         {menus.map((menu) =>
           editing === menu.id ? (
             <li key={menu.id} className="card">
@@ -198,6 +226,7 @@ export default function MenusPage() {
           ),
         )}
       </ul>
+      )}
 
       {menusQuery.hasNextPage && (
         <button
@@ -373,6 +402,15 @@ function CategoryPicker({
 }) {
   const [custom, setCustom] = useState("");
 
+  // 칩 목록을 프리셋과 selected만으로 합성하면, 프리셋에 없는 카테고리는 해제하는 순간
+  // selected에서 빠지며 목록에서 영구히 사라진다. 다시 쓰려면 처음부터 타이핑해야 하고,
+  // 방금 누른 버튼이 언마운트되니 초점도 <body>로 떨어진다. 여기에 따로 기억해 두면
+  // 칩이 애초에 사라지지 않으므로 초점 문제가 패치가 아니라 소멸로 해결된다.
+  // 처음 받은 selected로 시작하는 이유는, 수정 폼이 이미 가지고 있던 사용자 정의
+  // 카테고리도 똑같이 해제 한 번에 증발하기 때문이다.
+  const [customs, setCustoms] = useState<string[]>(selected);
+  const customInput = useRef<HTMLInputElement>(null);
+
   const toggle = (category: string) =>
     onChange(
       selected.includes(category)
@@ -382,15 +420,21 @@ function CategoryPicker({
 
   const addCustom = () => {
     const value = custom.trim();
-    if (value && !selected.includes(value)) onChange([...selected, value]);
     setCustom("");
+    // "추가"를 누르면 입력이 비어 그 버튼이 곧바로 disabled가 된다 — 방금 누른 버튼이
+    // 초점을 받을 수 없게 되면서 초점이 <body>로 떨어진다. 다음 행동(다른 카테고리 입력)이
+    // 시작되는 입력으로 옮기면 그 자리에서 이어서 칠 수 있다.
+    customInput.current?.focus();
+    if (!value) return;
+    setCustoms((prev) => (prev.includes(value) ? prev : [...prev, value]));
+    if (!selected.includes(value)) onChange([...selected, value]);
   };
 
   return (
     <fieldset>
       <legend>카테고리</legend>
       <div className="chip-row">
-        {[...new Set([...CATEGORY_PRESETS, ...selected])].map((category) => (
+        {[...new Set([...CATEGORY_PRESETS, ...customs, ...selected])].map((category) => (
           <button
             key={category}
             type="button"
@@ -406,6 +450,7 @@ function CategoryPicker({
           없다. 음성 제어로 지목할 이름도 필요하다. */}
       <div className="inline-add">
         <input
+          ref={customInput}
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           maxLength={20}
@@ -433,18 +478,38 @@ function TagPicker({
 }) {
   const [keyword, setKeyword] = useState("");
   const deferredKeyword = useDeferredValue(keyword);
+  const keywordRef = useRef<HTMLInputElement>(null);
+
+  // 태그를 고르면 그 칩이 제안 행에서 선택 행으로 옮겨가고, 선택 행의 칩을 해제하면 아예
+  // 사라진다 — 어느 쪽이든 방금 누른 버튼이 언마운트되어 초점이 <body>로 떨어진다.
+  // 해제한 칩에는 돌아갈 자리가 없으니 검색 입력으로 모은다. 이 컨트롤의 허브이고,
+  // 다음에 할 일은 대개 또 다른 태그를 찾는 것이기 때문이다.
+  const focusKeyword = () => keywordRef.current?.focus();
+
+  const selectTag = (tag: TagSummary) => {
+    onChange([...selected, { id: tag.id, name: tag.name }]);
+    focusKeyword();
+  };
+
+  const deselectTag = (tagId: number) => {
+    onChange(selected.filter((s) => s.id !== tagId));
+    focusKeyword();
+  };
+
+  const createMutation = useMutation({
+    mutationFn: createTag,
+    // 새로 만든 태그도 선택 행으로 들어가고, 검색어가 비면서 '만들기' 버튼까지 사라진다.
+    // 고르는 것과 같은 경로이므로 초점도 같은 곳으로 보낸다.
+    onSuccess: (tag) => {
+      onChange([...selected, { id: tag.id, name: tag.name }]);
+      setKeyword("");
+      focusKeyword();
+    },
+  });
 
   const tagsQuery = useQuery({
     queryKey: ["tags", deferredKeyword],
     queryFn: () => searchTags(deferredKeyword),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: createTag,
-    onSuccess: (tag) => {
-      onChange([...selected, { id: tag.id, name: tag.name }]);
-      setKeyword("");
-    },
   });
 
   const suggestions = (tagsQuery.data ?? []).filter(
@@ -466,7 +531,7 @@ function TagPicker({
               {...chipToggle(true, "chip-tag")}
               aria-label={`${tag.name} 태그 선택 해제`}
               title="클릭하면 해제"
-              onClick={() => onChange(selected.filter((s) => s.id !== tag.id))}
+              onClick={() => deselectTag(tag.id)}
             >
               #{tag.name} ✕
             </button>
@@ -475,6 +540,7 @@ function TagPicker({
       )}
       <div className="inline-add">
         <input
+          ref={keywordRef}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           maxLength={50}
@@ -499,7 +565,7 @@ function TagPicker({
               key={tag.id}
               type="button"
               {...chipToggle(false, "chip-tag")}
-              onClick={() => onChange([...selected, { id: tag.id, name: tag.name }])}
+              onClick={() => selectTag(tag)}
             >
               #{tag.name}
             </button>

@@ -42,9 +42,16 @@
   min-width: min(280px, 100%);
   min-height: 74px;
 }
-.pick-button:hover:not(:disabled) {
+.pick-button:hover:not([aria-disabled="true"]) {
   border-color: var(--accent);
   box-shadow: var(--shadow);
+}
+/* 돌리는 동안 disabled 대신 aria-disabled를 쓴다(초점을 잃지 않기 위해). 그러면 전역
+   button:disabled의 흐림 처리가 걸리지 않아 시각적으로는 계속 누를 수 있어 보이므로,
+   같은 모습을 여기서 되살린다. */
+.pick-button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .pick-slot {

@@ -30,10 +30,34 @@ export default function RestaurantsPage() {
 
   const restaurants = restaurantsQuery.data ?? [];
 
+  // 삭제를 누른 버튼은 그 카드와 함께 사라진다 — window.confirm이 초점을 버튼으로 되돌려
+  // 놓아도 결국 <body>로 떨어져, 다음 식당을 지우려면 페이지 맨 위에서 Tab을 다시 눌러
+  // 내려와야 한다. 삭제 변이는 카드 안에 있어 카드가 스스로를 언마운트하므로, 초점을 받을
+  // 자리는 카드보다 오래 사는 이쪽(부모)에 둔다. (HistoryPage와 같은 처리)
+  const listRef = useRef<HTMLUListElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [focusAfterDelete, setFocusAfterDelete] = useState<"list" | "heading" | null>(null);
+
+  useEffect(() => {
+    if (focusAfterDelete == null) return;
+    (focusAfterDelete === "heading" ? headingRef : listRef).current?.focus();
+    // 비워 두지 않으면 다음 삭제 때 값이 그대로라 effect가 다시 돌지 않는다.
+    setFocusAfterDelete(null);
+  }, [focusAfterDelete]);
+
+  // 목적지는 refetch가 끝나기를 기다리지 않고 "삭제된 순간"의 개수로 정한다. 목록이 다시
+  // 그려진 뒤에 세면 초점 이동과 refetch가 서로를 기다리는 경쟁이 된다.
+  // 남는 식당이 있으면 <ul>은 refetch 뒤에도 같은 요소라 초점이 그대로 유지되고,
+  // 마지막 하나였으면 <ul>이 통째로 사라지므로 그 전에 제목으로 빠져 나와야 한다.
+  const handleDeleted = () => setFocusAfterDelete(restaurants.length <= 1 ? "heading" : "list");
+
   return (
     <div className="page">
       <header className="page-header">
-        <h1>내 식당</h1>
+        {/* 마지막 식당을 지우면 목록이 비어 초점을 둘 곳이 없다 — 제목이 그 폴백이다.
+            제목은 원래 초점을 받지 않는 요소라 tabIndex={-1}이 없으면 focus()가 조용히
+            무시된다. -1이므로 Tab 순서에는 끼지 않는다. */}
+        <h1 ref={headingRef} tabIndex={-1}>내 식당</h1>
       </header>
 
       <PlaceSearch onSaved={invalidate} />
@@ -57,12 +81,21 @@ export default function RestaurantsPage() {
           상황에서도 식당을 보고 고칠 수 있어야 한다. */}
       <KakaoMap points={restaurants} ariaLabel="저장한 식당 위치" />
 
-      {/* Safari + VoiceOver는 list-style: none이 걸린 <ul>에서 목록 시맨틱을 지운다. */}
-      <ul className="card-list" role="list">
-        {restaurants.map((restaurant) => (
-          <RestaurantCard key={restaurant.id} summary={restaurant} onChanged={invalidate} />
-        ))}
-      </ul>
+      {/* 0건일 때 빈 <ul>을 남기면 "목록, 항목 0개"로 읽혀 위 안내("저장한 식당이 없습니다")와
+          어긋난다. Safari + VoiceOver는 list-style: none이 걸린 <ul>의 목록 시맨틱을 지우므로
+          role도 명시한다. */}
+      {restaurants.length > 0 && (
+        <ul ref={listRef} tabIndex={-1} className="card-list" role="list">
+          {restaurants.map((restaurant) => (
+            <RestaurantCard
+              key={restaurant.id}
+              summary={restaurant}
+              onChanged={invalidate}
+              onDeleted={handleDeleted}
+            />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -198,9 +231,13 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
 function RestaurantCard({
   summary,
   onChanged,
+  onDeleted,
 }: {
   summary: RestaurantSummary;
   onChanged: () => void;
+  // 수정·연결과 달리 삭제는 이 카드를 없앤다. onChanged만으로는 부모가 그 차이를 알 수 없어
+  // 초점을 옮겨야 할 때와 아닐 때가 구분되지 않으므로 삭제 경로에만 별도 신호를 준다.
+  onDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"edit" | "link" | null>(null);
@@ -234,6 +271,7 @@ function RestaurantCard({
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["restaurant", summary.id] });
       onChanged();
+      onDeleted();
     },
   });
 
