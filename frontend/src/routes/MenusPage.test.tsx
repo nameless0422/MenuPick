@@ -374,7 +374,7 @@ describe("칩 조작 후 초점", () => {
     renderWithProviders(<MenusPage />);
 
     await user.click(newMenuButton());
-    await user.click(await screen.findByRole("button", { name: "#혼밥" }));
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 추가" }));
 
     // 고른 태그는 제안 행에서 사라져 선택 행으로 옮겨간다 — 돌아갈 버튼이 없다.
     expect(screen.getByRole("button", { name: "혼밥 태그 선택 해제" })).toBeInTheDocument();
@@ -565,5 +565,40 @@ describe("메뉴 폼 저장 버튼", () => {
     // 초점이 남아 있으니 연타가 가능해졌다 — 조기 반환이 없으면 그대로 두 번 나간다.
     await user.click(busyButton);
     expect(createMenuMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 태그 <b>제안</b> 칩에 {@code chipToggle(false)}가 붙어 aria-pressed="false"로 읽혔다.
+ *
+ * <p>aria-pressed는 "눌러서 켜고 다시 눌러 끌 수 있다"는 약속인데, 이 버튼은 눌러도
+ * pressed가 true로 바뀌지 않는다 — 선택 목록으로 옮겨 가며 이 자리에서 언마운트된다.
+ * 확인하러 돌아온 자리에는 아무것도 없고 다시 눌러 끌 수도 없다. 상태를 뗀 만큼 이름이
+ * 일을 대신해야 한다 — "#혼밥"만으로는 눌렀을 때 무엇이 일어나는지 알 수 없다.
+ */
+describe("태그 제안 칩", () => {
+  it("토글이 아니므로 aria-pressed를 달지 않고, 이름이 무엇을 하는지 말한다", async () => {
+    const user = userEvent.setup();
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    renderWithProviders(<MenusPage />);
+
+    await user.click(newMenuButton());
+
+    const chip = await screen.findByRole("button", { name: "혼밥 태그 추가" });
+    expect(chip).not.toHaveAttribute("aria-pressed");
+  });
+
+  it("반대로 선택된 칩은 눌러서 해제되는 진짜 토글이라 aria-pressed가 남는다", async () => {
+    const user = userEvent.setup();
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    renderWithProviders(<MenusPage />);
+
+    await user.click(newMenuButton());
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 추가" }));
+
+    expect(screen.getByRole("button", { name: "혼밥 태그 선택 해제" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });

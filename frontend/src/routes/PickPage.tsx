@@ -1,11 +1,11 @@
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { requestPick, type PickRequest, type PickResult } from "../api/pick";
 import { searchTags } from "../api/tags";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
-import { chipToggle } from "../a11y/chipToggle";
+import { chipAction, chipToggle } from "../a11y/chipToggle";
 import { CATEGORY_PRESETS } from "../constants";
 import KakaoMap from "../maps/KakaoMap";
 import "./PickPage.css";
@@ -21,6 +21,9 @@ type GeoState =
   | { status: "error" };
 
 export default function PickPage() {
+  // 필터 <section>을 랜드마크로 세우려면 이름이 필요하다 — 그 이름을 주는 제목의 id.
+  const filtersHeadingId = useId();
+
   // ---- 필터 상태 ----
   const [categories, setCategories] = useState<string[]>([]);
   const [includeTags, setIncludeTags] = useState<TagSummary[]>([]);
@@ -148,7 +151,14 @@ export default function PickPage() {
         <h1>오늘 뭐 먹지</h1>
       </header>
 
-      <section className="pick-filters">
+      {/* 이름 없는 <section>은 랜드마크로 노출되지 않는다 — 스크린리더의 랜드마크 목록에
+          잡히지 않아 실질적으로 <div>였고, 필터 뭉치를 건너뛰어 뽑기 버튼으로 가거나
+          반대로 필터로 되돌아오려면 fieldset 네 개를 Tab으로 헤집는 수밖에 없었다.
+          제목은 화면에 내지 않는다 — 눈으로 보는 사람에게는 각 fieldset의 legend
+          (카테고리·포함 태그·제외 태그·거리)가 이미 구조를 보여주고 있어, 그 위에
+          "픽 조건"을 한 줄 더 세우면 같은 말을 두 번 하는 셈이 된다. */}
+      <section className="pick-filters" aria-labelledby={filtersHeadingId}>
+        <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
         <CategoryFilter selected={categories} onChange={setCategories} />
         <TagFilter
           legend="포함 태그"
@@ -455,10 +465,14 @@ function TagFilter({
       {suggestions.length > 0 && (
         <div className="chip-row">
           {suggestions.map((tag) => (
+            // 제안 칩은 토글이 아니다 — 누르면 위 "선택된 태그" 줄로 옮겨 가며 여기서
+            // 사라진다. chipToggle이 붙이던 aria-pressed="false"는 "다시 눌러 끌 수 있는
+            // 버튼"이라는 약속이라 지켜지지 않았고, 대신 이름으로 무엇이 일어나는지 말한다.
             <button
               key={tag.id}
               type="button"
-              {...chipToggle(false, "chip-tag")}
+              {...chipAction("chip-tag")}
+              aria-label={`${tag.name} 태그 추가`}
               onClick={() => selectTags([...selected, { id: tag.id, name: tag.name }])}
             >
               #{tag.name}

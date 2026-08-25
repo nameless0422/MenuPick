@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import HistoryPage from "./HistoryPage";
@@ -203,5 +203,25 @@ describe("HistoryPage 삭제 후 초점", () => {
     await waitFor(() => expect(screen.queryByRole("list")).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "픽 히스토리" })).toHaveFocus();
     confirmSpy.mockRestore();
+  });
+});
+
+/**
+ * 기간 버튼 3개는 aria-pressed로 눌린 상태를 올바르게 알리지만, 묶음에 이름이 없었다.
+ *
+ * <p>그러면 스크린리더에는 "7일 버튼, 30일 버튼, 전체 버튼"이 페이지에 그냥 흩어져 있는
+ * 것으로 읽힌다. 무엇의 7일인지(기간인지 개수인지 정렬인지)가 어디에도 없어, "7일 눌림"을
+ * 읽어줘 봐야 무엇이 눌린 것인지는 여전히 모른다.
+ */
+describe("기간 필터 그룹", () => {
+  it("세 버튼이 '조회 기간'이라는 이름의 그룹으로 묶인다", async () => {
+    renderWithProviders(<HistoryPage />);
+
+    const group = await screen.findByRole("group", { name: "조회 기간" });
+
+    // 이름만 맞고 버튼이 안 들어 있으면 그룹이 엉뚱한 곳에 붙은 것이다.
+    expect(within(group).getByRole("button", { name: "7일" })).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "30일" })).toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "전체" })).toBeInTheDocument();
   });
 });

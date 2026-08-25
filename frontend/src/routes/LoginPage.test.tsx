@@ -309,3 +309,28 @@ describe("LoginPage 제출 버튼", () => {
     expect(login).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * "먼저 구경해보기"가 {@code <strong>}이었다.
+ *
+ * <p>시각적으로는 카드 제목인데 제목 트리에서는 빠져 있어, 이 화면을 제목으로 훑으면
+ * {@code <h1>메뉴픽} 하나만 나온다. 즉 "가입하지 않고도 먼저 써 볼 수 있다"는 온보딩
+ * 경로가 스크린리더 사용자에게는 존재하지 않는 것과 같았다 — 로그인 폼과 소셜 버튼을
+ * 전부 지나 Tab으로 내려와야만 우연히 발견할 수 있었다.
+ */
+describe("로그인 화면의 시연 카드 제목", () => {
+  it("<h2>로 제목 트리에 올라온다", () => {
+    renderLogin();
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "먼저 구경해보기" }),
+    ).toBeInTheDocument();
+  });
+
+  it("그 제목이 카드를 랜드마크로 세운다", () => {
+    renderLogin();
+
+    // 이름 없는 <section>은 랜드마크로 노출되지 않아 role="region"으로 잡히지 않는다.
+    expect(screen.getByRole("region", { name: "먼저 구경해보기" })).toBeInTheDocument();
+  });
+});

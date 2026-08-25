@@ -63,14 +63,23 @@ export default function SettingsPage() {
   // 동의 체크 전에 "탈퇴하기"가 왜 잠겼는지를 버튼에 aria-describedby로 묶기 위한 id.
   const agreeNoteId = useId();
 
+  // 이 화면은 서로 독립적인 작업 네 개(계정·소셜 연동·비밀번호 변경·회원 탈퇴)가 세로로
+  // 늘어선 구조인데, 섹션 제목이 <strong>이라 제목 트리에는 <h1>설정 하나뿐이었다.
+  // 그래서 스크린리더의 제목 탐색(H 키)으로는 화면 맨 위에서 한 발짝도 못 움직이고,
+  // <section>에도 접근 가능한 이름이 없어 랜드마크 목록에조차 잡히지 않았다 —
+  // 탈퇴 섹션까지 가려면 앞의 모든 버튼과 입력칸을 Tab으로 지나가는 수밖에 없었다.
+  // <h2>로 세우고 그 id를 <section aria-labelledby>가 가리키면 두 경로가 함께 열린다.
+  const accountHeadingId = useId();
+  const withdrawHeadingId = useId();
+
   return (
     <div className="page">
       <header className="page-header">
         <h1>설정</h1>
       </header>
 
-      <section className="card settings-section">
-        <strong>계정</strong>
+      <section className="card settings-section" aria-labelledby={accountHeadingId}>
+        <h2 id={accountHeadingId}>계정</h2>
         {meQuery.isSuccess && (
           <p className="settings-desc">
             {meQuery.data.nickname}
@@ -107,8 +116,11 @@ export default function SettingsPage() {
       {/* 소셜 전용 계정에는 바꿀 비밀번호가 없다 — 폼을 띄워봐야 누르는 순간 400이 날 뿐이다. */}
       {meQuery.data?.hasPassword && <PasswordSection />}
 
-      <section className="card settings-section settings-danger">
-        <strong>회원 탈퇴</strong>
+      <section
+        className="card settings-section settings-danger"
+        aria-labelledby={withdrawHeadingId}
+      >
+        <h2 id={withdrawHeadingId}>회원 탈퇴</h2>
         <p className="settings-desc">탈퇴하면 계정이 즉시 비활성화되고, 다음 순서로 처리됩니다.</p>
         <ul className="settings-policy">
           <li>탈퇴 후 <strong>30일</strong> 동안은 같은 계정으로 다시 로그인하면 복구됩니다.</li>
@@ -214,6 +226,9 @@ function SocialLinkSection({ me }: { me: Me }) {
   // 사용자는 방금 누른 것이 먹혔는지 알 수 없다.
   const justLinked = (useLocation().state as { socialLinked?: Provider } | null)?.socialLinked;
 
+  // 섹션 제목이자 이 <section>의 접근 가능한 이름. (SettingsPage 최상단 주석 참고)
+  const headingId = useId();
+
   const unlinkMutation = useMutation({
     // 함수를 그대로 넘기지 않는다 — react-query는 mutationFn을 (변수, 컨텍스트)로 부르고,
     // unlinkSocialAccount의 두 번째 인자가 언젠가 생기면 그 컨텍스트가 조용히 들어간다.
@@ -228,8 +243,8 @@ function SocialLinkSection({ me }: { me: Me }) {
   });
 
   return (
-    <section className="card settings-section">
-      <strong>소셜 계정 연동</strong>
+    <section className="card settings-section" aria-labelledby={headingId}>
+      <h2 id={headingId}>소셜 계정 연동</h2>
       <p className="settings-desc">
         연동하면 다음부터 그 계정으로도 로그인할 수 있어요. 가입은 이메일로만 받고 있어,
         연동하지 않은 소셜 계정으로는 로그인되지 않습니다.
@@ -374,6 +389,8 @@ function PasswordSection() {
   // 두면, 그 칸으로 이동했을 때 이름 뒤에 이유가 함께 읽힌다.
   const tooShortId = useId();
   const mismatchId = useId();
+  // 섹션 제목이자 이 <section>의 접근 가능한 이름. (SettingsPage 최상단 주석 참고)
+  const headingId = useId();
   const canSubmit = current.length > 0 && next.length >= PASSWORD_MIN_LENGTH && !mismatch;
 
   // "입력이 덜 찼다(!canSubmit)"와 "요청이 나가 있다(isPending)"는 성격이 다르다.
@@ -389,8 +406,8 @@ function PasswordSection() {
     undefined;
 
   return (
-    <section className="card settings-section">
-      <strong>비밀번호 변경</strong>
+    <section className="card settings-section" aria-labelledby={headingId}>
+      <h2 id={headingId}>비밀번호 변경</h2>
       <p className="settings-desc">
         변경하면 다른 기기의 로그인이 모두 해제됩니다.
       </p>

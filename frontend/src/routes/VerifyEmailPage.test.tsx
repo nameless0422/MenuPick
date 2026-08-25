@@ -77,4 +77,18 @@ describe("VerifyEmailPage", () => {
 
     expect(verifyEmailMock).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * 처리 중 화면에 {@code <h1>}이 없었다. 인증 메일 링크를 누른 사람이 처음 도착하는
+   * 문서인데 제목이 하나도 없으면, 스크린리더가 새 문서를 읽기 시작할 때 "여기가 어디인지"를
+   * 말해 줄 것이 없다 — 실패 화면에는 이미 {@code <h1>}이 있어 두 상태가 서로 다르게
+   * 읽히기까지 했다.
+   */
+  it("처리 중 화면에도 <h1>이 있다", async () => {
+    renderAt("?token=abc");
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "이메일 인증" }),
+    ).toBeInTheDocument();
+  });
 });

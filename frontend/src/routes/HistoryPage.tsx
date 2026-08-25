@@ -121,7 +121,13 @@ export default function HistoryPage() {
         <h1 ref={headingRef} tabIndex={-1}>픽 히스토리</h1>
       </header>
 
-      <div className="days-filter">
+      {/* 세 버튼은 "조회 기간"이라는 하나의 질문에 대한 선택지인데, 묶음에 이름이 없으면
+          스크린리더에는 "7일 버튼, 30일 버튼, 전체 버튼"이 페이지에 그냥 흩어져 있는 것으로
+          읽힌다. 무엇의 7일인지(기간인지 개수인지 정렬인지)가 어디에도 없고, aria-pressed로
+          "7일 눌림"을 읽어줘 봐야 무엇이 눌린 것인지 모르는 것은 그대로다.
+          role="group"은 화살표 키 이동 같은 동작을 약속하지 않으므로 지금 구현으로 지킬 수
+          있다 — radiogroup으로 올리려면 roving tabindex까지 함께 와야 한다(#126). */}
+      <div className="days-filter" role="group" aria-label="조회 기간">
         {DAYS_OPTIONS.map((option) => (
           <button
             key={option.value}

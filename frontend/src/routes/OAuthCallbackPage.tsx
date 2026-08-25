@@ -5,6 +5,7 @@ import { apiErrorCode, apiErrorMessage } from "../api/http";
 import { useAuth } from "../auth/AuthContext";
 import { consumeOAuthRequest } from "../auth/oauthUrls";
 import { consumeReturnTo } from "../auth/returnTo";
+import "./AuthPages.css";
 
 const INVALID_REQUEST_MESSAGE =
   "로그인 요청이 유효하지 않습니다. 다시 시도해주세요.";
@@ -89,6 +90,32 @@ export default function OAuthCallbackPage({ provider }: { provider: Provider }) 
       });
   }, [searchParams, provider, login, navigate, isAuthenticated, isLoading]);
 
-  if (error) return <p>{error} <a href={retryPath}>돌아가기</a></p>;
-  return <p>처리 중...</p>;
+  // 이 화면은 제공자에서 리다이렉트로 새로 뜬 문서다 — 즉 스크린리더가 문서를 처음부터
+  // 다시 읽기 시작하는 자리인데, 여태 <h1>도 스타일도 없는 맨 <p> 한 줄이었다.
+  // 제목이 없으면 제목 탐색으로도 문서 개요로도 잡히는 것이 없어 "지금 어디에 도착했는지"를
+  // 알 방법이 없고, 실패했을 때는 그 상태로 오류 문장과 "돌아가기" 링크만 덩그러니 남는다.
+  // AuthPages.css를 함께 들여와 로그인·가입·메일 인증 화면과 같은 폭·여백을 쓴다 —
+  // 이 화면만 빠져 있어 소셜 로그인 도중에 레이아웃이 통째로 무너졌다.
+  // 이 화면은 로그인 콜백이기도 하고 연동 콜백이기도 하다 — 어느 쪽으로 왔는지는
+  // 돌아갈 자리가 이미 알고 있다. 제목이 둘을 뭉뚱그리면 설정에서 연동하러 온 사람이
+  // "로그인하지 못했습니다"를 듣고 자기 계정이 잘못된 줄 안다.
+  const linking = retryPath === SETTINGS;
+
+  if (error) {
+    return (
+      <div className="login-page">
+        <h1>{linking ? "연동하지 못했습니다" : "로그인하지 못했습니다"}</h1>
+        <p className="error" role="alert">{error}</p>
+        <div className="auth-links">
+          <a href={retryPath}>돌아가기</a>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="login-page">
+      <h1>{linking ? "소셜 계정 연동" : "소셜 로그인"}</h1>
+      <p>처리 중...</p>
+    </div>
+  );
 }
