@@ -22,5 +22,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     boolean existsByNickname(String nickname);
 
+    /**
+     * 살아 있는 계정 중에 이 주소를 쓰는 계정이 있는지.
+     *
+     * <p>탈퇴(soft delete) 계정을 일부러 제외한다. 탈퇴한 사용자가 같은 주소로 다시 가입해
+     * 돌아오는 경로가 있고({@code completeVerification}의 되살리기), 여기서 탈퇴 계정까지
+     * "이미 가입됨"으로 막으면 그 길이 끊긴다 — 비밀번호 재설정도 탈퇴 계정은 대상에서
+     * 빼므로 되돌아올 수단이 하나도 남지 않는다.
+     */
+    boolean existsByEmailAndDeletedAtIsNull(String email);
+
     List<User> findAllByDeletedAtBefore(LocalDateTime cutoff);
 }

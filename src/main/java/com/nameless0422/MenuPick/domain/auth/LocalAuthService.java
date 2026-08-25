@@ -80,7 +80,22 @@ public class LocalAuthService {
 
     // ---- 가입 ----
 
-    /** 계정을 만들고 인증 메일을 보낸다. 인증 전까지는 로그인할 수 없다. */
+    /**
+     * 계정을 만들고 인증 메일을 보낸다. 인증 전까지는 로그인할 수 없다.
+     *
+     * <p><b>이미 가입된 주소여도 같은 응답을 준다.</b> 예전에는 409
+     * {@code EMAIL_ALREADY_REGISTERED}를 그대로 돌려줬는데, 그러면
+     * {@link #resendVerification}·{@link #requestPasswordReset}이 "대상이 없어도 성공으로
+     * 끝낸다"며 공들여 막아 둔 사용자 열거가 무의미해진다 — 주소 목록을 가입 API에 넣고
+     * 409/201만 구분하면 "이 주소가 메뉴픽에 가입돼 있는지"가 그대로 수집된다.
+     *
+     * <p>대신 그 주소로 안내 메일을 보낸다. 응답만 통일하고 아무것도 보내지 않으면, 정말로
+     * 자기가 가입을 시도한 사람이 오지 않는 인증 메일을 기다리다 막힌다.
+     *
+     * <p>닉네임 중복(409)은 그대로 둔다. 그건 이메일 가입 여부를 흘리지 않는다 — 아래에서
+     * 주소 검사를 닉네임 검사보다 <b>먼저</b> 하므로, 이미 가입된 주소는 닉네임이 무엇이든
+     * 201로 끝난다.
+     */
     public void signup(String rawEmail, String rawPassword, String rawNickname) {
         String email = normalize(rawEmail);
         String nickname = rawNickname.trim();
@@ -91,10 +106,30 @@ public class LocalAuthService {
         // 발송은 전용 풀에서 비동기로 일어나고 실패해도 예외가 올라오지 않는다(AuthMailer 참고).
         // 즉 가입 응답은 SMTP 왕복을 기다리지 않는다. 메일이 끝내 안 나가면 계정은 미인증
         // 상태로 남고, 사용자는 재발송 버튼이나 같은 주소의 재가입으로 이어갈 수 있다.
+        if (userId == null) {
+            authMailer.sendAlreadyRegistered(email);
+            return;
+        }
         sendVerification(userId, email);
     }
 
+    /**
+     * @return 새로 만들었거나 덮어쓴 pending 계정의 userId. 이미 가입된 주소면 {@code null}
+     */
     private Long createOrReplacePendingAccount(String email, String encodedPassword, String nickname) {
+        // 살아 있는 계정이 이미 이 주소를 갖고 있으면 아무것도 만들지 않는다.
+        //
+        // 검증된 주소는 users.email에 들어가므로(verifyEmail) 이 한 줄이 "이미 인증된 자체
+        // 계정"과 "#71 이전에 소셜로 만들어진 레거시 계정"을 함께 막는다. 후자는 LOCAL 행이
+        // 없어 아래 findByProviderAndSocialId로는 걸리지 않던 구멍이었고, 그 경우 pending이
+        // 만들어져 completeVerification의 병합 분기로 흘렀다.
+        //
+        // 탈퇴 계정은 일부러 제외한다 — 같은 주소로 다시 가입해 돌아오는 경로가 살아 있어야
+        // 한다(UserRepository.existsByEmailAndDeletedAtIsNull 주석 참고).
+        if (userRepository.existsByEmailAndDeletedAtIsNull(email)) {
+            return null;
+        }
+
         Optional<AuthProvider> existing =
                 authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, email);
 
@@ -102,8 +137,10 @@ public class LocalAuthService {
             AuthProvider provider = existing.get();
             User user = provider.getUser();
 
+            // 위 검사에 걸리지 않는데 인증까지 끝난 경우는 users.email이 비어 있는 어긋난
+            // 데이터뿐이다. 그때도 새 pending을 만들지는 않는다.
             if (user.isEmailVerified()) {
-                throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED);
+                return null;
             }
 
             // 인증을 마치지 않은 계정은 로그인이 불가능해 딸린 데이터가 없다. 같은 주소의 새

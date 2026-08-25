@@ -50,7 +50,6 @@ public enum ErrorCode {
             "마지막 로그인 수단이라 해제할 수 없습니다. 비밀번호를 먼저 설정해주세요."),
 
     // --- Auth: 자체 계정 ---
-    EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),
     // 자체 가입에서만 쓴다. 소셜 로그인은 닉네임을 제공자가 정해 사용자가 고칠 수 없으므로
     // 거절하면 로그인 자체가 막힌다 — 그쪽은 NicknameAllocator가 번호를 붙여 통과시킨다.
     NICKNAME_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),

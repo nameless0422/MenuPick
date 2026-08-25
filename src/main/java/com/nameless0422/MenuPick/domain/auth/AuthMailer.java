@@ -47,6 +47,32 @@ public class AuthMailer {
                 """.formatted(link, validFor.toHours()));
     }
 
+    /**
+     * 이미 가입된 주소로 가입 시도가 들어왔을 때 그 주소로 보내는 안내.
+     *
+     * <p>가입 API가 신규/기존을 같은 응답으로 돌려주기 때문에 필요하다. 응답만 통일하고
+     * 아무 메일도 보내지 않으면, 정말로 자기가 가입을 시도한 사람은 오지 않는 인증 메일을
+     * 기다리다 막힌다. 여기서 "이미 계정이 있고 다음에 무엇을 하면 되는지"를 알려야
+     * 응답 통일이 사용자를 버리지 않는다.
+     *
+     * <p>링크도 토큰도 넣지 않는다. 이 메일은 <b>가입을 시도한 사람</b>이 아니라
+     * <b>주소의 주인</b>에게 가므로, 남이 시킨 요청 하나로 주인의 계정에 영향을 줄 수 있는
+     * 것을 쥐여 주면 안 된다. 비밀번호 재설정은 주인이 직접 시작하게 둔다.
+     */
+    @Async(MailAsyncConfig.EXECUTOR)
+    public void sendAlreadyRegistered(String to) {
+        send("가입 안내", to, "[메뉴픽] 이미 가입된 계정입니다", """
+                이 주소로 메뉴픽 가입 시도가 있었습니다.
+
+                이미 가입된 계정이라 새로 만들지 않았습니다. 그대로 로그인하시면 됩니다.
+                비밀번호가 기억나지 않으면 로그인 화면의 "비밀번호를 잊으셨나요?"로
+                재설정할 수 있습니다.
+
+                본인이 시도하지 않았다면 이 메일을 무시하셔도 됩니다.
+                계정과 비밀번호는 그대로입니다.
+                """);
+    }
+
     @Async(MailAsyncConfig.EXECUTOR)
     public void sendPasswordReset(String to, String token, Duration validFor) {
         String link = link("/reset-password", token);
