@@ -16,11 +16,27 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NaverMapsClientTest {
+
+    /** 문서상 오류 status. 여기서는 프록시가 200으로 감싼 상황을 흉내낸다. */
+    private static final String SYSTEM_ERROR_BODY = """
+            { "status": "SYSTEM_ERROR", "errorMessage": "Unexpected Error" }
+            """;
+
+    /** status.code 3 = 정상 처리, 결과 없음. 오류가 아니다. */
+    private static final String NO_RESULTS_BODY = """
+            { "status": { "code": 3, "name": "no results", "message": "" }, "results": [] }
+            """;
+
+    /** status.code 100 = invalid request. 200으로 감싸 온 경우를 흉내낸다. */
+    private static final String INVALID_REQUEST_BODY = """
+            { "status": { "code": 100, "name": "invalid request", "message": "" }, "results": [] }
+            """;
 
     private MockWebServer mockWebServer;
     private NaverMapsClient naverMapsClient;
@@ -334,7 +350,9 @@ class NaverMapsClientTest {
         String b = NaverMapsClient.reverseGeocodeCacheKey("126.9781,37.5664", "roadaddr");
 
         assertThat(a).isEqualTo(b);
-        assertThat(a).startsWith("126.978,37.566");
+        // 성분은 URL 인코딩된다 — 콤마가 %2C가 되고, 값임을 나타내는 =가 앞에 붙는다.
+        // 근거는 NaverMapsClient.joinKey 참고.
+        assertThat(a).startsWith("=126.978%2C37.566");
     }
 
     @Test
@@ -393,6 +411,95 @@ class NaverMapsClientTest {
                 .getValue(context);
 
         assertThat(key).isEqualTo(NaverMapsClient.reverseGeocodeCacheKey("126.9783882,37.5661103", null));
-        assertThat(key).isEqualTo("126.978,37.566:null");
+        // null은 빈 성분, 값은 = 로 시작하는 성분이다.
+        assertThat(key).isEqualTo("=126.978%2C37.566:");
+    }
+
+    // --- 응답 본문의 status 검사 (이슈 #76) ---
+
+    /**
+     * 네이버는 문서상 INVALID_REQUEST/SYSTEM_ERROR를 각각 HTTP 400·500과 함께 돌려주므로
+     * 보통은 예외 경로로 먼저 걸린다. 여기서 막으려는 것은 사이에 낀 프록시·게이트웨이가
+     * 오류 본문을 200으로 감싸 돌려주는 경우다 — 그때 그냥 통과시키면 깨진 응답이
+     * naverGeocode 캐시(TTL 24시간)에 그대로 박힌다.
+     */
+    @Test
+    @DisplayName("geocode - 200인데 본문 status가 OK가 아니면 502로 끊는다 (캐시 오염 차단)")
+    void geocode_bodyStatusNotOk_throwsBadGateway() {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(SYSTEM_ERROR_BODY)
+                .addHeader("Content-Type", "application/json"));
+
+        assertThatThrownBy(() -> naverMapsClient.geocode("서울시청", null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NAVER_MAPS_API_ERROR);
+    }
+
+    @Test
+    @DisplayName("reverseGeocode - status.code 3(결과 없음)은 정상이므로 그대로 돌려준다")
+    void reverseGeocode_noResultsCode_isSuccess() {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(NO_RESULTS_BODY)
+                .addHeader("Content-Type", "application/json"));
+
+        NaverMapsResponse.ReverseGeocodeResult result =
+                naverMapsClient.reverseGeocode("126.978,37.566", null);
+
+        // 결과가 없다는 것도 유효한 답이다. 여기서 예외를 던지면 좌표 하나 때문에 화면이 깨진다.
+        assertThat(result.status().code()).isEqualTo(3);
+        assertThat(result.results()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("reverseGeocode - 200인데 status.code가 오류면 502로 끊는다")
+    void reverseGeocode_bodyStatusError_throwsBadGateway() {
+        mockWebServer.enqueue(new MockResponse()
+                .setBody(INVALID_REQUEST_BODY)
+                .addHeader("Content-Type", "application/json"));
+
+        assertThatThrownBy(() -> naverMapsClient.reverseGeocode("126.978,37.566", null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NAVER_MAPS_API_ERROR);
+    }
+
+    // --- 응답 타임아웃 (카카오 쪽에만 있던 것을 맞춘다, #87) ---
+
+    @Test
+    @DisplayName("타임아웃 - 응답이 3초 안에 오지 않으면 끊고 재시도한다 (톰캣 스레드 보호)")
+    void geocode_responseTimeout() {
+        // 응답 타임아웃(3s)보다 길고, 공용 WebClient 빈의 기본값(10s)보다는 짧은 지연.
+        // 타임아웃이 걸리지 않았다면 5초 뒤 200(빈 본문)을 받고 요청은 1건에 그친다 —
+        // 즉 requestCount == 2가 "3초에 끊고 재시도했다"는 증거다.
+        mockWebServer.enqueue(new MockResponse().setHeadersDelay(5, TimeUnit.SECONDS));
+        mockWebServer.enqueue(new MockResponse().setHeadersDelay(5, TimeUnit.SECONDS));
+
+        assertThatThrownBy(() -> naverMapsClient.geocode("서울시청", null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NAVER_MAPS_API_ERROR);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(2);
+    }
+
+    // --- 캐시 키 충돌 (이슈 #84) ---
+
+    /**
+     * 예전에는 성분을 콜론으로 그냥 이어 붙여, 값 안에 콜론이 들어가면 인자 경계가 밀려
+     * 서로 다른 조합이 같은 키를 만들 수 있었다. 그러면 서로 다른 좌표의 결과가 서로에게
+     * 응답되고, 한 번 박히면 TTL(24시간) 동안 유지된다.
+     */
+    @Test
+    @DisplayName("캐시 키 - orders에 구분자가 들어가도 좌표 성분과 섞이지 않는다")
+    void reverseGeocodeCacheKey_separatorInValueDoesNotShiftFields() {
+        String shifted = NaverMapsClient.reverseGeocodeCacheKey("126.978,37.566:roadaddr", null);
+        String plain = NaverMapsClient.reverseGeocodeCacheKey("126.978,37.566", "roadaddr:null");
+
+        assertThat(shifted).isNotEqualTo(plain);
+    }
+
+    @Test
+    @DisplayName("캐시 키 - null과 문자열 \"null\"은 다른 키가 된다")
+    void reverseGeocodeCacheKey_nullDiffersFromLiteralNull() {
+        assertThat(NaverMapsClient.reverseGeocodeCacheKey("126.978,37.566", null))
+                .isNotEqualTo(NaverMapsClient.reverseGeocodeCacheKey("126.978,37.566", "null"));
     }
 }

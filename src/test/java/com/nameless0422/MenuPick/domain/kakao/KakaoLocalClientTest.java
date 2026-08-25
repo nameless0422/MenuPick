@@ -397,4 +397,45 @@ class KakaoLocalClientTest {
         assertThat(key).isEqualTo(KakaoLocalClient.categoryCacheKey(
                 "FD6", "126.9853023", "37.5612511", null, null, null, null));
     }
+
+    // --- 캐시 키 충돌 (이슈 #84) ---
+
+    /**
+     * 예전에는 성분을 콜론으로 그냥 이어 붙였다. query와 categoryGroupCode 둘 다 사용자가
+     * 값을 정하는 문자열이라, 한쪽에 콜론을 넣으면 인자 경계가 밀려 다른 조합과 <b>같은 키</b>가
+     * 나온다. 그러면 서로 다른 검색의 결과가 서로에게 응답되고, TTL(1시간) 동안 유지된다.
+     *
+     * <pre>
+     *   query="김밥:FD6", category="X"     →  "김밥:FD6:X:..."
+     *   query="김밥",     category="FD6:X" →  "김밥:FD6:X:..."   ← 같은 키였다
+     * </pre>
+     */
+    @Test
+    @DisplayName("캐시 키 - 질의에 구분자가 들어가도 다른 인자와 섞이지 않는다")
+    void keywordCacheKey_separatorInValueDoesNotShiftFields() {
+        String shifted = KakaoLocalClient.keywordCacheKey(
+                "김밥:FD6", "X", null, null, null, null, null, null);
+        String plain = KakaoLocalClient.keywordCacheKey(
+                "김밥", "FD6:X", null, null, null, null, null, null);
+
+        assertThat(shifted).isNotEqualTo(plain);
+    }
+
+    @Test
+    @DisplayName("캐시 키 - null과 문자열 \"null\"은 다른 키가 된다")
+    void keywordCacheKey_nullDiffersFromLiteralNull() {
+        String withNull = KakaoLocalClient.keywordCacheKey(
+                "김밥", null, null, null, null, null, null, null);
+        String withLiteral = KakaoLocalClient.keywordCacheKey(
+                "김밥", "null", null, null, null, null, null, null);
+
+        assertThat(withNull).isNotEqualTo(withLiteral);
+    }
+
+    @Test
+    @DisplayName("캐시 키 - 같은 인자는 여전히 같은 키를 만든다 (캐시가 죽지 않는다)")
+    void keywordCacheKey_stableForSameArguments() {
+        assertThat(KakaoLocalClient.keywordCacheKey("  김밥  ", "FD6", "127.0", "37.0", 500, 1, 15, "accuracy"))
+                .isEqualTo(KakaoLocalClient.keywordCacheKey("김밥", "FD6", "127.0", "37.0", 500, 1, 15, "accuracy"));
+    }
 }
