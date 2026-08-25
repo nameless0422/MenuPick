@@ -63,9 +63,25 @@ public class NicknameAllocator {
         return withSuffix(desired, "-" + UUID.randomUUID().toString().substring(0, 8));
     }
 
+    /**
+     * {@code base}를 잘라 {@code suffix}를 붙일 자리를 만든다.
+     *
+     * <p>자르는 위치가 서로게이트 페어 한가운데면 짝 없는 서로게이트가 남는다. 이모지가 든
+     * 닉네임(카카오·구글 프로필에서 흔하다)이 49자쯤이면 정확히 그 자리가 나오고, MySQL은
+     * utf8mb4로 인코딩할 수 없는 그 값을 {@code Incorrect string value}로 거절한다 —
+     * 즉 소셜 로그인이 실패한다. 사용자는 이유를 알 방법이 없고 다시 시도해도 같다.
+     *
+     * <p>경계에 걸리면 한 칸 더 잘라 페어를 통째로 버린다. 이름이 한 글자 짧아지는 것은
+     * 로그인이 막히는 것보다 훨씬 낫다.
+     */
     private String withSuffix(String base, String suffix) {
         int room = MAX_LENGTH - suffix.length();
-        String trimmed = base.length() > room ? base.substring(0, room) : base;
-        return trimmed + suffix;
+        if (base.length() <= room) {
+            return base + suffix;
+        }
+        if (room > 0 && Character.isHighSurrogate(base.charAt(room - 1))) {
+            room--;
+        }
+        return base.substring(0, room) + suffix;
     }
 }

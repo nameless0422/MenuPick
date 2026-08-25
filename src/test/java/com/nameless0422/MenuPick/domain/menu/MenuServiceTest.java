@@ -471,4 +471,25 @@ class MenuServiceTest {
         idField.setAccessible(true);
         idField.set(entity, id);
     }
+
+    /**
+     * IN 조회는 중복 id를 한 행으로 돌려주므로, distinct 없이 크기를 비교하면 menus.size()가
+     * 항상 작아져 404가 난다. 실제로는 접근 가능한 메뉴이고 마지막 항목의 가중치를 적용하면
+     * 되는 정상 요청이다 — 화면에서 같은 메뉴가 두 번 담기는 것은 흔한 일이다.
+     */
+    @Test
+    @DisplayName("일괄 가중치 수정 - 같은 메뉴가 두 번 담겨도 404가 아니라 마지막 값이 적용된다")
+    void batchUpdateWeight_duplicateMenuId_appliesLastValue() {
+        given(menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(List.of(1L), 1L))
+                .willReturn(List.of(menu));
+
+        var entries = List.of(
+                new MenuRequest.WeightEntry(1L, 2),
+                new MenuRequest.WeightEntry(1L, 5));
+
+        menuService.batchUpdateWeight(1L, new MenuRequest.BatchUpdateWeight(entries));
+
+        assertThat(menu.getWeight()).isEqualTo(5);
+    }
+
 }

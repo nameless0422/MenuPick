@@ -12,11 +12,15 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.LongStream;
+import java.util.stream.IntStream;
+import java.util.stream.Collectors;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -282,4 +286,61 @@ class MenuControllerTest extends AbstractControllerTest {
                         .param("exclude", "true"))
                 .andExpect(status().isUnauthorized());
     }
+
+    // --- 컬렉션 상한·null 원소 (#87) ---
+
+    /**
+     * PickRequest는 같은 문제를 인지하고 세 집합 전부에 상한을 걸어 뒀는데 MenuRequest에는
+     * 없었다. 상한이 없으면 categories에 5만 개를 담은 요청 하나가 한 트랜잭션에서
+     * menu_categories에 5만 행을 INSERT한다.
+     */
+    @Test
+    @DisplayName("POST /api/v1/menus - 카테고리가 상한을 넘으면 400")
+    void createMenu_tooManyCategories() throws Exception {
+        Set<String> categories = IntStream.rangeClosed(1, 21)
+                .mapToObj(i -> "카테고리" + i)
+                .collect(Collectors.toSet());
+
+        mockMvc.perform(post("/api/v1/menus")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new MenuRequest.Create("된장찌개", "", 1, categories, null))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(menuService);
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/menus/{id} - 태그가 상한을 넘으면 400")
+    void updateMenu_tooManyTags() throws Exception {
+        Set<Long> tagIds = LongStream.rangeClosed(1, 21).boxed().collect(Collectors.toSet());
+
+        mockMvc.perform(put("/api/v1/menus/1")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new MenuRequest.Update("된장찌개", "", 1, false, null, tagIds))))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(menuService);
+    }
+
+    /**
+     * {@code @Valid}는 null 원소를 검증 대상에서 제외한다. 원소에 {@code @NotNull}이 없으면
+     * [null]이 그대로 서비스까지 내려가 entry.menuId()에서 NPE를 내고, catch-all이 500 +
+     * 풀 스택트레이스를 남긴다. 잘못된 요청은 400이어야 한다.
+     */
+    @Test
+    @DisplayName("PATCH /api/v1/menus/weights - 목록에 null 원소가 있으면 500이 아니라 400")
+    void batchUpdateWeight_nullEntry() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/weights")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entries\":[null]}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(menuService);
+    }
+
 }

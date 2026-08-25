@@ -43,8 +43,14 @@ public class PickService {
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
         List<Menu> candidates = menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId);
 
+        // 저장 경로(MenuService.normalizeCategories)가 저장 직전에 trim하므로, 요청 쪽도 같은
+        // 모양으로 맞춰야 비교가 성립한다. 맞추지 않으면 [" 한식"]이 @NotBlank를 통과하고도
+        // 저장된 "한식"과 매칭되지 않아 NO_PICK_CANDIDATES가 나고, 사용자는 분명히 있는
+        // 메뉴를 두고 "조건에 맞는 메뉴가 없다"는 답을 받는다. 히스토리에도 " 한식"이 남는다.
+        Set<String> categories = normalizeCategories(request == null ? null : request.categories());
+
         if (request != null) {
-            candidates = filterByCategories(candidates, request.categories());
+            candidates = filterByCategories(candidates, categories);
             candidates = filterByTags(candidates, request.tagIds(), request.excludeTagIds());
             candidates = filterByDistance(candidates, request.latitude(), request.longitude(), request.maxDistance());
         }
@@ -62,9 +68,20 @@ public class PickService {
         List<PickResponse.RestaurantWithDistance> restaurants =
                 buildRestaurantList(picked, lat, lng, maxDistance);
 
-        History history = saveHistory(userId, picked, findNearestRestaurant(picked, lat, lng), request);
+        History history = saveHistory(userId, picked, findNearestRestaurant(picked, lat, lng),
+                request, categories);
 
         return new PickResponse.PickResult(history.getId(), toDetail(picked), restaurants);
+    }
+
+    /** 앞뒤 공백만 다른 값이 다른 카테고리로 취급되지 않도록 저장 경로와 같은 모양으로 맞춘다. */
+    private static Set<String> normalizeCategories(Set<String> raw) {
+        if (raw == null) return Set.of();
+        return raw.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(c -> !c.isEmpty())
+                .collect(Collectors.toSet());
     }
 
     private List<Menu> filterByCategories(List<Menu> menus, Set<String> categories) {
@@ -217,7 +234,8 @@ public class PickService {
      * 의도적으로 기록하지 않는다</b> — 위치정보 최소 수집 원칙(docs/PrivacyReview.md).
      * 좌표는 픽 시점의 후보 필터링에만 쓰이고 저장되지 않는다.
      */
-    private History saveHistory(Long userId, Menu picked, Restaurant restaurant, PickRequest request) {
+    private History saveHistory(Long userId, Menu picked, Restaurant restaurant,
+                                PickRequest request, Set<String> categories) {
         History history = History.builder()
                 .user(userRepository.getReferenceById(userId))
                 .menu(picked)
@@ -226,10 +244,9 @@ public class PickService {
                 .build();
 
         if (request != null) {
-            if (request.categories() != null) {
-                request.categories().forEach(cat ->
-                        history.addFilterCondition("CATEGORY", cat));
-            }
+            // 원본이 아니라 정규화된 값을 남긴다. 원본을 남기면 히스토리에는 " 한식"이 보이는데
+            // 실제로 걸린 필터는 "한식"이라, 나중에 그 기록을 보고 같은 조건을 재현할 수 없다.
+            categories.forEach(cat -> history.addFilterCondition("CATEGORY", cat));
             Map<Long, String> tagNames = resolveTagNames(userId, request.tagIds(), request.excludeTagIds());
             if (request.tagIds() != null) {
                 request.tagIds().forEach(tagId ->

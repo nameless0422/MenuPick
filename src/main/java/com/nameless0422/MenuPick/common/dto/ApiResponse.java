@@ -50,12 +50,15 @@ public class ApiResponse<T> {
         return new ApiResponse<>(true, null, null, null, null);
     }
 
-    /** 실패 응답 — errorCode 없이 message만 포함 (레거시 호환) */
-    public static <T> ApiResponse<T> error(String message) {
-        return new ApiResponse<>(false, null, message, null, null);
-    }
-
-    /** 실패 응답 — ErrorCode + message 포함 */
+    /**
+     * 실패 응답 — ErrorCode + message 포함.
+     *
+     * <p>errorCode 없이 message만 담는 오버로드가 있었으나 제거했다. 그 오버로드를 쓰던
+     * 핸들러들(409·400·405·415·404·catch-all 500)은 {@code errorCode}가 null이 되고
+     * {@link JsonInclude#NON_NULL} 때문에 <b>필드 자체가 응답에서 사라졌다.</b> 같은 상태
+     * 코드에 두 가지 스키마가 존재하는 셈이라, 프론트가 errorCode로 분기하면 어느 쪽이
+     * 오느냐에 따라 조용히 깨진다. 오버로드를 없애면 새 핸들러도 코드를 고르지 않을 수 없다.
+     */
     public static <T> ApiResponse<T> error(ErrorCode errorCode, String message) {
         return new ApiResponse<>(false, null, message, errorCode.name(), null);
     }

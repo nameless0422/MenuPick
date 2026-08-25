@@ -542,4 +542,47 @@ class PickServiceTest {
             throw new RuntimeException(e);
         }
     }
+
+    // --- 카테고리 정규화 (#87) ---
+
+    /**
+     * 저장 경로(MenuService.normalizeCategories)는 저장 직전에 trim한다. 요청 쪽을 맞추지
+     * 않으면 [" KOREAN"]이 @NotBlank를 통과하고도 저장된 "KOREAN"과 매칭되지 않아
+     * NO_PICK_CANDIDATES가 난다 — 사용자는 분명히 있는 메뉴를 두고 "조건에 맞는 메뉴가 없다"는
+     * 답을 받고, 무엇이 잘못됐는지 알 방법이 없다.
+     */
+    @Test
+    @DisplayName("카테고리 앞뒤 공백은 무시된다 — 저장된 값과 같은 모양으로 비교한다")
+    void pick_trimsRequestedCategories() {
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickRequest request = new PickRequest(Set.of("  KOREAN  "), null, null, null, null, null);
+        PickResponse.PickResult result = pickService.pick(1L, request);
+
+        assertThat(result.menu().name()).isEqualTo("김치찌개");
+    }
+
+    /**
+     * 히스토리에 원본을 남기면 화면에는 " KOREAN"이 보이는데 실제로 걸린 필터는 "KOREAN"이라,
+     * 나중에 그 기록을 보고 같은 조건을 재현할 수 없다.
+     */
+    @Test
+    @DisplayName("히스토리에도 정규화된 카테고리가 기록된다")
+    void pick_recordsNormalizedCategoryInHistory() {
+        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .willReturn(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        ArgumentCaptor<History> saved = ArgumentCaptor.forClass(History.class);
+        given(historyRepository.save(saved.capture())).willAnswer(inv -> inv.getArgument(0));
+
+        pickService.pick(1L, new PickRequest(Set.of("  KOREAN  "), null, null, null, null, null));
+
+        assertThat(saved.getValue().getFilterConditions())
+                .extracting("filterValue")
+                .containsExactly("KOREAN");
+    }
+
 }

@@ -1,5 +1,8 @@
 package com.nameless0422.MenuPick.common.exception;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
 import com.nameless0422.MenuPick.domain.pick.DemoPickService;
 import com.nameless0422.MenuPick.domain.pick.PickController;
 import com.nameless0422.MenuPick.domain.pick.PickService;
@@ -59,4 +62,56 @@ class GlobalExceptionHandlerTest extends AbstractControllerTest {
 
         verifyNoInteractions(pickService);
     }
+
+    // --- 응답 스키마 일관성 (#87) ---
+    //
+    // 예전에는 BusinessException 핸들러만 errorCode를 채우고 나머지(409·400·405·415·404·500)는
+    // 레거시 오버로드를 써 errorCode가 null이 됐다. @JsonInclude(NON_NULL) 때문에 필드 자체가
+    // 사라지므로, 같은 상태 코드에 두 가지 스키마가 존재한다. 프론트가 errorCode로 분기하면
+    // 어느 쪽이 오느냐에 따라 조용히 깨진다.
+
+    @Test
+    @DisplayName("405 응답에도 errorCode가 담긴다")
+    void unsupportedMethod_carriesErrorCode() throws Exception {
+        mockMvc.perform(delete("/api/v1/pick")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.errorCode").value("METHOD_NOT_ALLOWED"));
+    }
+
+    @Test
+    @DisplayName("415 응답에도 errorCode가 담긴다")
+    void unsupportedMediaType_carriesErrorCode() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("categories=한식"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.errorCode").value("UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    @Test
+    @DisplayName("깨진 JSON 본문 400 응답에도 errorCode가 담긴다")
+    void malformedBody_carriesErrorCode() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not json "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("MALFORMED_REQUEST_BODY"));
+    }
+
+    @Test
+    @DisplayName("예상치 못한 500 응답에도 errorCode가 담긴다")
+    void unexpectedError_carriesErrorCode() throws Exception {
+        given(pickService.pick(anyLong(), any())).willThrow(new IllegalStateException("boom"));
+
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.errorCode").value("INTERNAL_SERVER_ERROR"));
+    }
+
 }
