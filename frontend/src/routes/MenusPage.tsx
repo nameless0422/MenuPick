@@ -16,7 +16,7 @@ import {
 } from "../api/menus";
 import { createTag, searchTags } from "../api/tags";
 import { apiErrorMessage as errorMessage } from "../api/http";
-import { chipToggle } from "../a11y/chipToggle";
+import { chipAction, chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import { CATEGORY_PRESETS } from "../constants";
@@ -625,10 +625,14 @@ function TagPicker({
       {suggestions.length > 0 && (
         <div className="chip-row">
           {suggestions.map((tag) => (
+            // 제안 칩은 토글이 아니다 — 누르면 위 "선택된 태그" 줄로 옮겨 가며 여기서
+            // 사라진다. chipToggle이 붙이던 aria-pressed="false"는 "다시 눌러 끌 수 있는
+            // 버튼"이라는 약속이라 지켜지지 않았고, 대신 이름으로 무엇이 일어나는지 말한다.
             <button
               key={tag.id}
               type="button"
-              {...chipToggle(false, "chip-tag")}
+              {...chipAction("chip-tag")}
+              aria-label={`${tag.name} 태그 추가`}
               onClick={() => selectTag(tag)}
             >
               #{tag.name}

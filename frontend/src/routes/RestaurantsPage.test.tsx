@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import RestaurantsPage from "./RestaurantsPage";
@@ -508,6 +508,11 @@ describe("메뉴 연결 버튼", () => {
   beforeEach(() => {
     vi.stubEnv("VITE_KAKAO_JS_KEY", "");
     fetchRestaurantsMock.mockResolvedValue([JINJU]);
+    // 상세도 성공시킨다. 파일 전체의 기본값은 "상세를 보지 않는다"는 뜻의 거부인데,
+    // 이제 상세 조회가 실패하면 카드가 role="alert"로 실패 사유를 띄운다 — 여기 테스트가
+    // 찾는 알림("연결할 메뉴를 먼저 선택해주세요.")과 섞여 findByRole("alert")이 여럿을
+    // 집는다. 이 describe가 보려는 것은 연결 폼이지 상세 조회가 아니다.
+    fetchRestaurantMock.mockResolvedValue(jinjuDetail);
   });
 
   /** 메뉴 연결 폼을 열고 "연결" 버튼을 돌려준다. */
@@ -592,5 +597,144 @@ describe("메뉴 연결 버튼", () => {
 
     await user.click(busyButton);
     expect(createMenuRestaurantMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * 카드 안에서 열리는 폼의 제목이 {@code <h2>}라, 그 카드들을 담은 목록의 제목
+ * ({@code <h2>저장한 식당})과 형제 레벨이었다.
+ *
+ * <p>제목만 훑는 사람에게는 수정 폼이 목록 밖의 별도 섹션으로 읽혀, "무엇을 수정하는
+ * 중인지"가 목록과 끊긴다. 레벨을 건너뛴 것은 아니라 자동 검사에는 걸리지 않지만,
+ * 문서 개요가 실제 화면 구조와 다르게 그려지는 것은 그대로다.
+ */
+describe("카드 안 폼의 제목 레벨", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    fetchRestaurantsMock.mockResolvedValue([JINJU]);
+    fetchRestaurantMock.mockResolvedValue(jinjuDetail);
+  });
+
+  it("수정 폼 제목은 목록 제목보다 한 단계 아래다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "식당 수정" }),
+    ).toBeInTheDocument();
+    // 목록 제목은 h2 그대로여야 "폼이 목록 안에 있다"는 관계가 성립한다.
+    expect(screen.getByRole("heading", { level: 2, name: "저장한 식당" })).toBeInTheDocument();
+  });
+
+  it("메뉴 연결 폼 제목도 목록 제목보다 한 단계 아래다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "진주회관 메뉴 연결" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 3, name: "메뉴 연결" }),
+    ).toBeInTheDocument();
+  });
+});
+
+/**
+ * 장소 검색 {@code <section>}에 접근 가능한 이름이 없었다.
+ *
+ * <p>이름 없는 {@code <section>}은 랜드마크로 노출되지 않아 실질적으로 {@code <div>}다.
+ * 검색 결과가 15건 늘어선 상태에서 아래 "저장한 식당" 목록으로 넘어가려면 결과 카드의
+ * 버튼을 전부 Tab으로 지나가는 수밖에 없었다.
+ */
+describe("장소 검색 섹션 랜드마크", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    fetchRestaurantsMock.mockResolvedValue([]);
+  });
+
+  it("제목으로 이름이 붙어 랜드마크로 잡힌다", async () => {
+    renderWithProviders(<RestaurantsPage />);
+
+    const section = await screen.findByRole("region", { name: "장소 검색으로 식당 추가" });
+
+    // 이름만 맞고 엉뚱한 요소에 붙었으면 안 된다 — 실제 검색 칸을 감싸고 있어야 한다.
+    expect(within(section).getByRole("textbox", { name: "장소 검색어" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 카드의 "수정"은 {@code disabled={!detail}}이었다 — 상세 조회가 끝날 때까지 잠긴다.
+ *
+ * <p>그 한 줄이 두 가지를 동시에 망가뜨렸다.
+ * <ul>
+ *   <li>잠긴 이유가 어디에도 없다. disabled 버튼은 Tab 순회에서 통째로 빠지므로
+ *       키보드·스크린리더 사용자에게는 "수정" 버튼이 있다는 사실 자체가 전달되지 않고,
+ *       잠깐 기다리면 되는 상황인지도 알 수 없다.</li>
+ *   <li><b>조회가 실패하면 영구히 잠긴다.</b> detail은 영영 오지 않는데 실패했다는 사실이
+ *       화면에 나오지도 않아, 사용자는 이유 없이 죽어 있는 버튼만 보게 된다. 재시도 수단도
+ *       없어 새로고침 말고는 이 카드의 수정을 되살릴 방법이 없었다.</li>
+ * </ul>
+ */
+describe("카드의 수정 버튼", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    fetchRestaurantsMock.mockResolvedValue([JINJU]);
+  });
+
+  it("상세를 기다리는 동안에도 초점을 받고 '사용 불가'와 사유가 함께 읽힌다", async () => {
+    fetchRestaurantMock.mockReturnValue(pendingForever<typeof jinjuDetail>());
+    renderWithProviders(<RestaurantsPage />);
+
+    const edit = await screen.findByRole("button", { name: "진주회관 수정" });
+
+    expect(edit).toHaveAttribute("aria-disabled", "true");
+    // disabled였다면 이 focus()가 조용히 무시되어 초점이 <body>에 남는다.
+    edit.focus();
+    expect(edit).toHaveFocus();
+    expect(edit).toHaveAccessibleDescription(/불러오는 중이라 아직 수정할 수 없어요/);
+  });
+
+  it("상세를 기다리는 동안 눌러도 수정 폼이 열리지 않는다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantMock.mockReturnValue(pendingForever<typeof jinjuDetail>());
+    renderWithProviders(<RestaurantsPage />);
+
+    // aria-disabled는 표시일 뿐 클릭을 막지 않는다 — 조기 반환이 없으면 detail이 없는 채로
+    // 폼이 열리려다 빈 화면이 된다.
+    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+
+    expect(screen.queryByRole("heading", { name: "식당 수정" })).not.toBeInTheDocument();
+  });
+
+  it("상세 조회가 실패하면 실패 사실과 재시도 수단이 화면에 나온다", async () => {
+    fetchRestaurantMock.mockRejectedValue(new Error("상세를 못 가져왔다"));
+    renderWithProviders(<RestaurantsPage />);
+
+    // 실패가 화면에 나오지 않으면 사용자는 "수정"이 왜 죽어 있는지 영영 알 수 없다.
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /상세 정보를 불러오지 못해 지금은 수정할 수 없어요/,
+    );
+    const edit = screen.getByRole("button", { name: "진주회관 수정" });
+    expect(edit).toHaveAccessibleDescription(/상세 정보를 불러오지 못해/);
+    expect(
+      screen.getByRole("button", { name: "진주회관 상세 정보 다시 불러오기" }),
+    ).toBeInTheDocument();
+  });
+
+  it("다시 시도가 성공하면 잠금이 풀리고 수정 폼이 열린다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantMock.mockRejectedValueOnce(new Error("상세를 못 가져왔다"));
+    fetchRestaurantMock.mockResolvedValue(jinjuDetail);
+    renderWithProviders(<RestaurantsPage />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "진주회관 상세 정보 다시 불러오기" }),
+    );
+
+    const edit = await screen.findByRole("button", { name: "진주회관 수정" });
+    await waitFor(() => expect(edit).not.toHaveAttribute("aria-disabled"));
+    await user.click(edit);
+    expect(await screen.findByRole("heading", { name: "식당 수정" })).toBeInTheDocument();
   });
 });

@@ -39,6 +39,9 @@ export default function LoginPage() {
   // 사용자도 이어지는 Tab이 로그인 폼으로 들어간다.
   const expiredNotice = useFocusOnMount<HTMLParagraphElement>();
 
+  // 시연 카드의 제목이자 그 <section>의 접근 가능한 이름.
+  const demoHeadingId = useId();
+
   return (
     <div className="login-page">
       <h1>메뉴픽</h1>
@@ -83,8 +86,12 @@ export default function LoginPage() {
         쓸 수 있어요.
       </p>
 
-      <section className="card login-demo">
-        <strong>먼저 구경해보기</strong>
+      <section className="card login-demo" aria-labelledby={demoHeadingId}>
+        {/* <strong>이었다. 시각적으로는 이 카드의 제목인데 제목 트리에서는 빠져 있어,
+            로그인 화면을 제목으로 훑으면 <h1>메뉴픽 하나만 나오고 "가입 없이 먼저
+            써 볼 수 있다"는 이 온보딩 경로는 존재하지 않는 것이 된다. 카드 자체도
+            이름이 없어 랜드마크로 잡히지 않았다. */}
+        <h2 id={demoHeadingId}>먼저 구경해보기</h2>
         <p className="login-demo-desc">
           로그인 없이 뽑아볼 수 있어요. 샘플 메뉴로 시연하며, 결과는 저장되지 않습니다.
         </p>
