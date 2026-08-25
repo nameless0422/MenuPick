@@ -43,6 +43,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -182,17 +183,89 @@ class LocalAuthServiceTest {
             verify(authProviderRepository).findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL);
         }
 
+        /**
+         * 예전에는 여기서 409 EMAIL_ALREADY_REGISTERED를 돌려줬다. 그러면 재발송·비밀번호
+         * 재설정이 "대상이 없어도 성공으로 끝낸다"며 막아 둔 사용자 열거가 무의미해진다 —
+         * 주소 목록을 가입 API에 넣고 409/201만 구분하면 가입 여부가 그대로 수집된다.
+         */
         @Test
-        @DisplayName("이미 인증된 계정이 있으면 409로 막는다")
-        void alreadyRegistered() {
-            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
-                    .willReturn(Optional.of(localAccount(1L, EMAIL, PASSWORD, true)));
+        @DisplayName("이미 가입된 주소여도 새 가입과 같은 응답을 준다 (사용자 열거 차단)")
+        void alreadyRegistered_respondsSameAsNewSignup() {
+            given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(true);
 
-            assertThatThrownBy(() -> localAuthService.signup(EMAIL, PASSWORD, "테스터"))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting("errorCode").isEqualTo(ErrorCode.EMAIL_ALREADY_REGISTERED);
+            localAuthService.signup(EMAIL, PASSWORD, "테스터");
 
             verify(userRepository, never()).save(any());
+            // 인증 메일이 나가면 "이 주소는 미가입"이라는 사실이 메일함 쪽으로 새어 나간다.
+            verify(authMailer, never()).sendVerification(anyString(), anyString(), any(Duration.class));
+        }
+
+        /**
+         * 응답만 통일하고 아무것도 보내지 않으면, 정말로 자기가 가입을 시도한 사람이
+         * 오지 않는 인증 메일을 기다리다 막힌다.
+         */
+        @Test
+        @DisplayName("이미 가입된 주소에는 그 주소로 안내 메일이 간다")
+        void alreadyRegistered_sendsNotice() {
+            given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(true);
+
+            localAuthService.signup(EMAIL, PASSWORD, "테스터");
+
+            verify(authMailer).sendAlreadyRegistered(EMAIL);
+        }
+
+        /**
+         * #71 이전에는 소셜 로그인이 계정을 만들었다. 그 시절 계정은 users.email이 있고
+         * LOCAL 행이 없을 수 있어, provider 조회만으로는 걸리지 않고 pending이 만들어졌다.
+         * 그 pending은 메일 인증 시점에 병합 분기로 흘러 남이 정한 비밀번호를 그 계정에 옮긴다.
+         */
+        @Test
+        @DisplayName("LOCAL 행이 없는 레거시 소셜 계정의 주소도 새 pending을 만들지 않는다")
+        void legacySocialOnlyAccount_isTreatedAsRegistered() {
+            given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(true);
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.empty());
+
+            localAuthService.signup(EMAIL, PASSWORD, "테스터");
+
+            verify(userRepository, never()).save(any());
+            verify(authProviderRepository, never()).save(any());
+        }
+
+        /**
+         * 탈퇴 계정까지 "이미 가입됨"으로 막으면 같은 주소로 다시 가입해 돌아오는 길이 끊긴다.
+         * 비밀번호 재설정도 탈퇴 계정은 대상에서 빼므로 되돌아올 수단이 하나도 남지 않는다.
+         */
+        @Test
+        @DisplayName("탈퇴한 계정의 주소는 막지 않는다 — 재가입으로 돌아올 수 있어야 한다")
+        void withdrawnAccountAddress_isNotBlocked() {
+            given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(false);
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.empty());
+            User saved = User.builder().nickname("테스터").emailVerified(false).build();
+            ReflectionTestUtils.setField(saved, "id", 1L);
+            given(userRepository.save(any(User.class))).willReturn(saved);
+            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.VERIFY_EMAIL), eq(1L), any()))
+                    .willReturn("verify-token");
+
+            localAuthService.signup(EMAIL, PASSWORD, "테스터");
+
+            verify(authMailer).sendVerification(eq(EMAIL), eq("verify-token"), any(Duration.class));
+        }
+
+        /**
+         * 주소 검사가 닉네임 검사보다 뒤에 있으면, 이미 가입된 주소에 이미 쓰이는 닉네임을
+         * 넣었을 때만 409가 나온다 — 응답 차이가 다시 생겨 열거가 되살아난다.
+         */
+        @Test
+        @DisplayName("이미 가입된 주소면 닉네임이 겹쳐도 409가 아니라 같은 응답을 준다")
+        void alreadyRegistered_isNotMaskedByNicknameConflict() {
+            given(userRepository.existsByEmailAndDeletedAtIsNull(EMAIL)).willReturn(true);
+            given(userRepository.existsByNickname("테스터")).willReturn(true);
+
+            localAuthService.signup(EMAIL, PASSWORD, "테스터");
+
+            verify(authMailer).sendAlreadyRegistered(EMAIL);
         }
 
         @Test
