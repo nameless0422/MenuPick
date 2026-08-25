@@ -78,6 +78,11 @@ jobs:
             build/reports/tests/test
             build/reports/jacoco/test/html
 
+  # 백엔드와 프론트 이미지를 함께 빌드한다. 프론트만 CI 밖에 두면 (1) 되돌릴 태그가 없어
+  # git을 되감고 VM에서 재빌드해야 하고, (2) `up -d`가 이미 있는 로컬 이미지를 재빌드하지
+  # 않으므로 --build를 빠뜨린 배포가 백엔드만 새 버전이고 프론트는 옛 번들인 상태로 돈다.
+  # VITE_* 값은 빌드 타임에 번들로 구워지므로 키를 바꿔도 그때는 반영되지 않는다(#82).
+  #
   # PR에서도 이미지가 빌드되는지 확인한다. main push에서만 돌리면 Dockerfile을 고친 PR이
   # 초록으로 머지된 뒤 main에서 처음 깨지고, 그때는 이미 main이 깨진 상태인 데다 :latest가
   # 갱신되지 않아 사정을 모르는 배포가 옛 이미지를 계속 받는다.
@@ -124,7 +129,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build image
+      - name: Build backend image
         # ghcr.io는 GITHUB_TOKEN만으로 인증되어 별도 시크릿 설정이 필요 없다.
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -135,8 +140,28 @@ jobs:
           # 네이티브로 한 번만 돌고, 아키텍처별로 갈리는 건 JRE 베이스뿐이다.
           platforms: ${{ env.PUBLISH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           # PR 검증이 매번 Gradle 빌드를 처음부터 돌지 않도록 레이어를 재사용한다.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # 스코프를 나누지 않으면 두 빌드가 같은 gha 캐시를 서로 덮어써
+          # 매번 캐시 미스가 난다(조용히 느려질 뿐이라 알아채기 어렵다).
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
           tags: |
             ${{ steps.image.outputs.name }}:${{ github.sha }}
             ${{ steps.image.outputs.name }}:latest
+
+      # 프론트 이미지도 같은 커밋 SHA로 태그한다. compose가 두 이미지에 같은 APP_VERSION을
+      # 쓰므로 태그가 어긋나면 그 배포는 아예 pull에 실패한다 — 조용한 버전 불일치보다
+      # 시끄러운 실패가 낫다.
+      - name: Build frontend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ./frontend
+          push: ${{ env.PUBLISH == 'true' }}
+          platforms: ${{ env.PUBLISH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          build-args: |
+            VITE_API_BASE_URL=
+            VITE_KAKAO_JS_KEY=${{ secrets.VITE_KAKAO_JS_KEY }}
+          tags: |
+            ${{ steps.image.outputs.name }}-web:${{ github.sha }}
+            ${{ steps.image.outputs.name }}-web:latest
