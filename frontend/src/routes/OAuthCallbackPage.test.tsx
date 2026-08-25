@@ -64,6 +64,7 @@ beforeEach(() => {
     login: loginFn,
     logout: vi.fn(),
     withdraw: vi.fn(),
+    sessionExpired: false,
   });
 });
 
@@ -148,6 +149,7 @@ describe("OAuthCallbackPage - 연동 모드", () => {
       login: loginFn,
       logout: vi.fn(),
       withdraw: vi.fn(),
+      sessionExpired: false,
     });
 
     renderCallback(state);
@@ -189,6 +191,7 @@ describe("OAuthCallbackPage - 요청 검증", () => {
       login: loginFn,
       logout: vi.fn(),
       withdraw: vi.fn(),
+      sessionExpired: false,
     });
 
     renderCallback(state);

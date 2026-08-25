@@ -12,6 +12,7 @@ import {
 } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { consumeReturnTo } from "../auth/returnTo";
+import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import "./AuthPages.css";
 
@@ -23,14 +24,35 @@ export default function LoginPage() {
   // 고정 샘플에서 뽑히며 저장되지 않는다.
   const demo = useMutation({ mutationFn: requestDemoPick });
 
-  // 연동된 적 없는 소셜 계정으로 로그인을 시도해 콜백 화면에서 되돌아온 경우
-  // (OAuthCallbackPage가 SOCIAL_ACCOUNT_NOT_LINKED를 보고 여기로 보낸다).
-  const notLinked = (useLocation().state as { socialNotLinked?: Provider } | null)?.socialNotLinked;
+  // 이 화면에 어떻게 왔는지를 보내는 쪽이 알려준다.
+  //  * socialNotLinked: 연동된 적 없는 소셜 계정으로 로그인을 시도해 콜백 화면에서
+  //    되돌아온 경우 (OAuthCallbackPage가 SOCIAL_ACCOUNT_NOT_LINKED를 보고 보낸다).
+  //  * sessionExpired: 쓰던 중에 세션이 끊겨 ProtectedRoute가 밀어낸 경우.
+  const arrival = useLocation().state as
+    | { socialNotLinked?: Provider; sessionExpired?: boolean }
+    | null;
+  const notLinked = arrival?.socialNotLinked;
+
+  // 만료 안내는 마운트 시점에 이미 내용을 갖고 삽입되므로 라이브 리전으로는 통지되지
+  // 않는다(내용과 함께 나타나는 role="status"는 "바뀐 것"이 없어 읽히지 않는다).
+  // 남은 수단은 초점을 옮기는 것뿐이다 — 옮기면 스크린리더가 그 문장을 읽고, 키보드
+  // 사용자도 이어지는 Tab이 로그인 폼으로 들어간다.
+  const expiredNotice = useFocusOnMount<HTMLParagraphElement>();
 
   return (
     <div className="login-page">
       <h1>메뉴픽</h1>
       <p>오늘 뭐 먹지 고민을 대신 해드립니다.</p>
+
+      {/* 아무 말 없이 화면만 바뀌면 사용자는 자기가 뭘 잘못 눌렀다고 생각한다.
+          "다시 로그인하면 보던 화면으로 돌아간다"까지 말하는 이유는 ProtectedRoute가
+          returnTo를 남겨뒀기 때문이다 — 실제로 그렇게 동작한다.
+          tabIndex={-1}이 없으면 <p>는 초점을 받지 못해 focus()가 조용히 무시된다. */}
+      {arrival?.sessionExpired && (
+        <p className="auth-notice" ref={expiredNotice} tabIndex={-1}>
+          로그인한 지 오래되어 자동으로 로그아웃됐어요. 다시 로그인하면 보던 화면으로 돌아갑니다.
+        </p>
+      )}
 
       <EmailLoginForm />
 

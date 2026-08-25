@@ -76,6 +76,7 @@ beforeEach(() => {
   useAuthMock.mockReturnValue({
     isAuthenticated: true,
     isLoading: false,
+    sessionExpired: false,
     login: vi.fn(),
     logout: logoutFn,
     withdraw: withdrawFn,
