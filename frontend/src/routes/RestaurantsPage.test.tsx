@@ -695,15 +695,25 @@ describe("카드의 수정 버튼", () => {
     expect(edit).toHaveAccessibleDescription(/불러오는 중이라 아직 수정할 수 없어요/);
   });
 
-  it("상세를 기다리는 동안 눌러도 수정 폼이 열리지 않는다", async () => {
+  it("상세를 기다리는 동안 누른 것이 나중에 폼을 열어젖히지 않는다", async () => {
     const user = userEvent.setup();
-    fetchRestaurantMock.mockReturnValue(pendingForever<typeof jinjuDetail>());
+    let arriveDetail: (detail: typeof jinjuDetail) => void = () => {};
+    fetchRestaurantMock.mockReturnValue(
+      new Promise<typeof jinjuDetail>((resolve) => {
+        arriveDetail = resolve;
+      }),
+    );
     renderWithProviders(<RestaurantsPage />);
 
-    // aria-disabled는 표시일 뿐 클릭을 막지 않는다 — 조기 반환이 없으면 detail이 없는 채로
-    // 폼이 열리려다 빈 화면이 된다.
-    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+    const edit = await screen.findByRole("button", { name: "진주회관 수정" });
+    // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 조기 반환이 없으면 이 클릭이 mode를
+    // "edit"으로 바꿔 두고, 화면은 detail이 없어 그대로 카드로 남는다 — 사용자는 "아무 일도
+    // 없었다"고 판단하고 손을 뗀다. 그런데 상세가 도착하는 순간 폼이 저 혼자 열려 카드를
+    // 통째로 갈아치우고, 읽던 자리도 초점도 예고 없이 뒤엎인다.
+    await user.click(edit);
 
+    arriveDetail(jinjuDetail);
+    await waitFor(() => expect(edit).not.toHaveAttribute("aria-disabled"));
     expect(screen.queryByRole("heading", { name: "식당 수정" })).not.toBeInTheDocument();
   });
 
