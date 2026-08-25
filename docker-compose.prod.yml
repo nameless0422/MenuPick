@@ -167,6 +167,12 @@ services:
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
       NAVER_MAPS_CLIENT_ID: ${NAVER_MAPS_CLIENT_ID}
       NAVER_MAPS_CLIENT_SECRET: ${NAVER_MAPS_CLIENT_SECRET}
+      # 지도 API 게이트웨이 도메인. 네이버가 신규 도메인(maps.apigw.ntruss.com)을 안내한
+      # 이력이 있어, 이전이 실제로 일어났을 때 재빌드 없이 바꾸고 되돌릴 수 있도록 열어 둔다(#76).
+      # 여기 기본값은 application-prod.yml의 기본값과 같아야 한다 — compose의 environment는
+      # 명시한 키만 넘기고, 빈 값을 넘기면 yml의 기본값이 아니라 빈 문자열이 이긴다.
+      NAVER_MAPS_GEOCODE_URL: ${NAVER_MAPS_GEOCODE_URL:-https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode}
+      NAVER_MAPS_REVERSE_GEOCODE_URL: ${NAVER_MAPS_REVERSE_GEOCODE_URL:-https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
       # 자체 계정의 메일 인증·비밀번호 재설정 발송. prod 프로파일은 이 값들에 기본값을 두지 않아,
       # 빠지면 기동 시점에 실패한다 — 조용히 뜨면 가입자가 인증 메일을 영영 못 받는다.

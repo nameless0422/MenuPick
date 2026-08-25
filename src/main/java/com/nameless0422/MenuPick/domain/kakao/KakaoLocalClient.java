@@ -2,24 +2,25 @@ package com.nameless0422.MenuPick.domain.kakao;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
+import com.nameless0422.MenuPick.common.http.ExternalApiConnector;
 import com.nameless0422.MenuPick.domain.kakao.dto.KakaoLocalResponse;
-import io.netty.channel.ChannelOption;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
-import reactor.netty.http.client.HttpClient;
 import reactor.util.retry.Retry;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeoutException;
 
 @Slf4j
@@ -33,15 +34,6 @@ public class KakaoLocalClient {
      */
     private static final int CACHE_COORD_SCALE = 3;
 
-    /**
-     * 외부 지도 API 전용 타임아웃. 공용 {@code WebClient} 빈의 기본값(connect 5s / response 10s)은
-     * 이 경로에 지나치게 관대하다 — 사용자가 화면 앞에서 기다리는 동기 호출이고,
-     * {@code block()}으로 톰캣 스레드를 점유하므로 업스트림이 느려지면 스레드 풀이 그대로 마른다.
-     * 재시도 1회를 감안한 최악 지연은 대략 {@code 3s + 0.2s + 3s ≈ 6.2s}다.
-     */
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
-    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(3);
-
     /** 재시도 사이 고정 대기. 업스트림이 순간적으로 흔들린 경우를 흡수할 정도만 준다. */
     private static final Duration RETRY_DELAY = Duration.ofMillis(200);
 
@@ -51,24 +43,31 @@ public class KakaoLocalClient {
     public KakaoLocalClient(KakaoLocalProperties kakaoLocalProperties, WebClient webClient) {
         this.kakaoLocalProperties = kakaoLocalProperties;
         // 공용 빈(common/security/SecurityConfig)을 그대로 쓰면 OAuth 호출까지 타임아웃이 바뀌므로,
-        // 여기서만 커넥터를 갈아끼운 파생 클라이언트를 만든다.
+        // 여기서만 커넥터를 갈아끼운 파생 클라이언트를 만든다. 커넥션 풀도 이 업스트림 전용이다 —
+        // 근거는 ExternalApiConnector 참고.
         this.webClient = webClient.mutate()
-                .clientConnector(new ReactorClientHttpConnector(
-                        HttpClient.create()
-                                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) CONNECT_TIMEOUT.toMillis())
-                                .responseTimeout(RESPONSE_TIMEOUT)))
+                .clientConnector(ExternalApiConnector.isolated("kakao-local"))
                 .build();
     }
 
     @Cacheable(value = "kakaoKeywordSearch",
             key = "T(com.nameless0422.MenuPick.domain.kakao.KakaoLocalClient)"
                     + ".keywordCacheKey(#query, #categoryGroupCode, #x, #y, #radius, #page, #size, #sort)",
-            // sync=true: 인기 좌표의 캐시가 만료되는 순간 같은 키의 요청이 동시에 업스트림으로
-            // 몰려나가는 캐시 스탬피드를 막는다(같은 키는 한 스레드만 로딩, 나머지는 대기).
-            // 주의) sync=true는 unless와 함께 쓸 수 없다(기동 시 IllegalStateException).
-            //       execute()가 null 결과를 이미 예외로 바꾸므로 unless는 어차피 죽은 코드였다.
-            // RedisConfig의 fail-open(CacheErrorHandler)은 유지된다 — Spring 6.2+의 동기 경로도
-            // AbstractCacheInvoker.doGet(cache, key, loader)를 거쳐 캐시 오류를 미스로 강등한다.
+            // sync=true의 실제 효과. 예전 주석은 "같은 키는 한 스레드만 로딩, 나머지는 대기"라고
+            // 적어 두었지만 이 구성에서는 그런 대기가 없다 — RedisConfig가 쓰는
+            // RedisCacheManager.builder(factory)는 nonLockingRedisCacheWriter라, 락도 synchronized도
+            // 없이 GET → (미스면) 로더 → PUT을 그냥 실행한다. 즉 인기 좌표의 엔트리가 만료되는
+            // 순간 그 키를 노리는 동시 요청 N건이 전부 업스트림으로 나간다(#84).
+            //   * 실제 중복 제거가 필요해지면 RedisCacheWriter.lockingRedisCacheWriter로 바꿔야
+            //     한다. 다만 그러면 락 대기 시간이 새로 생겨 ExternalApiConnector의 지연 예산과
+            //     함께 다시 계산해야 하므로, 지금은 스탬피드를 감수하고 사실만 적어 둔다.
+            //   * TTL이 1시간이고 같은 키에 동시에 몰리는 사용자 수가 작아 실질 손해가 크지 않다.
+            // 남겨 두는 이유는 두 가지다.
+            //   * unless와 함께 쓸 수 없다는 제약이 그대로다(기동 시 IllegalStateException).
+            //     execute()가 null 결과를 이미 예외로 바꾸므로 unless는 어차피 죽은 코드였다.
+            //   * RedisConfig의 fail-open(CacheErrorHandler)은 유지된다 — 동기 경로도
+            //     AbstractCacheInvoker.doGet(cache, key, loader)를 거쳐 캐시 오류를 미스로 강등한다.
+            //     이 부분은 예전 주석도 정확했다.
             sync = true)
     public KakaoLocalResponse.PlaceSearchResult searchByKeyword(
             String query, String categoryGroupCode,
@@ -92,7 +91,7 @@ public class KakaoLocalClient {
     @Cacheable(value = "kakaoCategorySearch",
             key = "T(com.nameless0422.MenuPick.domain.kakao.KakaoLocalClient)"
                     + ".categoryCacheKey(#categoryGroupCode, #x, #y, #radius, #page, #size, #sort)",
-            // sync=true 근거·주의사항은 searchByKeyword 주석 참고
+            // sync=true의 실제 효과·주의사항은 searchByKeyword 주석 참고
             sync = true)
     public KakaoLocalResponse.PlaceSearchResult searchByCategory(
             String categoryGroupCode, String x, String y, Integer radius,
@@ -127,7 +126,9 @@ public class KakaoLocalClient {
                     .retrieve()
                     .bodyToMono(KakaoLocalResponse.PlaceSearchResult.class)
                     .retryWhen(retrySpec(operation))
-                    .block();
+                    // 재시도까지 포함한 하드 데드라인. 단계별 상한의 합은 프론트엔드 axios의
+                    // 15초 타임아웃을 넘어서므로 그 전에 우리 쪽에서 끊는다.
+                    .block(ExternalApiConnector.TOTAL_TIMEOUT);
         } catch (WebClientResponseException e) {
             log.error("카카오 로컬 {} API 응답 오류: status={}, body={}",
                     operation, e.getStatusCode(), e.getResponseBodyAsString(), e);
@@ -184,15 +185,44 @@ public class KakaoLocalClient {
     public static String keywordCacheKey(String query, String categoryGroupCode,
                                          String x, String y, Integer radius,
                                          Integer page, Integer size, String sort) {
-        return normalizeQuery(query) + ':' + categoryGroupCode + ':'
-                + normalizeCoord(x) + ':' + normalizeCoord(y) + ':' + radius + ':'
-                + page + ':' + size + ':' + sort;
+        return joinKey(normalizeQuery(query), categoryGroupCode,
+                normalizeCoord(x), normalizeCoord(y), radius, page, size, sort);
     }
 
     public static String categoryCacheKey(String categoryGroupCode, String x, String y,
                                           Integer radius, Integer page, Integer size, String sort) {
-        return categoryGroupCode + ':' + normalizeCoord(x) + ':' + normalizeCoord(y) + ':'
-                + radius + ':' + page + ':' + size + ':' + sort;
+        return joinKey(categoryGroupCode, normalizeCoord(x), normalizeCoord(y),
+                radius, page, size, sort);
+    }
+
+    /**
+     * 성분들을 서로 섞이지 않게 이어 붙여 캐시 키를 만든다.
+     *
+     * <p>예전에는 {@code a + ':' + b + ...}로 단순 연결했다. 사용자 질의에는 {@code :}가 들어갈 수
+     * 있고({@code @Size(max=100)} 외에 제약이 없다) null은 문자열 {@code "null"}이 되므로,
+     * 서로 다른 인자 조합이 <b>같은 키</b>를 만들 수 있었다.
+     *
+     * <pre>
+     *   query="김밥:FD6", categoryGroupCode=null  →  "김밥:FD6:null:..."
+     *   query="김밥",     categoryGroupCode="FD6" →  "김밥:FD6:null:..."   ← 같은 키
+     * </pre>
+     *
+     * <p>충돌하면 서로 다른 검색의 결과가 서로에게 응답된다. 확률은 낮지만 사용자가 질의만으로
+     * 조작할 수 있고, 한 번 박히면 TTL(1시간) 동안 유지된다.
+     *
+     * <p>각 성분을 URL 인코딩하면 값 안의 {@code :}가 {@code %3A}가 되어 구분자와 섞이지 않는다.
+     * null과 빈 문자열도 갈라야 하므로 값 앞에 {@code =}를 붙인다 — 인코딩된 값 안에서
+     * {@code =}는 {@code %3D}가 되므로 이 표시가 값의 일부로 나타날 수 없다.
+     * 즉 null은 빈 성분, 값은 항상 {@code =}로 시작하는 성분이다.
+     */
+    private static String joinKey(Object... parts) {
+        StringJoiner joiner = new StringJoiner(":");
+        for (Object part : parts) {
+            joiner.add(part == null
+                    ? ""
+                    : "=" + URLEncoder.encode(part.toString(), StandardCharsets.UTF_8));
+        }
+        return joiner.toString();
     }
 
     /** 앞뒤 공백만 다른 질의가 별도 캐시 엔트리를 차지하지 않도록 정리한다. */

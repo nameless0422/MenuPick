@@ -114,8 +114,13 @@ naver:
   maps:
     client-id: ${NAVER_MAPS_CLIENT_ID}
     client-secret: ${NAVER_MAPS_CLIENT_SECRET}
-    geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode
-    reverse-geocode-base-url: https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc
+    # 게이트웨이 도메인을 코드 변경·재빌드 없이 바꾸고 되돌릴 수 있게 env로 노출한다.
+    # 네이버가 신규 도메인(maps.apigw.ntruss.com)을 안내한 이력이 있으나, 공식 API 문서는
+    # 2026-08 기준 여전히 아래 값을 기재하고 있어 기본값은 그대로 둔다. 운영 로그에
+    # "네이버 Geocode API 응답 오류: status=401" 또는 404가 보이면 도메인 이전이 실제로
+    # 일어난 것이므로, 두 env만 바꿔 재기동하면 된다(#76).
+    geocode-base-url: ${NAVER_MAPS_GEOCODE_URL:https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode}
+    reverse-geocode-base-url: ${NAVER_MAPS_REVERSE_GEOCODE_URL:https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc}
 
 logging:
   level:
