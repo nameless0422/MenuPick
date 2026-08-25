@@ -10,7 +10,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
@@ -26,13 +28,45 @@ import java.util.Map;
 @EnableCaching
 public class RedisConfig implements CachingConfigurer {
 
+    /**
+     * 캐시 값 직렬화기.
+     *
+     * <p>Jackson2 판({@code GenericJackson2JsonRedisSerializer})은 Boot 4.1에서 제거 예정으로
+     * 표시됐다 — 빌드는 통과하지만 다음 major에서 컴파일이 깨진다. 후속 클래스는 no-arg 생성자가
+     * 없고 빌더로 만든다.
+     *
+     * <p><b>기본 타이핑이 필요한 이유.</b> 캐시된 값은 {@code Object}로 되살아나므로 JSON에 타입
+     * 정보가 없으면 record DTO가 {@code LinkedHashMap}으로 복원되고, Spring Cache가 메서드
+     * 반환 타입으로 캐스팅하는 순간 {@code ClassCastException}이 난다.
+     *
+     * <p><b>그런데 무제한으로 켜지 않는다.</b> 옛 no-arg 생성자는 {@code @class}로 전면 다형성
+     * 타이핑을 켰다 — Redis에 쓰기가 가능한 누군가가 임의 클래스 이름을 심으면 역직렬화가 그 클래스를
+     * 인스턴스화한다(가젯 체인). 실제로 쓰는 값은 우리 DTO와 그 안의 컬렉션·문자열뿐이므로 거기까지만
+     * 허용한다. 허용 목록을 벗어난 값은 역직렬화가 거부되고, 아래 {@link CacheErrorHandler}가 그
+     * 실패를 캐시 미스로 강등해 원본 호출로 흘러간다.
+     *
+     * <p>직렬화 형식이 Jackson2 판과 달라 이미 Redis에 들어 있는 값은 새 직렬화기로 읽히지 않을 수
+     * 있다. 이 캐시는 전부 외부 API 응답이라 최악이라야 TTL(최대 24시간) 동안 적중률이 떨어질 뿐이다.
+     */
+    private static GenericJacksonJsonRedisSerializer cacheValueSerializer() {
+        PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.nameless0422.MenuPick.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType(String.class)
+                .build();
+
+        return GenericJacksonJsonRedisSerializer.builder()
+                .enableDefaultTyping(typeValidator)
+                .build();
+    }
+
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new GenericJackson2JsonRedisSerializer()))
+                        .fromSerializer(cacheValueSerializer()))
                 .disableCachingNullValues()
                 .entryTtl(Duration.ofHours(1));
 
