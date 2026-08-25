@@ -146,6 +146,11 @@ public class SecurityConfig {
                         // 소셜 계정 연동·해제. anyRequest().authenticated()로도 같은 결과지만,
                         // 바로 위 permitAll 목록과 한 화면 안에 있어 명시해 둔다 — 여기 한 줄이
                         // 잘못 들어가면 남의 계정에 소셜 계정을 붙이거나 떼어낼 수 있게 된다.
+                        // 로그아웃은 AT가 만료된 뒤에야 가장 필요하다. authenticated()로 두면
+                        // 그때 401이 나고 쿠키를 지우는 Set-Cookie도 실리지 않아, 14일짜리
+                        // Refresh Token이 남은 채 공용 PC에서 /refresh 한 번으로 되살아난다.
+                        // 주체는 principal이 없으면 쿠키에서 찾는다(AuthService.logout).
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/*/link").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/*/link").authenticated()
                         // 게스트 데모 픽 — 온보딩 퍼널용 시연 (docs/Planning.md 4.3).

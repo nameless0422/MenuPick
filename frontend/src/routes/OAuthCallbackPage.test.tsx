@@ -108,20 +108,22 @@ describe("OAuthCallbackPage - 로그인 모드", () => {
 describe("OAuthCallbackPage - 연동 모드", () => {
   it("연동으로 시작했으면 로그인이 아니라 연동을 호출하고 설정 화면으로 돌아간다", async () => {
     const state = startedState(linkAuthorizeUrl("kakao"));
-    linkSocialAccountMock.mockResolvedValue(["kakao"]);
+    linkSocialAccountMock.mockResolvedValue({ linkedProviders: ["kakao"], accessToken: "연동-후-토큰" });
 
     renderCallback(state);
 
     expect(await screen.findByText(/설정 화면/)).toBeInTheDocument();
     expect(linkSocialAccountMock).toHaveBeenCalledWith("kakao", "auth_code");
-    // 연동은 이미 로그인한 계정에 붙이는 것이라 세션을 갈아끼우면 안 된다.
+    // 연동은 소셜 로그인이 아니다 — 인가 코드를 로그인 경로로 보내면 안 된다.
     expect(loginWithOAuthMock).not.toHaveBeenCalled();
-    expect(loginFn).not.toHaveBeenCalled();
+    // 다만 서버가 연동과 함께 모든 세션을 끊으므로, 함께 온 새 토큰은 적용해야 한다.
+    // 적용하지 않으면 지금 토큰이 만료되는 순간 재발급이 막혀 조용히 로그아웃된다.
+    expect(loginFn).toHaveBeenCalledWith("연동-후-토큰");
   });
 
   it("연동을 마쳤다는 표시를 설정 화면에 넘긴다", async () => {
     const state = startedState(linkAuthorizeUrl("kakao"));
-    linkSocialAccountMock.mockResolvedValue(["kakao"]);
+    linkSocialAccountMock.mockResolvedValue({ linkedProviders: ["kakao"], accessToken: "연동-후-토큰" });
 
     renderCallback(state);
 

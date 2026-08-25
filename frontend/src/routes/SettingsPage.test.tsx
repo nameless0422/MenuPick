@@ -8,8 +8,8 @@ import {
   changePassword,
   fetchMe,
   unlinkSocialAccount,
+  type LinkResult,
   type Me,
-  type Provider,
 } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 
@@ -29,6 +29,7 @@ const fetchMeMock = vi.mocked(fetchMe);
 const unlinkMock = vi.mocked(unlinkSocialAccount);
 const changePasswordMock = vi.mocked(changePassword);
 const useAuthMock = vi.mocked(useAuth);
+const loginFn = vi.fn();
 
 // 로그아웃·탈퇴는 세션 훅이 쥐고 있다. 매번 새 vi.fn()을 끼우면 "요청이 나갔는가"를
 // 테스트에서 붙잡을 수 없어, 한 번 만들어 두고 beforeEach에서 구현만 되돌린다.
@@ -71,13 +72,14 @@ beforeEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
   // clearAllMocks는 호출 기록만 지운다 — 앞선 테스트가 끼워 둔 구현이 남지 않도록 되돌린다.
+  loginFn.mockClear();
   logoutFn.mockImplementation(() => Promise.resolve());
   withdrawFn.mockImplementation(() => Promise.resolve());
   useAuthMock.mockReturnValue({
     isAuthenticated: true,
     isLoading: false,
     sessionExpired: false,
-    login: vi.fn(),
+    login: loginFn,
     logout: logoutFn,
     withdraw: withdrawFn,
   });
@@ -127,7 +129,7 @@ describe("SettingsPage 소셜 계정 연동", () => {
   it("해제에 성공하면 다시 조회하지 않고 목록을 갱신한다", async () => {
     const user = userEvent.setup();
     fetchMeMock.mockResolvedValue(me({ linkedProviders: ["kakao"] }));
-    unlinkMock.mockResolvedValue([]);
+    unlinkMock.mockResolvedValue({ linkedProviders: [], accessToken: "해제-후-토큰" });
 
     renderSettings();
     await user.click(await screen.findByRole("button", { name: "카카오 연동 해제" }));
@@ -136,6 +138,20 @@ describe("SettingsPage 소셜 계정 연동", () => {
     expect(unlinkMock).toHaveBeenCalledWith("kakao");
     // 서버가 갱신된 목록을 그대로 주므로 /me 재조회는 없어야 한다
     expect(fetchMeMock).toHaveBeenCalledTimes(1);
+  });
+
+  // 해제는 그 계정의 모든 세션을 끊는다 — 끊어낸 수단으로 만들어진 세션이 남아 있으면
+  // "이 로그인 방법을 없앴다"는 행동이 아무것도 끊지 못한 것이 된다. 그 대가로 방금 해제한
+  // 당사자도 함께 밀려나므로, 서버가 같이 준 새 토큰을 적용하지 않으면 스스로를 로그아웃시킨다.
+  it("해제에 성공하면 함께 온 새 토큰을 적용한다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me({ linkedProviders: ["kakao"] }));
+    unlinkMock.mockResolvedValue({ linkedProviders: [], accessToken: "해제-후-토큰" });
+
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "카카오 연동 해제" }));
+
+    await waitFor(() => expect(loginFn).toHaveBeenCalledWith("해제-후-토큰"));
   });
 
   // 통과시키면 그 계정에는 영원히 들어갈 수 없고, 탈퇴조차 못 해 데이터만 남는다.
@@ -185,7 +201,7 @@ describe("SettingsPage 소셜 계정 연동", () => {
   it("해제 요청 중에도 버튼이 초점을 지키고 진행 중임을 알린다", async () => {
     const user = userEvent.setup();
     fetchMeMock.mockResolvedValue(me({ hasPassword: true, linkedProviders: ["kakao"] }));
-    unlinkMock.mockReturnValue(pendingForever<Provider[]>());
+    unlinkMock.mockReturnValue(pendingForever<LinkResult>());
 
     renderSettings();
     const unlink = await screen.findByRole("button", { name: "카카오 연동 해제" });
@@ -205,7 +221,7 @@ describe("SettingsPage 소셜 계정 연동", () => {
   it("다른 제공자를 해제하는 중에도 연동하기 버튼은 잠기지 않는다", async () => {
     const user = userEvent.setup();
     fetchMeMock.mockResolvedValue(me({ hasPassword: true, linkedProviders: ["kakao"] }));
-    unlinkMock.mockReturnValue(pendingForever<Provider[]>());
+    unlinkMock.mockReturnValue(pendingForever<LinkResult>());
 
     renderSettings();
     const unlink = await screen.findByRole("button", { name: "카카오 연동 해제" });

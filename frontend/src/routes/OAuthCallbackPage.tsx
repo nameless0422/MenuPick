@@ -68,7 +68,13 @@ export default function OAuthCallbackPage({ provider }: { provider: Provider }) 
       linkSocialAccount(provider, code)
         // 연동 결과는 설정 화면이 안내 문구로 보여준다. 목록 자체는 그 화면이 /me로 다시 읽는다 —
         // 이 화면은 리다이렉트로 새로 뜬 문서라 넘겨줄 수 있는 캐시가 없다.
-        .then(() => navigate(SETTINGS, { replace: true, state: { socialLinked: provider } }))
+        .then(({ accessToken }) => {
+          // 서버가 연동과 함께 그 계정의 모든 세션을 끊었다. 새 토큰을 적용하지 않으면 지금
+          // 들고 있는 Access Token은 살아 있어도 그 뒤 재발급이 막혀, 30분쯤 지나 조용히
+          // 로그아웃된다 — 사용자 입장에서는 연동한 것이 로그아웃의 원인이 된다.
+          login(accessToken);
+          navigate(SETTINGS, { replace: true, state: { socialLinked: provider } });
+        })
         .catch((e) => setError(apiErrorMessage(e)));
       return;
     }

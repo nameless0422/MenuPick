@@ -1249,7 +1249,7 @@ MySQL의 공간 함수(ST_Distance_Sphere) 활용 또는 애플리케이션 레�
 
 활성 프로파일은 `SPRING_PROFILES_ACTIVE` 환경 변수로 지정한다 (미지정 시 local). 운영 배포 시 yml 수정 없이 환경 변수만으로 전환.
 
-> **배포 대상(잠정)**: Oracle Cloud Free Tier — 아직 확정은 아니다([DecisionLog.md D-023](DecisionLog.md#d-023-배포-대상--oracle-cloud-free-tier-잠정)). PaaS가 아니라 VM을 직접 운영하는 방식이라, MySQL/Redis/앱을 한 대에 컨테이너로 함께 띄우는 `docker-compose.prod.yml`을 준비해뒀다. `.env.prod.example`을 복사해 실제 값을 채운 뒤 `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build`로 기동한다. Free Tier의 Ampere A1(ARM) 인스턴스를 쓴다면 `eclipse-temurin`/`mysql`/`redis` 공식 이미지가 모두 arm64를 지원해 `Dockerfile` 수정 없이 그대로 빌드된다.
+> **배포 대상(잠정)**: Oracle Cloud Free Tier — 아직 확정은 아니다([DecisionLog.md D-023](DecisionLog.md#d-023-배포-대상--oracle-cloud-free-tier-잠정)). PaaS가 아니라 VM을 직접 운영하는 방식이라, MySQL/Redis/앱을 한 대에 컨테이너로 함께 띄우는 `docker-compose.prod.yml`을 준비해뒀다. `.env.prod.example`을 복사해 실제 값을 채운 뒤 `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d`로 기동한다. **`--build`는 쓰지 않는다** — 앱과 프론트 이미지는 모두 CI가 빌드해 GHCR에 올리고, VM은 `APP_VERSION` 태그를 pull해서 쓴다(#82). VM에서 빌드하면 되돌릴 태그가 남지 않고 1GB 인스턴스에서는 Gradle이 뜨지도 않는다. Free Tier의 Ampere A1(ARM) 인스턴스를 쓴다면 `eclipse-temurin`/`mysql`/`redis` 공식 이미지가 모두 arm64를 지원해 `Dockerfile` 수정 없이 그대로 빌드된다.
 
 `local`/`test`는 `spring.datasource.url`을 yml에 고정해두고 계정 정보만 env로 받지만, `dev`/`prod`는 배포 대상마다 호스트가 달라지므로 `DB_URL` 전체를 env로 받는다(예: `jdbc:mysql://<host>:3306/menupick?...`). `dev`는 팀 협업용으로 `/swagger-ui`를 열어두고(`local`과 동일), `prod`는 `application.yml` 기본값(false)을 그대로 물려받아 닫혀 있다([DecisionLog.md D-021](DecisionLog.md#d-021-swagger-ui-노출--기본-off-local-프로파일만-on)).
 
