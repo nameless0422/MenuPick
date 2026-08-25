@@ -101,8 +101,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
             // 사용자 ID가 아니라 IP 버킷이 되는데(이 필터가 JWT 필터보다 먼저 돈다 — 클래스 주석),
             // 연동은 계정당 몇 번 하고 마는 동작이라 IP 기준으로도 정상 사용자가 걸리지 않는다.
             // 해제(DELETE)는 외부 호출 없이 DB 행 하나를 지울 뿐이고 인증도 필요해,
-            // 같은 성격의 /logout·/withdraw와 마찬가지로 넣지 않는다.
+            // 같은 성격의 /withdraw와 마찬가지로 넣지 않는다.
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/*/link"),
+            // 로그아웃. AT가 만료된 뒤에도 동작해야 해서 permitAll이 됐고(SecurityConfig),
+            // 그러면서 "인증이 필요하니 굳이 셀 것 없다"는 위 근거가 이 경로에서만 무너졌다.
+            // 하는 일은 Redis 키 삭제 하나라 증폭은 없지만, 토큰 없이 부를 수 있는 auth 경로는
+            // 전부 같은 IP 버킷에 넣는다는 규칙을 예외 없이 유지한다.
+            PathPatternRequestMatcher.pathPattern(HttpMethod.DELETE, "/api/v1/auth/logout"),
             // 비밀번호 변경. 인증이 필요하지만 그것만으로는 부족하다.
             //  (1) currentPassword 대입: LoginAttemptLimiter는 login()에서만 집계하므로
             //      이 경로의 검증 실패는 어디에도 세어지지 않는다. 세션 하나만 손에 넣으면

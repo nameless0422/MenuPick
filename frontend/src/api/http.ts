@@ -93,9 +93,9 @@ async function refreshAccessToken(): Promise<string> {
 // 이 목록은 백엔드 두 곳과 반드시 함께 움직여야 한다 — 어긋나면 조용히 같은 증상으로 되돌아간다:
 //   * SecurityConfig.securityFilterChain()의 permitAll 목록 (= 토큰 없이 호출하는 경로)
 //   * RateLimitFilter.AUTH_RATE_LIMITED_PATHS (= 인증 버킷을 소모하는 경로)
-// 반대로 /auth/me·/auth/password·/auth/logout·/auth/withdraw는 인증이 필요한 경로라
-// 401이 곧 "Access Token 만료"를 뜻한다. 여기 넣으면 재발급 경로가 사라져 사용자가
-// 30분(AT 수명)마다 로그인 화면으로 튕긴다. 이름이 닮은 /auth/password-reset과 헷갈리지 말 것.
+// 반대로 /auth/me·/auth/password·/auth/withdraw는 인증이 필요한 경로라 401이 곧
+// "Access Token 만료"를 뜻한다. 여기 넣으면 재발급 경로가 사라져 사용자가 30분(AT 수명)마다
+// 로그인 화면으로 튕긴다. 이름이 닮은 /auth/password-reset과 헷갈리지 말 것.
 const PRE_AUTH_PATHS = [
   "/api/v1/auth/kakao",
   "/api/v1/auth/google",
@@ -106,6 +106,9 @@ const PRE_AUTH_PATHS = [
   "/api/v1/auth/resend-verification",
   "/api/v1/auth/password-reset",
   "/api/v1/auth/password-reset/confirm",
+  // 로그아웃은 AT가 만료된 뒤에야 가장 필요하다. 그래서 permitAll이 됐고, 토큰이 없어도
+  // 서버가 쿠키에서 주체를 찾아 세션을 지운다. 여기서 재발급을 시도할 이유가 없다.
+  "/api/v1/auth/logout",
   // permitAll이라 401 자체가 나지 않지만, "토큰 없이 부르는 경로"라는 같은 이유로 여기 둔다.
   "/api/v1/pick/demo",
 ];

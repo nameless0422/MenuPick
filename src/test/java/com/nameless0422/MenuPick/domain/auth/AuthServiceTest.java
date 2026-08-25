@@ -43,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -60,6 +61,7 @@ class AuthServiceTest {
     @Mock private UserHardDeleteService userHardDeleteService;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private RefreshTokenStore refreshTokenStore;
+    @Mock private AuthMailer authMailer;
     @Mock private OAuthProvider kakaoProvider;
 
     private AuthService authService;
@@ -91,7 +93,7 @@ class AuthServiceTest {
                 userRepository, authProviderRepository,
                 new NicknameAllocator(userRepository),
                 userHardDeleteService,
-                jwtTokenProvider, refreshTokenStore, jwtProperties,
+                jwtTokenProvider, refreshTokenStore, authMailer, jwtProperties,
                 // 토큰 발급은 TokenIssuer로 옮겼지만, 이 테스트가 검증하는 것은
                 // "로그인 성공 시 어떤 토큰이 저장·반환되는가"라 실제 구현을 그대로 넣는다.
                 new TokenIssuer(userRepository, jwtTokenProvider, refreshTokenStore, jwtProperties),
@@ -359,10 +361,16 @@ class AuthServiceTest {
         given(authProviderRepository.save(any(AuthProvider.class)))
                 .willAnswer(inv -> inv.getArgument(0));
 
-        List<String> result = authService.linkSocialAccount(1L, "kakao", "auth_code");
+        AuthService.LinkResult result = authService.linkSocialAccount(1L, "kakao", "auth_code");
 
         // LOCAL은 연동 목록이 아니다 — 자체 자격증명이라 hasPassword가 따로 알려준다
-        assertThat(result).containsExactly("KAKAO");
+        assertThat(result.linkedProviders()).containsExactly("KAKAO");
+        // 로그인 수단이 늘었으니 기존 세션은 끊긴다 — Refresh Token을 새로 저장하면 그 계정의
+        // 다른 세션이 전부 밀려난다(RefreshTokenStore.save가 회전 유예 값까지 버린다).
+        // 당사자에게는 그 새 토큰이 그대로 나가야 한다. 안 그러면 설정 화면에서 버튼 한 번
+        // 누른 사용자가 스스로를 로그아웃시킨 셈이 된다.
+        verify(refreshTokenStore).save(eq(1L), any(), anyLong());
+        assertThat(result.tokens()).isNotNull();
 
         ArgumentCaptor<AuthProvider> captor = ArgumentCaptor.forClass(AuthProvider.class);
         verify(authProviderRepository).save(captor.capture());
@@ -486,10 +494,13 @@ class AuthServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(me));
         given(authProviderRepository.findAllByUserId(1L)).willReturn(List.of(local, kakao));
 
-        List<String> result = authService.unlinkSocialAccount(1L, "kakao");
+        AuthService.LinkResult result = authService.unlinkSocialAccount(1L, "kakao");
 
-        assertThat(result).isEmpty();
+        assertThat(result.linkedProviders()).isEmpty();
         verify(authProviderRepository).delete(kakao);
+        // 끊어낸 수단으로 만들어진 세션이 남아 있으면 "이 로그인 방법을 없앴다"는 행동이
+        // 아무것도 끊지 못한 것이 된다. Refresh Token을 새로 저장해 나머지를 밀어낸다.
+        verify(refreshTokenStore).save(eq(1L), any(), anyLong());
     }
 
     @Test
@@ -505,7 +516,8 @@ class AuthServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(me));
         given(authProviderRepository.findAllByUserId(1L)).willReturn(List.of(kakao, google));
 
-        assertThat(authService.unlinkSocialAccount(1L, "KAKAO")).containsExactly("GOOGLE");
+        assertThat(authService.unlinkSocialAccount(1L, "KAKAO").linkedProviders())
+                .containsExactly("GOOGLE");
         verify(authProviderRepository).delete(kakao);
     }
 
@@ -650,9 +662,61 @@ class AuthServiceTest {
     @Test
     @DisplayName("로그아웃 시 Redis에서 Refresh Token을 삭제한다")
     void logout() {
-        authService.logout(1L);
+        authService.logout(1L, null);
 
         verify(refreshTokenStore).delete(1L);
+    }
+
+    /**
+     * 로그아웃이 가장 필요한 순간은 Access Token이 만료된 뒤다. principal이 없다고 아무것도
+     * 하지 않으면 14일짜리 Refresh Token이 남은 채라, 공용 PC에서 다음 사용자가 /refresh
+     * 한 번으로 남의 세션을 되살린다.
+     */
+    @Test
+    @DisplayName("로그아웃 - 인증이 없어도 Refresh Token 쿠키의 주인 세션을 끊는다")
+    void logout_withoutPrincipal_usesRefreshCookie() {
+        Claims claims = mock(Claims.class);
+        given(jwtTokenProvider.parseRefreshToken("살아있는-refresh")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(7L);
+
+        authService.logout(null, "살아있는-refresh");
+
+        verify(refreshTokenStore).delete(7L);
+    }
+
+    @Test
+    @DisplayName("로그아웃 - 주체를 찾을 수 없으면 아무것도 지우지 않는다")
+    void logout_withoutAnySubject_isNoop() {
+        authService.logout(null, "쓰레기-토큰");
+
+        verify(refreshTokenStore, never()).delete(any());
+    }
+
+    /**
+     * 명시적 연동(link)에는 있던 같은 제공자 중복 가드가 자동 병합 경로에는 없었다.
+     * DB에 (user_id, provider) UNIQUE가 없어(V1 스키마) 행이 둘 생기면, 그때부터
+     * findByUserIdAndProvider가 결과 둘을 만나 비밀번호 변경·연동 해제가 통째로 막힌다.
+     */
+    @Test
+    @DisplayName("자동 병합 - 이미 같은 제공자가 연동돼 있으면 행을 하나 더 만들지 않는다")
+    void autoMerge_sameProviderAlreadyLinked_rejected() {
+        User owner = userWithId(5L, "주인");
+        AuthProvider existingKakao = AuthProvider.builder()
+                .user(owner).provider("KAKAO").socialId("kakao_old").build();
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code")).willReturn(
+                new OAuthUserProfile("kakao_new", "owner@example.com", "주인", true));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_new"))
+                .willReturn(Optional.empty());
+        given(userRepository.findByEmail("owner@example.com")).willReturn(Optional.of(owner));
+        given(authProviderRepository.findAllByUserId(5L)).willReturn(List.of(existingKakao));
+
+        assertThatThrownBy(() -> authService.socialLogin("kakao", "auth_code"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.SOCIAL_ALREADY_LINKED);
+
+        verify(authProviderRepository, never()).save(any(AuthProvider.class));
     }
 
     @Test
@@ -725,4 +789,76 @@ class AuthServiceTest {
                 .passwordHash("{argon2}hash")
                 .build();
     }
+
+    // --- 로그인 수단 변경 통지 (#87) ---
+
+    /**
+     * 세션을 끊는 것만으로는 Access Token을 탈취한 쪽이 자기 소셜 계정을 붙여 둔 경우를
+     * 막지 못한다 — 그쪽은 자기 소셜로 다시 들어온다. 주인이 사실을 알아야 연동을 해제하고
+     * 비밀번호를 바꿀 수 있으므로, 이 통지가 이 변경에 대한 실질적인 방어선이다.
+     */
+    @Test
+    @DisplayName("연동하면 계정 주인에게 알린다")
+    void link_notifiesOwner() {
+        User me = userWithId(1L, "나");
+        me.verifyEmail("me@example.com");
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code")).willReturn(
+                new OAuthUserProfile("kakao_new", null, "카카오닉", false));
+        given(userRepository.findById(1L)).willReturn(Optional.of(me));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_new"))
+                .willReturn(Optional.empty());
+        given(authProviderRepository.findAllByUserId(1L)).willReturn(List.of(localProvider(me)));
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+
+        authService.linkSocialAccount(1L, "kakao", "auth_code");
+
+        verify(authMailer).sendLoginMethodChanged("me@example.com", "카카오", true);
+    }
+
+    @Test
+    @DisplayName("해제해도 계정 주인에게 알린다")
+    void unlink_notifiesOwner() {
+        User me = userWithId(1L, "나");
+        me.verifyEmail("me@example.com");
+        AuthProvider local = localProvider(me);
+        AuthProvider kakao = AuthProvider.builder()
+                .user(me).provider("KAKAO").socialId("kakao_mine").build();
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(userRepository.findById(1L)).willReturn(Optional.of(me));
+        given(authProviderRepository.findAllByUserId(1L)).willReturn(List.of(local, kakao));
+
+        authService.unlinkSocialAccount(1L, "kakao");
+
+        verify(authMailer).sendLoginMethodChanged("me@example.com", "카카오", false);
+    }
+
+    /**
+     * #71 이전에 소셜로 만들어진 계정은 users.email이 비어 있을 수 있다. 보낼 곳이 없다는
+     * 사실이 연동 자체를 막을 이유는 아니다 — 통지는 건너뛰고 변경은 그대로 진행한다.
+     */
+    @Test
+    @DisplayName("주소가 없는 계정이면 통지를 건너뛰되 변경은 그대로 진행한다")
+    void link_withoutEmail_skipsNotification() {
+        User me = userWithId(1L, "나");
+
+        given(kakaoProvider.getProviderName()).willReturn("KAKAO");
+        given(kakaoProvider.getUserProfile("auth_code")).willReturn(
+                new OAuthUserProfile("kakao_new", null, "카카오닉", false));
+        given(userRepository.findById(1L)).willReturn(Optional.of(me));
+        given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_new"))
+                .willReturn(Optional.empty());
+        given(authProviderRepository.findAllByUserId(1L)).willReturn(List.of(localProvider(me)));
+        given(authProviderRepository.save(any(AuthProvider.class)))
+                .willAnswer(inv -> inv.getArgument(0));
+
+        AuthService.LinkResult result = authService.linkSocialAccount(1L, "kakao", "auth_code");
+
+        assertThat(result.linkedProviders()).containsExactly("KAKAO");
+        verifyNoInteractions(authMailer);
+    }
+
 }

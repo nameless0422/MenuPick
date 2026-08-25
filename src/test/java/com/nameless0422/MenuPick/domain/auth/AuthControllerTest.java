@@ -20,6 +20,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
@@ -117,10 +119,14 @@ class AuthControllerTest extends AbstractControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/auth/logout - 인증 없이 요청하면 401")
-    void logout_unauthorized() throws Exception {
+    @DisplayName("DELETE /api/v1/auth/logout - 인증이 없어도 200으로 쿠키를 지운다")
+    void logout_withoutAuthentication_stillClearsCookie() throws Exception {
+        // 로그아웃이 가장 필요한 순간은 Access Token이 만료된 뒤다. 여기서 401을 내면
+        // 쿠키를 지우는 Set-Cookie도 실리지 않아, 14일짜리 Refresh Token이 남은 채
+        // 공용 PC에서 다음 사용자가 /refresh 한 번으로 남의 세션을 되살린다.
         mockMvc.perform(delete("/api/v1/auth/logout"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isOk())
+                .andExpect(cookie().maxAge("refresh_token", 0));
     }
 
     @Test
@@ -132,7 +138,7 @@ class AuthControllerTest extends AbstractControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(cookie().maxAge("refresh_token", 0));
 
-        verify(authService).logout(1L);
+        verify(authService).logout(eq(1L), any());
     }
 
     @Test
@@ -279,14 +285,19 @@ class AuthControllerTest extends AbstractControllerTest {
     @Test
     @DisplayName("POST /api/v1/auth/{provider}/link - 연동 후 갱신된 연동 목록을 반환한다")
     void linkSocialAccount_success() throws Exception {
-        given(authService.linkSocialAccount(1L, "kakao", "link_code")).willReturn(List.of("KAKAO"));
+        given(authService.linkSocialAccount(1L, "kakao", "link_code"))
+                .willReturn(new AuthService.LinkResult(List.of("KAKAO"),
+                        new TokenResponse("new-access", "new-refresh")));
 
         mockMvc.perform(post("/api/v1/auth/kakao/link")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new OAuthLoginRequest("link_code"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.linkedProviders[0]").value("KAKAO"));
+                .andExpect(jsonPath("$.data.linkedProviders[0]").value("KAKAO"))
+                // 연동은 기존 세션을 전부 끊는다. 새 토큰이 함께 나가지 않으면 당사자도 밀려난다.
+                .andExpect(jsonPath("$.data.accessToken").value("new-access"))
+                .andExpect(cookie().value("refresh_token", "new-refresh"));
     }
 
     @Test
@@ -312,7 +323,9 @@ class AuthControllerTest extends AbstractControllerTest {
     @Test
     @DisplayName("DELETE /api/v1/auth/{provider}/link - 해제 후 남은 연동 목록을 반환한다")
     void unlinkSocialAccount_success() throws Exception {
-        given(authService.unlinkSocialAccount(1L, "kakao")).willReturn(List.of());
+        given(authService.unlinkSocialAccount(1L, "kakao"))
+                .willReturn(new AuthService.LinkResult(List.of(),
+                        new TokenResponse("new-access", "new-refresh")));
 
         mockMvc.perform(delete("/api/v1/auth/kakao/link").with(authentication(AUTH)))
                 .andExpect(status().isOk())

@@ -221,6 +221,7 @@ export default function SettingsPage() {
  */
 function SocialLinkSection({ me }: { me: Me }) {
   const queryClient = useQueryClient();
+  const { login } = useAuth();
 
   // 연동을 마친 콜백 화면이 여기로 보내면서 남긴 표시. 화면이 그냥 바뀌기만 하면
   // 사용자는 방금 누른 것이 먹혔는지 알 수 없다.
@@ -235,7 +236,11 @@ function SocialLinkSection({ me }: { me: Me }) {
     mutationFn: (provider: Provider) => unlinkSocialAccount(provider),
     // 서버가 해제 후의 전체 목록을 그대로 준다 — /me를 다시 부르지 않고 캐시만 맞춘다.
     // invalidate로 두면 재조회가 끝날 때까지 방금 끊은 항목이 "연동됨"으로 남아 있다.
-    onSuccess: (linkedProviders) => {
+    onSuccess: ({ linkedProviders, accessToken }) => {
+      // 해제는 그 계정의 모든 세션을 끊는다 — 끊어낸 수단으로 만들어진 세션이 남아 있으면
+      // "이 로그인 방법을 없앴다"는 행동이 아무것도 끊지 못한 것이 된다. 그 대가로 방금
+      // 해제한 당사자도 함께 밀려나므로, 함께 온 새 토큰을 여기서 적용해야 한다.
+      login(accessToken);
       queryClient.setQueryData<Me>(["me"], (prev) =>
         prev ? { ...prev, linkedProviders } : prev,
       );

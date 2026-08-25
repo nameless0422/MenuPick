@@ -43,6 +43,7 @@ public class AuthService {
     private final UserHardDeleteService userHardDeleteService;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
+    private final AuthMailer authMailer;
     private final JwtProperties jwtProperties;
     private final TokenIssuer tokenIssuer;
     private final TransactionTemplate transactionTemplate;
@@ -87,22 +88,69 @@ public class AuthService {
      * 새 트랜잭션에서 다시 보면 상대가 커밋한 행이 보이므로, 재시도는 성공이 아니라
      * "이미 연동됨"이라는 정확한 거절로 끝난다.
      */
-    public List<String> linkSocialAccount(Long userId, String providerName, String code) {
+    public LinkResult linkSocialAccount(Long userId, String providerName, String code) {
         OAuthProvider provider = findProvider(providerName);
         OAuthUserProfile profile = provider.getUserProfile(code);
         // 경로에서 온 문자열이 아니라 제공자가 선언한 이름으로 저장한다 — findProvider가 대소문자를
         // 가리지 않으므로, 받은 값을 그대로 쓰면 "kakao" 행과 "KAKAO" 행이 갈라져 연동 조회가 엇나간다.
         String canonicalName = provider.getProviderName();
 
+        Changed changed;
         try {
-            return inTransaction(() -> link(userId, canonicalName, profile));
+            changed = inTransaction(() -> link(userId, canonicalName, profile));
         } catch (DataIntegrityViolationException | UnexpectedRollbackException e) {
             log.info("소셜 연동 동시 요청 충돌 — 새 트랜잭션에서 재시도합니다: provider={}", canonicalName);
-            return inTransaction(() -> link(userId, canonicalName, profile));
+            changed = inTransaction(() -> link(userId, canonicalName, profile));
         }
+        return finishAuthMethodChange(userId, changed, canonicalName, true);
     }
 
-    private List<String> link(Long userId, String providerName, OAuthUserProfile profile) {
+    /** 연동·해제 결과. 세션이 갈리므로 새 토큰이 함께 나간다. */
+    public record LinkResult(List<String> linkedProviders, TokenResponse tokens) {}
+
+    /**
+     * 로그인 수단이 바뀐 뒤의 공통 마무리 — 기존 세션 정리와 주인 통지.
+     *
+     * <p><b>세션을 끊는 이유.</b> 예전에는 연동 추가·해제가 {@code refreshTokenStore}를 전혀
+     * 건드리지 않았다. 그래서 붙여 둔 수단을 해제해도 그 수단으로 만들어진 세션이 Refresh Token
+     * 수명(14일) 동안 그대로 살아 있었다 — "이 로그인 방법을 없앴다"는 사용자의 행동이 실제로는
+     * 아무것도 끊지 못했다. 비밀번호 변경이 같은 이유로 이미 이렇게 하고 있고,
+     * {@code RefreshTokenStore.save}가 회전 유예 값까지 버리는 것도 같은 맥락이다.
+     *
+     * <p>새 토큰을 돌려주는 이유는 당사자까지 함께 끊기기 때문이다. 안 주면 사용자는 설정
+     * 화면에서 연동 버튼을 한 번 눌렀다가 그대로 로그아웃당한다.
+     *
+     * <p><b>통지가 더 중요하다.</b> 세션을 끊는 것만으로는 Access Token을 탈취한 쪽이 자기 소셜
+     * 계정을 붙여 둔 경우를 막지 못한다 — 그쪽은 자기 소셜로 다시 들어온다. 주인이 사실을
+     * 알아야 연동을 해제하고 비밀번호를 바꿀 수 있다.
+     *
+     * <p>메일은 트랜잭션 밖에서 보낸다(AuthMailer가 전용 풀로 다시 넘긴다). 주소가 없는 계정
+     * (#71 이전 소셜 생성 레거시)은 보낼 곳이 없어 건너뛴다 — 그 사실이 연동 자체를 막을
+     * 이유는 아니다.
+     */
+    private LinkResult finishAuthMethodChange(Long userId, Changed changed,
+                                              String providerName, boolean linked) {
+        TokenResponse tokens = tokenIssuer.issue(userId);
+
+        if (changed.email() != null) {
+            authMailer.sendLoginMethodChanged(changed.email(), providerLabel(providerName), linked);
+        }
+        return new LinkResult(changed.providers(), tokens);
+    }
+
+    /** 로그인 수단 변경의 결과. 메일 발송을 트랜잭션 밖으로 빼기 위해 주소를 함께 들고 나온다. */
+    private record Changed(List<String> providers, String email) {}
+
+    /** 메일 문구에 쓰는, 사람이 읽는 이름. 모르는 값이면 그대로 쓴다(연동 자체는 이미 성공했다). */
+    private static String providerLabel(String providerName) {
+        return switch (providerName) {
+            case "KAKAO" -> "카카오";
+            case "GOOGLE" -> "구글";
+            default -> providerName;
+        };
+    }
+
+    private Changed link(Long userId, String providerName, OAuthUserProfile profile) {
         User user = activeUser(userId);
 
         authProviderRepository.findByProviderAndSocialId(providerName, profile.socialId())
@@ -132,7 +180,9 @@ public class AuthService {
         );
 
         // 재조회 대신 직접 이어 붙인다 — 방금 save한 행이 조회에 잡히려면 flush 시점에 기대게 된다.
-        return socialProviderNames(Stream.concat(owned.stream(), Stream.of(saved)).toList());
+        return new Changed(
+                socialProviderNames(Stream.concat(owned.stream(), Stream.of(saved)).toList()),
+                user.getEmail());
     }
 
     /**
@@ -141,13 +191,14 @@ public class AuthService {
      * <p>외부 호출이 없어 통째로 @Transactional을 걸어도 되지만, 같은 빈의 @Transactional 메서드를
      * 안에서 부르면 프록시를 타지 않아 무효라 이 클래스의 다른 경로와 같은 방식을 유지한다.
      */
-    public List<String> unlinkSocialAccount(Long userId, String providerName) {
+    public LinkResult unlinkSocialAccount(Long userId, String providerName) {
         String canonicalName = findProvider(providerName).getProviderName();
-        return inTransaction(() -> unlink(userId, canonicalName));
+        Changed changed = inTransaction(() -> unlink(userId, canonicalName));
+        return finishAuthMethodChange(userId, changed, canonicalName, false);
     }
 
-    private List<String> unlink(Long userId, String providerName) {
-        activeUser(userId);
+    private Changed unlink(Long userId, String providerName) {
+        User user = activeUser(userId);
 
         List<AuthProvider> owned = authProviderRepository.findAllByUserId(userId);
 
@@ -168,7 +219,9 @@ public class AuthService {
 
         authProviderRepository.delete(target);
 
-        return socialProviderNames(owned.stream().filter(provider -> provider != target).toList());
+        return new Changed(
+                socialProviderNames(owned.stream().filter(provider -> provider != target).toList()),
+                user.getEmail());
     }
 
     /**
@@ -218,8 +271,36 @@ public class AuthService {
         return new TokenResponse(newAccessToken, issuedRefreshToken);
     }
 
-    public void logout(Long userId) {
-        refreshTokenStore.delete(userId);
+    /**
+     * 로그아웃. <b>Access Token이 없거나 만료됐어도 동작해야 한다.</b>
+     *
+     * <p>예전에는 이 경로가 {@code authenticated()}라 AT가 만료된 뒤에는 401이 났고, 401 응답에는
+     * 쿠키를 지우는 {@code Set-Cookie}도 실리지 않았다. Refresh Token은 14일이고 {@code /refresh}는
+     * permitAll이라, 공용 PC에서 다음 사용자가 {@code /refresh} 한 번으로 남의 세션을 되살릴 수
+     * 있었다. 즉 "로그아웃"이 가장 필요한 상황에서 정확히 동작하지 않았다.
+     *
+     * <p>그래서 주체를 두 곳에서 찾는다 — 인증된 principal, 없으면 Refresh Token 쿠키.
+     * 쿠키까지 없거나 파싱되지 않으면 지울 체인이 없다는 뜻이라 조용히 끝낸다(컨트롤러는
+     * 어느 경우에도 만료 쿠키를 내려보낸다).
+     *
+     * <p>permitAll이 되면서 남이 강제로 로그아웃시키는 CSRF가 이론상 가능해지지만, refresh
+     * 쿠키가 {@code SameSite=Strict}라 다른 사이트에서 실려 나가지 않고, 성공해도 피해는
+     * 재로그인뿐이다.
+     */
+    public void logout(Long userId, String refreshToken) {
+        Long target = userId != null ? userId : userIdFrom(refreshToken);
+        if (target != null) {
+            refreshTokenStore.delete(target);
+        }
+    }
+
+    private Long userIdFrom(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return null;
+        }
+        return jwtTokenProvider.parseRefreshToken(refreshToken)
+                .map(jwtTokenProvider::getUserId)
+                .orElse(null);
     }
 
     @Transactional
@@ -295,6 +376,17 @@ public class AuthService {
     private AuthProvider linkToVerifiedEmailOwner(String providerName, OAuthUserProfile profile) {
         User user = findUserByEmail(trustedEmail(profile))
                 .orElseThrow(() -> new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_LINKED));
+
+        // 명시적 연동 경로(link)가 두는 것과 같은 가드. DB에는 (user_id, provider) UNIQUE가
+        // 없어(V1 스키마) 여기서 막지 않으면 같은 제공자 행이 둘 생기고, 그때부터
+        // findByUserIdAndProvider가 결과 둘을 만나 조회 자체가 터진다 — 비밀번호 변경·연동
+        // 해제 경로가 통째로 막힌다. 제공자가 계정당 이메일 유일성을 강제해 재현 조건이 좁을
+        // 뿐이지, 한쪽에만 가드가 있는 상태는 그 전제에 기대고 있다는 뜻이다.
+        boolean alreadyLinked = authProviderRepository.findAllByUserId(user.getId()).stream()
+                .anyMatch(mine -> mine.getProvider().equals(providerName));
+        if (alreadyLinked) {
+            throw new BusinessException(ErrorCode.SOCIAL_ALREADY_LINKED);
+        }
 
         return authProviderRepository.save(
                 AuthProvider.builder()
