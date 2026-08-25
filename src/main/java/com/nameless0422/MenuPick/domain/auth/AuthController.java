@@ -165,8 +165,7 @@ public class AuthController {
             @AuthenticationPrincipal Long userId,
             @PathVariable String provider,
             @RequestBody @Valid OAuthLoginRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(new LinkedProvidersResponse(
-                authService.linkSocialAccount(userId, provider, request.code()))));
+        return linkedProvidersResponse(authService.linkSocialAccount(userId, provider, request.code()));
     }
 
     /** 연동 해제. 이 계정에 남는 로그인 수단이 없어지는 경우는 서비스가 막는다. */
@@ -174,8 +173,22 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LinkedProvidersResponse>> unlinkSocialAccount(
             @AuthenticationPrincipal Long userId,
             @PathVariable String provider) {
-        return ResponseEntity.ok(ApiResponse.ok(new LinkedProvidersResponse(
-                authService.unlinkSocialAccount(userId, provider))));
+        return linkedProvidersResponse(authService.unlinkSocialAccount(userId, provider));
+    }
+
+    /**
+     * 연동·해제 응답. 로그인 수단이 바뀌면 기존 세션을 전부 끊으므로 당사자의 세션도 갈린다 —
+     * 새 Refresh Token 쿠키를 함께 내려보내지 않으면 사용자는 버튼 한 번 눌렀다가 로그아웃당한다.
+     */
+    private ResponseEntity<ApiResponse<LinkedProvidersResponse>> linkedProvidersResponse(
+            AuthService.LinkResult result) {
+        ResponseCookie cookie = refreshCookieBuilder(result.tokens().refreshToken())
+                .maxAge(Duration.ofMillis(jwtProperties.refreshTokenExpiry()))
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .body(ApiResponse.ok(new LinkedProvidersResponse(
+                        result.linkedProviders(), result.tokens().accessToken())));
     }
 
     @PostMapping("/refresh")
@@ -187,10 +200,16 @@ public class AuthController {
         return tokenResponse(authService.refresh(refreshToken));
     }
 
+    /**
+     * 로그아웃. Access Token이 만료된 뒤에도 동작해야 하므로 permitAll이다(SecurityConfig).
+     * 인증돼 있으면 principal을, 아니면 Refresh Token 쿠키를 주체로 삼는다 —
+     * 근거는 {@link AuthService#logout}.
+     */
     @DeleteMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
-            @AuthenticationPrincipal Long userId) {
-        authService.logout(userId);
+            @AuthenticationPrincipal Long userId,
+            @CookieValue(name = REFRESH_COOKIE, required = false) String refreshToken) {
+        authService.logout(userId, refreshToken);
         return responseWithExpiredCookie();
     }
 

@@ -73,6 +73,31 @@ public class AuthMailer {
                 """);
     }
 
+    /**
+     * 로그인 수단(소셜 연동)이 추가·해제됐음을 계정 주인에게 알린다.
+     *
+     * <p>이 알림이 이 변경에 대한 <b>유일한 방어선</b>이다. Access Token을 탈취한 쪽이 자기
+     * 소셜 계정을 붙여 두면 영구적인 문이 하나 생기는데, 세션을 끊는 것만으로는 그 문이 닫히지
+     * 않는다(공격자는 자기 소셜로 다시 들어온다). 주인이 사실을 알아야 연동을 해제하고
+     * 비밀번호를 바꿀 수 있다.
+     *
+     * <p>본인이 한 일이면 그냥 넘기면 되므로 링크는 넣지 않는다 — 대응 경로는 앱 안의
+     * 설정 화면이고, 메일에 들어간 링크는 그 자체로 피싱 표적이 된다.
+     */
+    @Async(MailAsyncConfig.EXECUTOR)
+    public void sendLoginMethodChanged(String to, String providerLabel, boolean linked) {
+        String what = linked ? "연동됐습니다" : "해제됐습니다";
+        send("로그인 수단 변경", to, "[메뉴픽] 로그인 수단이 변경됐습니다", """
+                메뉴픽 계정의 %s 로그인 연동이 %s.
+
+                본인이 하신 변경이라면 이 메일은 무시하셔도 됩니다.
+
+                하지 않은 변경이라면 계정에 다른 사람이 접근했을 수 있습니다.
+                지금 바로 로그인해 설정 > 소셜 계정 연동에서 모르는 연동을 해제하고,
+                비밀번호를 바꿔주세요. 비밀번호를 바꾸면 다른 기기의 로그인이 모두 끊깁니다.
+                """.formatted(providerLabel, what));
+    }
+
     @Async(MailAsyncConfig.EXECUTOR)
     public void sendPasswordReset(String to, String token, Duration validFor) {
         String link = link("/reset-password", token);

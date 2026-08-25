@@ -55,25 +55,39 @@ export async function loginWithOAuth(provider: Provider, code: string) {
 // ---- 소셜 계정 연동 ----
 
 /**
+ * 연동·해제 결과.
+ *
+ * accessToken이 함께 오는 이유: 서버는 로그인 수단이 바뀌면 그 계정의 모든 세션을 끊는다
+ * (비밀번호 변경과 같은 처리). 방금 변경한 당사자의 세션도 함께 끊기므로, 이 토큰을 받아
+ * 적용하지 않으면 사용자는 연동 버튼을 한 번 눌렀다가 그대로 로그아웃당한다.
+ */
+export interface LinkResult {
+  linkedProviders: Provider[];
+  accessToken: string;
+}
+
+/**
  * 로그인한 계정에 소셜 계정을 붙인다. 인가 코드는 로그인과 같은 방식으로 받아온다
  * (auth/oauthUrls.ts의 linkAuthorizeUrl).
  *
  * 응답은 연동 후의 전체 목록이라 /me를 한 번 더 부르지 않고 캐시를 맞출 수 있다.
  */
-export async function linkSocialAccount(provider: Provider, code: string) {
-  const res = await http.post<ApiResponse<{ linkedProviders: string[] }>>(
+export async function linkSocialAccount(provider: Provider, code: string): Promise<LinkResult> {
+  const res = await http.post<ApiResponse<{ linkedProviders: string[]; accessToken: string }>>(
     `/api/v1/auth/${provider}/link`,
     { code },
   );
-  return toProviders(res.data.data!.linkedProviders);
+  const data = res.data.data!;
+  return { linkedProviders: toProviders(data.linkedProviders), accessToken: data.accessToken };
 }
 
 /** 연동 해제. 남는 로그인 수단이 없어지는 경우는 서버가 LAST_LOGIN_METHOD로 막는다. */
-export async function unlinkSocialAccount(provider: Provider) {
-  const res = await http.delete<ApiResponse<{ linkedProviders: string[] }>>(
+export async function unlinkSocialAccount(provider: Provider): Promise<LinkResult> {
+  const res = await http.delete<ApiResponse<{ linkedProviders: string[]; accessToken: string }>>(
     `/api/v1/auth/${provider}/link`,
   );
-  return toProviders(res.data.data!.linkedProviders);
+  const data = res.data.data!;
+  return { linkedProviders: toProviders(data.linkedProviders), accessToken: data.accessToken };
 }
 
 // ---- 자체 계정 ----

@@ -33,12 +33,17 @@ public class AuthResponse {
     ) {}
 
     /**
-     * 연동·해제 후의 연동 목록.
+     * 연동·해제 후의 연동 목록과 새 Access Token.
      *
      * <p>변경 결과를 그대로 돌려줘 클라이언트가 /me를 한 번 더 부르지 않아도 화면을 맞출 수 있게 한다.
+     *
+     * <p>토큰이 함께 오는 이유: 로그인 수단이 바뀌면 기존 세션을 전부 끊는다(비밀번호 변경과
+     * 같은 처리). 그러면 방금 변경한 당사자의 세션도 함께 끊기므로, 새 토큰을 돌려주지 않으면
+     * 사용자는 설정 화면에서 연동 버튼 한 번 눌렀다가 로그아웃당한다.
      */
     public record LinkedProvidersResponse(
-            List<String> linkedProviders
+            List<String> linkedProviders,
+            String accessToken
     ) {}
 
     /** emailVerified: 제공자가 이메일 소유를 검증했는지 여부 — 미검증 이메일은 계정 통합에 쓰면 안 된다. */
