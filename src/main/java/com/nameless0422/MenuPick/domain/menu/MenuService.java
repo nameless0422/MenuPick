@@ -105,8 +105,11 @@ public class MenuService {
 
     @Transactional
     public void batchUpdateWeight(Long userId, MenuRequest.BatchUpdateWeight request) {
+        // distinct가 없으면 같은 메뉴를 두 번 담은 요청이 404가 된다 — IN 조회는 중복을 한 행으로
+        // 돌려주므로 menus.size()가 항상 작아지기 때문이다. 실제로는 접근 가능한 메뉴이고,
+        // 마지막 항목의 가중치를 적용하면 되는 정상 요청이다.
         List<Long> menuIds = request.entries().stream()
-                .map(MenuRequest.WeightEntry::menuId).toList();
+                .map(MenuRequest.WeightEntry::menuId).distinct().toList();
         List<Menu> menus = menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(menuIds, userId);
 
         if (menus.size() != menuIds.size()) {

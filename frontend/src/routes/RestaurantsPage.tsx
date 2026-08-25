@@ -127,6 +127,8 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
   // 아니다. 다시 채우면 사유도 함께 사라진다.
   const keywordInput = useRef<HTMLInputElement>(null);
   const keywordErrorId = useId();
+  // 이 <section>의 접근 가능한 이름을 제목에서 가져오기 위한 id.
+  const headingId = useId();
   const [keywordMissing, setKeywordMissing] = useState(false);
   const showKeywordError = keywordMissing && !keyword.trim();
 
@@ -139,8 +141,12 @@ function PlaceSearch({ onSaved }: { onSaved: () => void }) {
       : "";
 
   return (
-    <section className="menu-form">
-      <h2>장소 검색으로 식당 추가</h2>
+    // 이름 없는 <section>은 랜드마크로 노출되지 않아 스크린리더의 랜드마크 목록에 잡히지
+    // 않았다 — 실질적으로 <div>였고, 검색 결과가 15건 늘어선 상태에서 아래 "저장한 식당"
+    // 목록으로 넘어가려면 결과 카드의 버튼을 전부 Tab으로 지나가는 수밖에 없었다.
+    // 이미 있는 제목을 aria-labelledby로 가리키기만 하면 이름이 생겨 점프가 가능해진다.
+    <section className="menu-form" aria-labelledby={headingId}>
+      <h2 id={headingId}>장소 검색으로 식당 추가</h2>
       <form
         className="inline-add"
         onSubmit={(e) => {
@@ -291,6 +297,28 @@ function RestaurantCard({
   });
   const detail = detailQuery.data;
 
+  // "수정"은 상세가 도착해야 폼을 채울 수 있다. 예전에는 그동안 disabled로 잠갔는데,
+  // 그 한 줄이 두 가지를 동시에 망가뜨렸다.
+  //  - 잠긴 이유가 어디에도 없다: disabled 버튼은 Tab 순회에서 통째로 빠지므로
+  //    키보드·스크린리더 사용자에게는 "수정" 버튼이 있다는 사실 자체가 전달되지 않고,
+  //    잠깐 기다리면 되는 상황인지도 알 수 없다.
+  //  - 조회가 실패하면 영구히 잠긴다: detail은 영영 오지 않는데 실패했다는 사실이
+  //    화면에 나오지도 않아, 사용자는 이유 없이 죽어 있는 버튼만 보게 된다. 재시도 수단도
+  //    없어 이 카드의 수정은 새로고침 말고는 되살릴 방법이 없었다.
+  // 진행 중은 aria-busy, 아직 못 쓰는 상태는 aria-disabled로 알리고 사유를
+  // aria-describedby로 버튼에 묶는다. 실패는 사유와 "다시 시도"를 함께 화면에 낸다.
+  // aria-*는 표시일 뿐 클릭을 막지 않으므로, 막는 일은 onClick의 조기 반환이 한다.
+  const editBlocked = !detail;
+  const detailLoadingNoteId = useId();
+  const detailErrorId = useId();
+  // 두 사유는 동시에 성립하지 않는다(실패했으면 로딩 중이 아니다). 성공한 뒤에는
+  // 가리킬 사유가 없다 — 없는 id를 가리키면 참조가 끊겨 아무것도 읽히지 않는다.
+  const editBlockedReasonId = detailQuery.isError
+    ? detailErrorId
+    : editBlocked
+      ? detailLoadingNoteId
+      : undefined;
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteRestaurant(summary.id),
     onSuccess: () => {
@@ -336,14 +364,55 @@ function RestaurantCard({
       <span>{summary.address || "주소 정보 없음"}</span>
       {detail?.phone && <span>{detail.phone}</span>}
       {deleteMutation.isError && <p className="error" role="alert">{errorMessage(deleteMutation.error)}</p>}
+
+      {/* 아직 조회 중이라 "수정"이 잠겼다는 사실은 눈으로 보면 흐려진 버튼으로 드러나지만,
+          그 사유는 화면에 글자로 없다. 카드마다 "불러오는 중"을 한 줄씩 띄우면 목록이
+          안내문으로 뒤덮이므로, 사유는 감춰 두고 버튼에 aria-describedby로만 묶는다 —
+          초점이 버튼에 닿는 순간 이름 뒤에 이유가 이어 읽힌다. */}
+      {editBlocked && !detailQuery.isError && (
+        <p className="sr-only" id={detailLoadingNoteId}>
+          상세 정보를 불러오는 중이라 아직 수정할 수 없어요.
+        </p>
+      )}
+
+      {/* 조회가 실패하면 여기서 끝나면 안 된다 — 사유와 재시도 수단이 없으면 이 카드의
+          수정은 새로고침 말고 되살릴 방법이 없다. */}
+      {detailQuery.isError && (
+        <>
+          <p className="error" role="alert" id={detailErrorId}>
+            상세 정보를 불러오지 못해 지금은 수정할 수 없어요. {errorMessage(detailQuery.error)}
+          </p>
+          <div className="card-actions">
+            <button
+              type="button"
+              aria-busy={detailQuery.isFetching}
+              aria-disabled={detailQuery.isFetching || undefined}
+              aria-label={`${summary.name} 상세 정보 다시 불러오기`}
+              onClick={() => {
+                if (detailQuery.isFetching) return;
+                void detailQuery.refetch();
+              }}
+            >
+              {detailQuery.isFetching ? "다시 불러오는 중…" : "다시 시도"}
+            </button>
+          </div>
+        </>
+      )}
+
       {/* 버튼 이름에 식당 이름을 넣는다. 없으면 NVDA 요소 목록에서 "수정, 메뉴 연결, 삭제"만
           반복되어 어느 카드의 것인지 알 수 없다. "수정"과 "메뉴 연결"은 확인 단계도 없다. */}
       <div className="card-actions">
         <button
           ref={opener("edit")}
-          disabled={!detail}
+          // disabled를 쓰지 않는 이유는 위 editBlocked 주석에 적어 두었다.
+          aria-busy={editBlocked && detailQuery.isFetching}
+          aria-disabled={editBlocked || undefined}
+          aria-describedby={editBlockedReasonId}
           aria-label={`${summary.name} 수정`}
-          onClick={() => setMode("edit")}
+          onClick={() => {
+            if (editBlocked) return;
+            setMode("edit");
+          }}
         >
           수정
         </button>
@@ -441,7 +510,10 @@ function RestaurantEditForm({
         saveMutation.mutate();
       }}
     >
-      <h2 ref={headingRef} tabIndex={-1}>식당 수정</h2>
+      {/* <h2>였다. 이 폼은 목록(<h2>저장한 식당</h2>) 안의 <li>를 대체하며 열리는데,
+          같은 레벨로 두면 제목만 훑는 사람에게는 수정 폼이 목록 밖의 별도 섹션으로 읽혀
+          "무엇을 수정하는 중인지"가 목록과 끊긴다. <h3>이면 목록에 속한 것으로 읽힌다. */}
+      <h3 ref={headingRef} tabIndex={-1}>식당 수정</h3>
       <label>
         식당 이름
         <input
@@ -558,7 +630,8 @@ function MenuLinkForm({
         linkMutation.mutate();
       }}
     >
-      <h2 ref={headingRef} tabIndex={-1}>메뉴 연결</h2>
+      {/* 수정 폼과 같은 이유로 <h3>이다 — 이 폼도 목록 안의 카드에서 열린다. */}
+      <h3 ref={headingRef} tabIndex={-1}>메뉴 연결</h3>
 
       <fieldset>
         <legend>메뉴 선택</legend>

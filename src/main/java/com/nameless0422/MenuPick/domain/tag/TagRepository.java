@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.tag;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,7 +13,22 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
 
     Optional<Tag> findByUserIdAndName(Long userId, String name);
 
-    List<Tag> findByUserIdAndNameStartingWith(Long userId, String prefix);
+    /**
+     * 이름 접두사로 자기 태그를 찾는다. {@code prefix}는 <b>이미 이스케이프되어 % 가 붙은</b>
+     * LIKE 패턴이어야 한다({@code TagService.searchTags} 참고).
+     *
+     * <p>파생 메서드({@code findByUserIdAndNameStartingWith})를 쓰지 않는 이유는 그쪽이
+     * 파라미터를 그대로 패턴에 넣기 때문이다 — 사용자가 {@code %} 하나만 보내면 자기 태그가
+     * 전량 내려온다(타인 데이터는 아니지만 자동완성이 목록 덤프가 된다). {@code escape}를
+     * 쓰려면 쿼리를 직접 써야 한다.
+     *
+     * <p>결과 수는 {@link Pageable}로 자른다. 상한이 없으면 태그가 많은 사용자의 자동완성
+     * 한 번이 수백 행을 직렬화해 내려보낸다.
+     */
+    @Query("select t from Tag t where t.user.id = :userId and t.name like :pattern escape '!' order by t.name")
+    List<Tag> searchByNamePattern(@Param("userId") Long userId,
+                                  @Param("pattern") String pattern,
+                                  Pageable pageable);
 
     List<Tag> findAllByIdInAndUserId(Iterable<Long> ids, Long userId);
 

@@ -481,3 +481,44 @@ describe("비밀번호 변경 버튼", () => {
     expect(changePasswordMock).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * 섹션 제목 4개가 {@code <strong>}이었다 (SettingsPage.css가 색만 --text-h로 올려
+ * "제목처럼 보이게만" 해 뒀다).
+ *
+ * <p>이 화면은 서로 독립적인 작업 네 개가 세로로 늘어선 구조인데, 제목 트리에는
+ * {@code <h1>설정} 하나뿐이라 스크린리더의 제목 탐색(H 키)으로는 맨 위에서 한 발짝도
+ * 움직일 수 없었다. {@code <section>}에도 접근 가능한 이름이 없어 랜드마크 목록에조차
+ * 잡히지 않았으므로, 탈퇴 섹션까지 가려면 앞의 모든 버튼과 입력칸을 Tab으로 지나가는 것이
+ * 유일한 길이었다. 눈으로 보이는 계층과 프로그램적 계층이 어긋나 있던 전형적인 예다.
+ */
+describe("설정 화면의 섹션 구조", () => {
+  it("섹션 제목 4개가 <h2>로 제목 트리에 올라온다", async () => {
+    fetchMeMock.mockResolvedValue(me({ hasPassword: true }));
+
+    renderSettings();
+
+    // 비밀번호 섹션은 /me가 도착해야(hasPassword) 그려진다.
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "비밀번호 변경" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "계정" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "소셜 계정 연동" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "회원 탈퇴" })).toBeInTheDocument();
+  });
+
+  it("각 섹션이 그 제목을 이름으로 가진 랜드마크가 된다", async () => {
+    fetchMeMock.mockResolvedValue(me({ hasPassword: true }));
+
+    renderSettings();
+
+    // 이름이 없는 <section>은 랜드마크로 노출되지 않아 role="region"으로 잡히지도 않는다 —
+    // 이 조회가 통과한다는 것은 곧 aria-labelledby가 제목에 실제로 닿아 있다는 뜻이다.
+    expect(await screen.findByRole("region", { name: "비밀번호 변경" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "계정" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "소셜 계정 연동" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "회원 탈퇴" })).toBeInTheDocument();
+  });
+});

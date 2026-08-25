@@ -114,9 +114,7 @@ public class GlobalExceptionHandler {
         // DB 스키마·제약조건명이 노출되지 않도록 상세 메시지는 DEBUG로만 기록
         log.warn("DataIntegrityViolationException: [{}]", e.getMostSpecificCause().getClass().getSimpleName());
         log.debug("DataIntegrityViolationException detail: {}", e.getMostSpecificCause().getMessage());
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error("데이터 무결성 제약 조건을 위반했습니다."));
+        return error(ErrorCode.DATA_INTEGRITY_VIOLATION);
     }
 
     /**
@@ -126,8 +124,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
         log.warn("HttpMessageNotReadableException: {}", e.getMessage());
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error("요청 본문을 읽을 수 없습니다. JSON 형식을 확인해주세요."));
+        return error(ErrorCode.MALFORMED_REQUEST_BODY);
     }
 
     /**
@@ -137,8 +134,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
         log.warn("MethodArgumentTypeMismatchException: param={}, value={}", e.getName(), e.getValue());
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error("'" + e.getName() + "' 파라미터의 타입이 올바르지 않습니다."));
+        return error(ErrorCode.INVALID_INPUT,
+                "'" + e.getName() + "' 파라미터의 타입이 올바르지 않습니다.");
     }
 
     /**
@@ -148,8 +145,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException e) {
         log.warn("MissingServletRequestParameterException: param={}", e.getParameterName());
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error("필수 파라미터 '" + e.getParameterName() + "'이(가) 누락되었습니다."));
+        return error(ErrorCode.INVALID_INPUT,
+                "필수 파라미터 '" + e.getParameterName() + "'이(가) 누락되었습니다.");
     }
 
     /**
@@ -175,7 +172,8 @@ public class GlobalExceptionHandler {
         if (supported != null && !supported.isEmpty()) {
             builder.allow(supported.toArray(new HttpMethod[0]));
         }
-        return builder.body(ApiResponse.error("지원하지 않는 HTTP 메서드입니다."));
+        return builder.body(ApiResponse.error(ErrorCode.METHOD_NOT_ALLOWED,
+                ErrorCode.METHOD_NOT_ALLOWED.getMessage()));
     }
 
     /**
@@ -187,8 +185,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ApiResponse<Void>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e) {
         log.warn("HttpMediaTypeNotSupportedException: contentType={}", e.getContentType());
-        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
-                .body(ApiResponse.error("지원하지 않는 Content-Type입니다."));
+        return error(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
     }
 
     /**
@@ -196,8 +193,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error("요청한 리소스를 찾을 수 없습니다."));
+        return error(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
     /**
@@ -207,10 +203,23 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
         log.error("Unexpected error", e);
-        return ResponseEntity
-                .internalServerError()
-                .body(ApiResponse.error(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()));
+        return error(ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
+    /**
+     * 코드에 딸린 상태·문구를 그대로 쓰는 실패 응답.
+     *
+     * <p>핸들러마다 상태 코드를 손으로 적으면 ErrorCode의 상태와 어긋날 수 있다 —
+     * 그러면 같은 오류가 코드와 HTTP 상태로 서로 다른 말을 하게 된다.
+     */
+    private static ResponseEntity<ApiResponse<Void>> error(ErrorCode errorCode) {
+        return error(errorCode, errorCode.getMessage());
+    }
 
+    /** 문구만 상황에 맞게 바꾸는 실패 응답 (어느 파라미터인지 등). */
+    private static ResponseEntity<ApiResponse<Void>> error(ErrorCode errorCode, String message) {
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(ApiResponse.error(errorCode, message));
+    }
 }

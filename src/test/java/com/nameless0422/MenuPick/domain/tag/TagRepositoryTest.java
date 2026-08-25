@@ -5,6 +5,7 @@ import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import com.nameless0422.MenuPick.common.config.JpaConfig;
 import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,15 +66,44 @@ class TagRepositoryTest extends AbstractIntegrationTest {
 
     @Test
     @DisplayName("태그명 prefix로 자동완성 검색한다")
-    void findByUserIdAndNameStartingWith() {
+    void searchByNamePattern() {
         tagRepository.save(Tag.builder().user(user).name("혼밥가능").build());
         tagRepository.save(Tag.builder().user(user).name("혼술가능").build());
         tagRepository.save(Tag.builder().user(user).name("맵찔이").build());
 
-        List<Tag> tags = tagRepository.findByUserIdAndNameStartingWith(user.getId(), "혼");
+        List<Tag> tags = tagRepository.searchByNamePattern(user.getId(), "혼%", PageRequest.of(0, 20));
         assertThat(tags).hasSize(2);
         assertThat(tags).extracting(Tag::getName)
                 .containsExactlyInAnyOrder("혼밥가능", "혼술가능");
+    }
+
+    /**
+     * 파생 메서드({@code findByUserIdAndNameStartingWith})는 파라미터를 그대로 패턴에 넣어
+     * {@code %} 하나면 전량이 내려온다. escape 절이 실제로 DB까지 전달되는지는 여기서만 확인된다 —
+     * 서비스 단위 테스트는 어떤 패턴을 넘겼는지까지만 볼 수 있다.
+     */
+    @Test
+    @DisplayName("이스케이프된 와일드카드는 문자 그대로 매칭된다")
+    void searchByNamePattern_escapedWildcardIsLiteral() {
+        tagRepository.save(Tag.builder().user(user).name("100%만족").build());
+        tagRepository.save(Tag.builder().user(user).name("혼밥가능").build());
+
+        List<Tag> literal = tagRepository.searchByNamePattern(user.getId(), "100!%%", PageRequest.of(0, 20));
+        assertThat(literal).extracting(Tag::getName).containsExactly("100%만족");
+
+        // 이스케이프하지 않은 %는 여전히 와일드카드다 — 그래서 서비스가 반드시 이스케이프해야 한다.
+        List<Tag> wildcard = tagRepository.searchByNamePattern(user.getId(), "%", PageRequest.of(0, 20));
+        assertThat(wildcard).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("결과 수는 Pageable로 잘린다")
+    void searchByNamePattern_respectsLimit() {
+        tagRepository.save(Tag.builder().user(user).name("혼밥가능").build());
+        tagRepository.save(Tag.builder().user(user).name("혼술가능").build());
+
+        assertThat(tagRepository.searchByNamePattern(user.getId(), "혼%", PageRequest.of(0, 1)))
+                .hasSize(1);
     }
 
     // --- findAllByIdInAndUserId (MenuService/PickService의 태그 소유권 검증 근거) ---

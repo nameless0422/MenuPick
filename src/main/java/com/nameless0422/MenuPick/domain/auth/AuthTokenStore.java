@@ -50,7 +50,33 @@ public class AuthTokenStore {
     private final StringRedisTemplate redisTemplate;
 
     /**
-     * 새 토큰을 발급하고 해시를 저장한다.
+     * 새 토큰을 발급하고 해시를 저장한다. <b>같은 사용자·같은 용도의 이전 토큰은 폐기된다.</b>
+     *
+     * <p><b>왜 이전 토큰을 지워야 하는가.</b> 예전에는 {@code auth:verify:{hash} -> userId} 한
+     * 방향만 저장해, 발급된 토큰을 사용자 기준으로 찾아낼 수단이 아예 없었다. 그래서 같은
+     * 사용자에게 토큰이 둘 이상 동시에 유효할 수 있었고, 다음이 실제로 열렸다:
+     *
+     * <ol>
+     *   <li>피해자가 정상 가입하고 인증 메일을 받는다(TTL 24시간). 아직 누르지 않았다.</li>
+     *   <li>그 사이 공격자가 같은 주소로 재가입한다. 미인증 계정은 주소 선점을 막기 위해
+     *       비밀번호를 덮어쓰도록 돼 있어({@code createOrReplacePendingAccount}),
+     *       LOCAL 행의 해시가 공격자 비밀번호로 바뀐다.</li>
+     *   <li>피해자가 뒤늦게 <b>자기가 받은</b> 링크를 누른다. 그 토큰은 여전히 유효하므로
+     *       계정이 <b>공격자 비밀번호를 가진 채</b> 활성화된다. 피해자는 "로그인이 안 된다"고만
+     *       인지한다.</li>
+     * </ol>
+     *
+     * <p>역인덱스({@code auth:verify:user:{userId} -> 현재 토큰 해시})를 두고 발급 때마다
+     * 이전 것을 지우면, 2단계에서 피해자의 토큰이 함께 죽는다.
+     *
+     * <p>비밀번호 재설정에도 같은 규칙을 적용한다. "한 번만 사용할 수 있다"고 안내하면서
+     * 재요청 전의 링크가 계속 살아 있는 것이 더 이상하고, 살아 있는 링크가 하나뿐이면
+     * 유출 시 회수 범위도 명확해진다.
+     *
+     * <p>동시 발급 사이의 경쟁은 남는다 — 두 요청이 겹치면 잠깐 토큰 둘이 유효할 수 있다.
+     * 다만 그 둘은 모두 정당하게 발급된 것이고, 위 시나리오처럼 "비밀번호가 바뀐 뒤에도
+     * 옛 토큰이 남는" 상황과는 다르다. Lua 스크립트로 원자화할 수 있으나 이 위험에 비해
+     * 과하다고 판단했다.
      *
      * @return 메일 링크에 넣을 원본 토큰. 저장되지 않으므로 이 반환값이 유일한 사본이다
      */
@@ -58,9 +84,20 @@ public class AuthTokenStore {
         byte[] raw = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        String tokenHash = sha256(token);
 
         execute(() -> {
-            redisTemplate.opsForValue().set(key(purpose, token), String.valueOf(userId), ttl);
+            String ownerKey = ownerKey(purpose, userId);
+
+            String previousHash = redisTemplate.opsForValue().get(ownerKey);
+            if (previousHash != null) {
+                redisTemplate.delete(purpose.keyPrefix + previousHash);
+            }
+
+            redisTemplate.opsForValue().set(purpose.keyPrefix + tokenHash, String.valueOf(userId), ttl);
+            // 역인덱스의 TTL은 토큰과 같다. 더 길면 이미 만료된 해시를 가리킨 채 남고,
+            // 짧으면 아직 유효한 토큰을 폐기할 수단이 먼저 사라진다.
+            redisTemplate.opsForValue().set(ownerKey, tokenHash, ttl);
             return null;
         });
 
@@ -80,16 +117,31 @@ public class AuthTokenStore {
             return Optional.empty();
         }
 
-        String userId = execute(() -> redisTemplate.opsForValue().getAndDelete(key(purpose, token)));
+        String tokenHash = sha256(token);
+        String userId = execute(() -> redisTemplate.opsForValue().getAndDelete(purpose.keyPrefix + tokenHash));
 
         if (userId == null) {
             return Optional.empty();
         }
+
+        // 역인덱스도 함께 치운다. 남겨 두면 이미 없는 토큰을 가리킨 채 TTL 동안 버티다가,
+        // 그 사이 발급되는 새 토큰이 "이전 토큰"이라며 엉뚱한 키를 지우게 된다(실제로는
+        // 없는 키라 무해하지만, 인덱스가 사실과 어긋난 채 도는 것 자체가 다음 버그의 씨앗이다).
+        // 이 토큰이 최신이 아니었다면 인덱스는 더 새 토큰을 가리키고 있으므로 건드리지 않는다.
+        execute(() -> {
+            String ownerKey = ownerKey(purpose, Long.valueOf(userId));
+            if (tokenHash.equals(redisTemplate.opsForValue().get(ownerKey))) {
+                redisTemplate.delete(ownerKey);
+            }
+            return null;
+        });
+
         return Optional.of(Long.valueOf(userId));
     }
 
-    private String key(Purpose purpose, String token) {
-        return purpose.keyPrefix + sha256(token);
+    /** 사용자별 "지금 살아 있는 토큰"의 해시를 가리키는 역인덱스 키. */
+    private String ownerKey(Purpose purpose, Long userId) {
+        return purpose.keyPrefix + "user:" + userId;
     }
 
     private String sha256(String value) {

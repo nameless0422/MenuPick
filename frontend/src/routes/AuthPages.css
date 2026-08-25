@@ -16,6 +16,16 @@
   gap: 10px;
 }
 
+/* 카드 제목은 <h2>다(예전에는 <strong>이었다 — 제목처럼 보이는데 제목 트리에는 없었다).
+   전역 h2(24px/500)를 그대로 받으면 바로 아래 시연 결과의 메뉴 이름(.login-demo-name,
+   24px/700)과 같은 크기가 되어, 정작 강조해야 할 "뽑힌 메뉴"가 카드 제목에 묻힌다.
+   요소만 바꾸고 보이는 크기는 <strong>이던 때 그대로 둔다. */
+.login-demo h2 {
+  font-size: inherit;
+  font-weight: 700;
+  margin: 0;
+}
+
 .login-demo-desc {
   font-size: 14px;
 }

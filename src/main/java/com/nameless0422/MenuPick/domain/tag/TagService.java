@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.domain.tag.dto.TagRequest;
 import com.nameless0422.MenuPick.domain.tag.dto.TagResponse;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +21,37 @@ public class TagService {
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
 
+    /**
+     * 자동완성 결과 상한. 입력창 아래 목록이라 이보다 많이 보여줄 자리가 없고, 상한이 없으면
+     * 태그가 많은 사용자의 키 입력 한 번이 수백 행을 직렬화해 내려보낸다.
+     */
+    private static final int MAX_SUGGESTIONS = 20;
+
     public List<TagResponse.TagInfo> searchTags(Long userId, String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return List.of();
         }
-        return tagRepository.findByUserIdAndNameStartingWith(userId, keyword).stream()
+        String pattern = escapeLike(keyword.trim()) + "%";
+        return tagRepository
+                .searchByNamePattern(userId, pattern, PageRequest.of(0, MAX_SUGGESTIONS)).stream()
                 .map(t -> new TagResponse.TagInfo(t.getId(), t.getName(), t.getCreatedAt()))
                 .toList();
+    }
+
+    /**
+     * LIKE 와일드카드를 문자 그대로 취급하게 만든다.
+     *
+     * <p>이스케이프하지 않으면 {@code ?keyword=%} 하나로 자기 태그 전량이 내려온다.
+     * 타인 데이터가 새지는 않지만 자동완성이 목록 덤프가 되고, {@code _}는 "아무 한 글자"라
+     * 사용자가 기대한 것과 다른 결과가 나온다.
+     *
+     * <p>이스케이프 문자 자신을 먼저 치환해야 한다. 나중에 하면 방금 우리가 붙인 {@code !}까지
+     * 다시 이스케이프해 패턴이 어긋난다.
+     */
+    private static String escapeLike(String value) {
+        return value.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
     }
 
     @Transactional

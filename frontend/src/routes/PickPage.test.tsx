@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import PickPage from "./PickPage";
@@ -377,7 +377,7 @@ describe("필터 칩 — 눌러도 갈 곳이 남는다", () => {
     renderWithProviders(<PickPage />);
 
     // 포함/제외 두 필터가 같은 키로 조회하므로 제안 칩도 두 벌 나온다 — 앞쪽이 포함 태그다.
-    const suggestions = await screen.findAllByRole("button", { name: "#혼밥" });
+    const suggestions = await screen.findAllByRole("button", { name: "혼밥 태그 추가" });
     await user.click(suggestions[0]);
 
     // 고른 칩은 제안 행에서 사라져 돌아갈 자리가 없다. 다음 행동이 시작되는 곳으로 모은다.
@@ -389,7 +389,7 @@ describe("필터 칩 — 눌러도 갈 곳이 남는다", () => {
     const user = userEvent.setup();
     renderWithProviders(<PickPage />);
 
-    await user.click((await screen.findAllByRole("button", { name: "#혼밥" }))[0]);
+    await user.click((await screen.findAllByRole("button", { name: "혼밥 태그 추가" }))[0]);
     await user.click(screen.getByRole("button", { name: "혼밥 태그 선택 해제" }));
 
     expect(screen.getByRole("textbox", { name: "포함 태그 검색" })).toHaveFocus();
@@ -430,5 +430,63 @@ describe("모션 최소화", () => {
     } finally {
       window.matchMedia = original;
     }
+  });
+});
+
+/**
+ * 태그 <b>제안</b> 칩에 {@code chipToggle(false)}가 붙어 aria-pressed="false"로 읽혔다.
+ *
+ * <p>aria-pressed는 "눌러서 켜고 다시 눌러 끌 수 있다"는 약속이다. 그런데 이 버튼은 눌러도
+ * pressed가 true로 바뀌지 않는다 — 선택 목록으로 옮겨 가며 이 자리에서 언마운트된다.
+ * 켜졌는지 확인하러 돌아온 자리에는 아무것도 없고, 다시 눌러 끌 수도 없다. 상태를 약속해
+ * 놓고 지키지 않는 것은 상태를 아예 말하지 않는 것보다 나쁘다.
+ *
+ * <p>상태를 뗀 만큼 이름이 일을 대신해야 한다 — "#혼밥"만으로는 눌렀을 때 추가되는지
+ * 검색되는지 지워지는지 알 수 없다.
+ */
+describe("태그 제안 칩", () => {
+  it("토글이 아니므로 aria-pressed를 달지 않고, 이름이 무엇을 하는지 말한다", async () => {
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    renderWithProviders(<PickPage />);
+
+    // 포함/제외 두 필터가 같은 키로 조회하므로 제안 칩도 두 벌 나온다.
+    const suggestions = await screen.findAllByRole("button", { name: "혼밥 태그 추가" });
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const chip of suggestions) {
+      expect(chip).not.toHaveAttribute("aria-pressed");
+    }
+  });
+
+  it("반대로 선택된 칩은 눌러서 해제되는 진짜 토글이라 aria-pressed가 남는다", async () => {
+    const user = userEvent.setup();
+    searchTagsMock.mockResolvedValue([HONBAP]);
+    renderWithProviders(<PickPage />);
+
+    await user.click((await screen.findAllByRole("button", { name: "혼밥 태그 추가" }))[0]);
+
+    // 이 칩은 눌러도 사라지지 않고 pressed=false로 돌아온다 — 약속이 지켜지는 쪽이다.
+    expect(screen.getByRole("button", { name: "혼밥 태그 선택 해제" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+});
+
+/**
+ * 필터 뭉치를 담은 {@code <section>}에 접근 가능한 이름이 없었다.
+ *
+ * <p>이름 없는 {@code <section>}은 랜드마크로 노출되지 않아 실질적으로 {@code <div>}다.
+ * 스크린리더의 랜드마크 목록에 잡히지 않으니 필터를 건너뛰어 뽑기 버튼으로 가거나 반대로
+ * 필터로 되돌아오려면 fieldset 네 개를 Tab으로 헤집는 수밖에 없었다.
+ */
+describe("필터 섹션 랜드마크", () => {
+  it("제목으로 이름이 붙어 랜드마크로 잡힌다", () => {
+    renderWithProviders(<PickPage />);
+
+    const filters = screen.getByRole("region", { name: "픽 조건" });
+
+    // 이름만 맞고 엉뚱한 요소에 붙었으면 안 된다 — 실제 필터를 감싸고 있어야 한다.
+    expect(within(filters).getByRole("group", { name: "카테고리" })).toBeInTheDocument();
+    expect(within(filters).getByRole("group", { name: "거리" })).toBeInTheDocument();
   });
 });

@@ -202,3 +202,35 @@ describe("OAuthCallbackPage - 요청 검증", () => {
     expect(sessionStorage.getItem("oauth_request_kakao")).not.toBeNull();
   });
 });
+
+/**
+ * 이 화면은 제공자에서 리다이렉트로 새로 뜬 문서다 — 스크린리더가 문서를 처음부터 다시
+ * 읽기 시작하는 자리인데, 여태 {@code <h1>}도 없는 맨 {@code <p>} 한 줄이었다.
+ *
+ * <p>제목이 없으면 제목 탐색으로도 문서 개요로도 잡히는 것이 없어 "지금 어디에 도착했는지"를
+ * 알 방법이 없다. 실패했을 때는 그 상태로 오류 문장과 "돌아가기" 링크만 덩그러니 남는다.
+ */
+describe("콜백 화면의 문서 제목", () => {
+  it("처리 중 화면에도 <h1>이 있다", () => {
+    const state = startedState(loginAuthorizeUrl("kakao"));
+    // 응답을 붙잡아 둬야 "처리 중" 화면이 그 자리에 멈춘다.
+    loginWithOAuthMock.mockReturnValue(new Promise<string>(() => {}));
+
+    renderCallback(state);
+
+    expect(screen.getByRole("heading", { level: 1, name: "소셜 로그인" })).toBeInTheDocument();
+  });
+
+  it("실패 화면의 제목이 로그인과 연동을 구분한다", async () => {
+    // 연동하러 왔다는 사실은 state에 실려 있다 — 여기서 "로그인하지 못했습니다"라고 하면
+    // 설정에서 연동을 누른 사람이 자기 계정이 잘못된 줄 안다.
+    const state = startedState(linkAuthorizeUrl("kakao"));
+    linkSocialAccountMock.mockRejectedValue(new Error("boom"));
+
+    renderCallback(state);
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "연동하지 못했습니다" }),
+    ).toBeInTheDocument();
+  });
+});
