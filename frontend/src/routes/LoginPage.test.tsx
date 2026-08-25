@@ -39,6 +39,7 @@ beforeEach(() => {
     login: vi.fn(),
     logout: vi.fn(),
     withdraw: vi.fn(),
+    sessionExpired: false,
   });
   Object.defineProperty(window, "location", {
     configurable: true,
@@ -52,6 +53,35 @@ afterEach(() => {
     configurable: true,
     writable: true,
     value: originalLocation,
+  });
+});
+
+describe("LoginPage 세션 만료 안내", () => {
+  // 만료는 아무 조작 없이 일어난다. 안내가 없으면 사용자는 화면이 왜 바뀌었는지 모른 채
+  // 자기가 뭘 잘못 눌렀다고 생각하고, 하던 일로 돌아갈 수 있다는 사실도 알 수 없다.
+  it("세션이 끊겨 밀려온 경우 왜 로그아웃됐는지 알려준다", () => {
+    renderLogin({ sessionExpired: true });
+
+    expect(
+      screen.getByText(/자동으로 로그아웃됐어요/),
+    ).toBeInTheDocument();
+  });
+
+  // 이 안내는 마운트 시점에 이미 내용을 갖고 나타나므로 라이브 리전으로는 통지되지 않는다.
+  // 초점을 옮기지 않으면 화면에는 떠 있는데 스크린리더 사용자에게는 전달되지 않아,
+  // "조용히 로그아웃됐다"는 원래 문제가 그대로 남는다.
+  it("안내로 초점을 옮겨 스크린리더에 실제로 읽히게 한다", () => {
+    renderLogin({ sessionExpired: true });
+
+    expect(document.activeElement).toBe(screen.getByText(/자동으로 로그아웃됐어요/));
+  });
+
+  it("그냥 들어온 로그인 화면에는 만료 안내를 띄우지 않는다", () => {
+    renderLogin();
+
+    expect(screen.queryByText(/자동으로 로그아웃됐어요/)).not.toBeInTheDocument();
+    // 초점도 건드리지 않는다 — 주소창에서 막 들어온 사용자의 초점을 빼앗을 이유가 없다.
+    expect(document.activeElement).toBe(document.body);
   });
 });
 

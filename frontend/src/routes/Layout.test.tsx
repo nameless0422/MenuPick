@@ -15,6 +15,7 @@ beforeEach(() => {
     login: vi.fn(),
     logout: vi.fn(),
     withdraw: vi.fn(),
+    sessionExpired: false,
   });
 });
 
