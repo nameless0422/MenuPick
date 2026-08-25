@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.domain.restaurant;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
@@ -304,4 +305,49 @@ class RestaurantServiceTest {
         idField.setAccessible(true);
         idField.set(entity, id);
     }
+
+    // --- 동시 생성 경합 (#87) ---
+
+    /**
+     * 이 API의 계약은 "중복을 409로 거절하지 않는다"이다 — 컨트롤러 javadoc이 그렇게 적고
+     * 있고, 이미 있는 식당을 만나면 created=false로 그대로 돌려준다. 그런데 findSamePlace와
+     * INSERT 사이에 같은 장소를 저장하는 요청이 끼어들면(더블클릭·재시도가 실제 경로다)
+     * uq_restaurants_user_place에 걸려 409 "데이터 무결성 제약 조건을 위반했습니다"가 나갔다.
+     * 같은 버튼을 두 번 누른 사용자에게만 실패가 보이는 셈이다.
+     */
+    @Test
+    @DisplayName("동시 생성 경합에 걸리면 이긴 쪽의 식당을 그대로 돌려준다 (409로 거절하지 않는다)")
+    void createRestaurant_concurrentInsert_returnsWinner() {
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "8005012"))
+                .willReturn(Optional.empty(), Optional.of(restaurant));
+        given(restaurantRepository.save(any(Restaurant.class)))
+                .willThrow(new DataIntegrityViolationException("uq_restaurants_user_place"));
+
+        RestaurantService.CreateResult result = restaurantService.createRestaurant(1L, createRequest());
+
+        assertThat(result.created()).isFalse();
+        assertThat(result.restaurant().name()).isEqualTo("진주회관");
+    }
+
+    /**
+     * kakaoPlaceId가 아닌 다른 제약이 걸렸다면 삼키면 안 된다 — 원인을 잃고, 저장되지 않은
+     * 식당을 "이미 있다"고 돌려주게 된다.
+     */
+    @Test
+    @DisplayName("경합이 아닌 제약 위반은 그대로 올려보낸다")
+    void createRestaurant_otherConstraintViolation_isRethrown() {
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "8005012"))
+                .willReturn(Optional.empty(), Optional.empty());
+        given(restaurantRepository.save(any(Restaurant.class)))
+                .willThrow(new DataIntegrityViolationException("다른 제약"));
+
+        assertThatThrownBy(() -> restaurantService.createRestaurant(1L, createRequest()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private static RestaurantRequest.Create createRequest() {
+        return new RestaurantRequest.Create("진주회관", "서울시 중구", "02-1234-5678",
+                new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), null, "8005012");
+    }
+
 }

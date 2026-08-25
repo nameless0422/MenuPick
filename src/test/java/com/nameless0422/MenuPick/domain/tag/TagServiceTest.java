@@ -9,6 +9,8 @@ import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Pageable;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
@@ -23,6 +25,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -57,7 +61,7 @@ class TagServiceTest {
     @DisplayName("자동완성 검색 - 매칭되는 태그 반환")
     void searchTags_returnsMatchingTags() {
         Tag tag2 = Tag.builder().user(user).name("혼술").build();
-        given(tagRepository.findByUserIdAndNameStartingWith(1L, "혼"))
+        given(tagRepository.searchByNamePattern(eq(1L), eq("혼%"), any(Pageable.class)))
                 .willReturn(List.of(tag, tag2));
 
         List<TagResponse.TagInfo> result = tagService.searchTags(1L, "혼");
@@ -65,6 +69,36 @@ class TagServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(0).name()).isEqualTo("혼밥");
         assertThat(result.get(1).name()).isEqualTo("혼술");
+    }
+
+    /**
+     * 이스케이프하지 않으면 {@code ?keyword=%} 하나로 자기 태그 전량이 내려온다.
+     * 자동완성이 목록 덤프가 되는 셈이라, 입력값이 와일드카드로 해석되지 않아야 한다.
+     */
+    @Test
+    @DisplayName("자동완성 검색 - LIKE 와일드카드를 문자 그대로 취급한다")
+    void searchTags_escapesLikeWildcards() {
+        ArgumentCaptor<String> pattern = ArgumentCaptor.forClass(String.class);
+        given(tagRepository.searchByNamePattern(eq(1L), pattern.capture(), any(Pageable.class)))
+                .willReturn(List.of());
+
+        tagService.searchTags(1L, "100%_!");
+
+        // % 와 _ 는 앞에 ! 가 붙어 문자로 내려가고, 이스케이프 문자 자신도 두 번 겹쳐 표시된다.
+        assertThat(pattern.getValue()).isEqualTo("100!%!_!!%");
+    }
+
+    @Test
+    @DisplayName("자동완성 검색 - 결과 수에 상한을 건다")
+    void searchTags_limitsResults() {
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        given(tagRepository.searchByNamePattern(eq(1L), anyString(), pageable.capture()))
+                .willReturn(List.of());
+
+        tagService.searchTags(1L, "혼");
+
+        // 상한이 없으면 태그가 많은 사용자의 키 입력 한 번이 수백 행을 직렬화해 내려보낸다.
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(20);
     }
 
     @Test

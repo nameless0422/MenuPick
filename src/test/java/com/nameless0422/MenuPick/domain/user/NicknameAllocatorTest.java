@@ -74,4 +74,25 @@ class NicknameAllocatorTest {
 
         assertThat(allocator().allocate("돌아올사람")).isEqualTo("돌아올사람2");
     }
+
+    /**
+     * 자르는 위치가 서로게이트 페어 한가운데면 짝 없는 서로게이트가 남는다. MySQL은 그 값을
+     * utf8mb4로 인코딩하지 못해 Incorrect string value로 거절하므로 소셜 로그인이 실패한다.
+     * 이모지로 끝나는 긴 프로필 이름(카카오·구글에서 흔하다)이 정확히 이 자리를 만든다.
+     */
+    @Test
+    @DisplayName("이모지가 잘리는 자리에 걸려도 짝 없는 서로게이트를 남기지 않는다")
+    void doesNotSplitSurrogatePair() {
+        // "가" 48개 + 이모지 1개(char 2개) = 50 char. 번호를 붙이려면 49로 잘라야 하는데,
+        // 그 49번째가 이모지의 앞쪽 서로게이트다.
+        String name = "가".repeat(48) + "\uD83C\uDF5C";
+        taken(name);
+
+        String allocated = allocator().allocate(name);
+
+        assertThat(allocated).hasSizeLessThanOrEqualTo(50);
+        assertThat(allocated.chars().anyMatch(c -> Character.isSurrogate((char) c))).isFalse();
+        assertThat(allocated).isEqualTo("가".repeat(48) + "2");
+    }
+
 }

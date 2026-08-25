@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantResponse;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,16 +63,39 @@ public class RestaurantService {
             return new CreateResult(toDetail(existing), true);
         }
 
-        Restaurant restaurant = restaurantRepository.save(Restaurant.builder()
-                .user(userRepository.getReferenceById(userId))
-                .name(request.name())
-                .address(request.address())
-                .phone(request.phone())
-                .latitude(request.latitude())
-                .longitude(request.longitude())
-                .naverUrl(request.naverUrl())
-                .kakaoPlaceId(request.kakaoPlaceId())
-                .build());
+        Restaurant restaurant;
+        try {
+            // IDENTITY 전략이라 save() 시점에 INSERT가 즉시 실행되므로 여기서 제약 위반을 잡을 수 있다.
+            restaurant = restaurantRepository.save(Restaurant.builder()
+                    .user(userRepository.getReferenceById(userId))
+                    .name(request.name())
+                    .address(request.address())
+                    .phone(request.phone())
+                    .latitude(request.latitude())
+                    .longitude(request.longitude())
+                    .naverUrl(request.naverUrl())
+                    .kakaoPlaceId(request.kakaoPlaceId())
+                    .build());
+        } catch (DataIntegrityViolationException e) {
+            // uq_restaurants_user_place(user_id, kakao_place_id) 위반 — 위 findSamePlace와 이 INSERT
+            // 사이에 같은 장소를 저장하는 요청이 끼어들었다(더블클릭·재시도가 실제 경로다).
+            //
+            // 여기서 그냥 올려보내면 GlobalExceptionHandler가 409 "데이터 무결성 제약 조건을
+            // 위반했습니다"로 바꾼다. 그런데 이 API의 계약은 정반대다 — 컨트롤러 javadoc이
+            // "중복을 409로 거절하지 않는다"고 길게 적어 두었고, 위의 findSamePlace 분기도
+            // 이미 있던 식당을 created=false로 돌려준다. 경합으로 들어온 요청만 다른 답을
+            // 받으면 같은 버튼을 두 번 누른 사용자에게만 실패가 보인다.
+            //
+            // TagService.createTag / MenuRestaurantService.createMenuRestaurant가 같은 경합을
+            // 같은 방식으로 처리한다. 다만 그쪽은 중복이 곧 오류라 409로 바꾸고, 여기는
+            // 중복이 정상이라 이긴 쪽의 결과를 그대로 돌려준다.
+            Restaurant winner = findSamePlace(userId, request.kakaoPlaceId());
+            if (winner == null) {
+                // kakaoPlaceId가 아닌 다른 제약이 걸렸다는 뜻이다. 삼키면 원인을 잃는다.
+                throw e;
+            }
+            return new CreateResult(toDetail(winner), false);
+        }
 
         return new CreateResult(toDetail(restaurant), true);
     }
