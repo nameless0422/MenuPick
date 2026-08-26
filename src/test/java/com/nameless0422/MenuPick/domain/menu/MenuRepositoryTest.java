@@ -107,6 +107,50 @@ class MenuRepositoryTest extends AbstractIntegrationTest {
         assertThat(candidates.get(0).getName()).isEqualTo("후보메뉴");
     }
 
+    /**
+     * 픽 후보 조회의 계약은 세 가지인데, 여태 실행되는 것은 {@code isExcluded} 하나뿐이었다.
+     *
+     * <p>{@code PickServiceTest}는 순수 Mockito라 이 메서드를 통째로 스텁한다 — 이름이 무엇이든
+     * 스텁이 답하므로 쿼리 자체는 한 번도 돌지 않는다. 그래서 파생 쿼리 이름에서
+     * {@code AndDeletedAtIsNull}이나 {@code UserId}가 빠져도 전 구간이 초록불로 남았다.
+     * 지운 메뉴가 오늘 점심으로 뽑히거나, 남의 메뉴가 내 픽에 섞이는 것은 조용히 통과할 수
+     * 있는 종류의 사고가 아니다.
+     */
+    @Test
+    @DisplayName("픽 후보 - 소프트 삭제된 메뉴는 후보에서 빠진다")
+    void findPickCandidates_excludesSoftDeleted() {
+        menuRepository.save(Menu.builder()
+                .user(user).name("살아있는메뉴").weight(1).build());
+        Menu removed = menuRepository.save(Menu.builder()
+                .user(user).name("지운메뉴").weight(1).build());
+        removed.softDelete(LocalDateTime.now());
+        menuRepository.flush();
+
+        List<Menu> candidates = menuRepository
+                .findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(user.getId());
+
+        assertThat(candidates).extracting(Menu::getName).containsExactly("살아있는메뉴");
+    }
+
+    @Test
+    @DisplayName("픽 후보 - 남의 메뉴는 후보에 섞이지 않는다")
+    void findPickCandidates_isScopedToOwner() {
+        User other = userRepository.save(User.builder()
+                .email("other@example.com")
+                .nickname("남")
+                .build());
+        menuRepository.save(Menu.builder()
+                .user(user).name("내메뉴").weight(1).build());
+        menuRepository.save(Menu.builder()
+                .user(other).name("남의메뉴").weight(1).build());
+        menuRepository.flush();
+
+        List<Menu> candidates = menuRepository
+                .findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(user.getId());
+
+        assertThat(candidates).extracting(Menu::getName).containsExactly("내메뉴");
+    }
+
     // --- 커서 페이지네이션 경계 ---
 
     @Test
