@@ -490,3 +490,94 @@ describe("필터 섹션 랜드마크", () => {
     expect(within(filters).getByRole("group", { name: "거리" })).toBeInTheDocument();
   });
 });
+
+/**
+ * 거리 선택지는 항상 정확히 하나가 선택돼 있고 해제할 수단이 없다 — 토글 버튼이 아니라
+ * 단일 선택 그룹이다. aria-pressed로 두면 스크린리더가 "500m 이내, 눌림"만 읽고 방금
+ * 300m가 풀렸다는 사실은 어디에서도 전달되지 않아, 선택이 옮겨 간 것이 아니라 하나가
+ * 더 켜진 것처럼 들린다.
+ *
+ * 역할만 바꾸는 것은 더 나쁘다 — role="radio"는 "화살표 키로 옮겨 다닐 수 있다"는 약속이고
+ * 사용자는 실제로 그렇게 조작한다. 그래서 역할·roving tabindex·화살표 이동을 함께 본다.
+ */
+describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
+  async function readyWithDistance() {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+    await user.click(distanceToggle());
+    await waitFor(() => expect(pendingRequests).toHaveLength(1));
+    resolveRequest(0, 37.5, 127.0);
+    await screen.findByRole("radiogroup", { name: "거리" });
+    return user;
+  }
+
+  it("선택지가 라디오로 노출되고 지금 선택된 하나만 checked다", async () => {
+    await readyWithDistance();
+
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(4);
+    expect(screen.getByRole("radio", { name: "500m 이내" })).toBeChecked();
+    expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
+  });
+
+  it("다른 선택지를 누르면 이전 선택이 풀린다", async () => {
+    const user = await readyWithDistance();
+
+    await user.click(screen.getByRole("radio", { name: "1km 이내" }));
+
+    expect(screen.getByRole("radio", { name: "1km 이내" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "500m 이내" })).not.toBeChecked();
+  });
+
+  it("Tab 한 번이면 그룹 전체를 지나간다 (roving tabindex)", async () => {
+    // 선택지가 넷인데 Tab을 넷 눌러야 한다면, 그룹이 늘어날수록 키보드 사용자만 비용을 문다.
+    await readyWithDistance();
+
+    const radios = screen.getAllByRole("radio");
+    expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
+    expect(screen.getByRole("radio", { name: "500m 이내" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("화살표 키로 선택이 옮겨 가고 초점도 함께 간다", async () => {
+    const user = await readyWithDistance();
+
+    screen.getByRole("radio", { name: "500m 이내" }).focus();
+    await user.keyboard("{ArrowRight}");
+
+    expect(screen.getByRole("radio", { name: "1km 이내" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "1km 이내" })).toHaveFocus();
+    expect(screen.getByRole("radio", { name: "1km 이내" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "500m 이내" })).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("끝에서 화살표를 더 누르면 반대쪽 끝으로 돈다", async () => {
+    const user = await readyWithDistance();
+
+    screen.getByRole("radio", { name: "500m 이내" }).focus();
+    await user.keyboard("{ArrowLeft}{ArrowLeft}");
+
+    expect(screen.getByRole("radio", { name: "2km 이내" })).toBeChecked();
+  });
+
+  it("Home·End로 양 끝으로 간다", async () => {
+    const user = await readyWithDistance();
+
+    screen.getByRole("radio", { name: "500m 이내" }).focus();
+    await user.keyboard("{End}");
+    expect(screen.getByRole("radio", { name: "2km 이내" })).toBeChecked();
+
+    await user.keyboard("{Home}");
+    expect(screen.getByRole("radio", { name: "300m 이내" })).toBeChecked();
+  });
+
+  it("고른 값이 픽 요청에 그대로 실린다", async () => {
+    // 역할을 바꾸면서 onClick 배선이 끊기면 화면만 멀쩡하고 요청은 옛 값으로 나간다.
+    const user = await readyWithDistance();
+
+    await user.click(screen.getByRole("radio", { name: "2km 이내" }));
+    await user.click(spinButton());
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
+    expect(requestPickMock.mock.calls.at(-1)![0].maxDistance).toBe(2000);
+  });
+});

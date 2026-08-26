@@ -15,11 +15,21 @@
  */
 export function chipToggle(on: boolean, extraClass?: string) {
   return {
-    className: ["chip", extraClass, "selectable", on ? "on" : ""]
-      .filter(Boolean)
-      .join(" "),
+    className: chipClass(on, extraClass),
     "aria-pressed": on,
   };
+}
+
+/**
+ * 칩의 클래스만 만든다. 상태를 알리는 속성은 붙이지 않는다.
+ *
+ * <p>겉모습은 {@link chipToggle}과 같아야 하지만 상태를 {@code aria-pressed}로 말하면
+ * 안 되는 자리를 위한 것이다 — 단일 선택 그룹(거리 필터)의 라디오가 여기 해당한다.
+ * 그쪽 상태는 {@code aria-checked}가 말하고, 두 속성을 함께 붙이면 스크린리더가
+ * "라디오 버튼, 선택됨, 눌림"처럼 겹쳐 읽는다. 켜짐 표시(.on)는 색이라 시각에만 쓰인다.
+ */
+export function chipClass(on: boolean, extraClass?: string) {
+  return ["chip", extraClass, "selectable", on ? "on" : ""].filter(Boolean).join(" ");
 }
 
 /**
