@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 
 export interface TagInfo {
   id: number;
@@ -10,12 +10,12 @@ export async function searchTags(keyword: string) {
   const res = await http.get<ApiResponse<TagInfo[]>>("/api/v1/tags", {
     params: { keyword },
   });
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function createTag(name: string) {
   const res = await http.post<ApiResponse<TagInfo>>("/api/v1/tags", { name });
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function deleteTag(tagId: number) {

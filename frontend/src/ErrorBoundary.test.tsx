@@ -7,7 +7,7 @@ import ErrorBoundary from "./ErrorBoundary";
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
 function Boom(): never {
-  // api/*.ts의 `res.data.data!`가 실제로 undefined를 받는 상황을 흉내낸다.
+  // 컴포넌트가 없는 값을 읽다 터지는, 렌더 중 예외의 가장 흔한 모양을 흉내낸다.
   throw new Error("Cannot read properties of undefined (reading 'menu')");
 }
 

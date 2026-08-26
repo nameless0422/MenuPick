@@ -17,6 +17,7 @@ import { chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import KakaoMap from "../maps/KakaoMap";
+import { safeExternalUrl } from "../externalUrl";
 
 export default function RestaurantsPage() {
   const queryClient = useQueryClient();
@@ -319,6 +320,8 @@ function RestaurantCard({
       ? detailLoadingNoteId
       : undefined;
 
+  const mapUrl = safeExternalUrl(detail?.naverUrl);
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteRestaurant(summary.id),
     onSuccess: () => {
@@ -348,11 +351,14 @@ function RestaurantCard({
     <li className="card">
       <div className="card-main">
         <strong>{summary.name}</strong>
-        {detail?.naverUrl && (
+        {/* 저장된 값을 그대로 href에 넣지 않는다 — 근거는 safeExternalUrl(../externalUrl).
+            걸러진 경우 링크 자리를 비운다: 주소를 못 믿겠다고 알릴 방법도 없거니와,
+            지도 보기는 이 카드의 부가 정보라 없어도 나머지는 그대로 쓸 수 있다. */}
+        {mapUrl && (
           // 새 창으로 열린다는 사실도 이름에 넣는다 — 링크를 따라간 뒤 뒤로 가기가 없어
           // 원래 자리로 못 돌아오는 상황을 미리 알린다.
           <a
-            href={detail.naverUrl}
+            href={mapUrl}
             target="_blank"
             rel="noreferrer"
             aria-label={`${summary.name} 지도 보기 (새 창)`}

@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 
 // MenuRestaurantResponse.MenuRestaurantDetail — 경로가 /api/v1/menus/{menuId}/restaurants 로 메뉴 중심
 export interface MenuRestaurantDetail {
@@ -31,7 +31,7 @@ export async function fetchMenuRestaurants(menuId: number) {
   const res = await http.get<ApiResponse<MenuRestaurantListResponse>>(
     `/api/v1/menus/${menuId}/restaurants`,
   );
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function createMenuRestaurant(menuId: number, request: MenuRestaurantCreateRequest) {
@@ -39,7 +39,7 @@ export async function createMenuRestaurant(menuId: number, request: MenuRestaura
     `/api/v1/menus/${menuId}/restaurants`,
     request,
   );
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function updateMenuRestaurant(
@@ -51,7 +51,7 @@ export async function updateMenuRestaurant(
     `/api/v1/menus/${menuId}/restaurants/${restaurantId}`,
     request,
   );
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function deleteMenuRestaurant(menuId: number, restaurantId: number) {

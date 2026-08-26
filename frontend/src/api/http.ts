@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import axios, { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -44,10 +44,24 @@ export const http = axios.create({
   timeout: REQUEST_TIMEOUT_MS,
 });
 
+/**
+ * 인터셉터가 요청에 붙여 두는 표식.
+ *
+ * - `_retried`: 이 요청이 이미 401 재시도를 한 번 썼는지. 무한 루프 방지.
+ * - `_sentWithToken`: 이 요청이 어떤 Access Token으로 나갔는지. 401을 받았을 때
+ *   "만료된 토큰 때문인가, 아니면 이미 갈린 지난 토큰 때문인가"를 가르는 유일한 단서다.
+ */
+interface TrackedRequestConfig extends InternalAxiosRequestConfig {
+  _retried?: boolean;
+  _sentWithToken?: string | null;
+}
+
 http.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+  // 재시도로 다시 들어올 때도 이 인터셉터를 거치므로 값은 항상 "직전에 실제로 실린 토큰"이다.
+  (config as TrackedRequestConfig)._sentWithToken = accessToken;
   return config;
 });
 
@@ -60,6 +74,26 @@ export function setSessionExpiredHandler(handler: (() => void) | null) {
   sessionExpiredHandler = handler;
 }
 
+/**
+ * 공통 응답 봉투에서 본문을 꺼낸다.
+ *
+ * 여태 호출부는 전부 {@code res.data.data!}로 단언했다. 타입은 {@code data?: T}인데 단언이
+ * 그 물음표를 지워버려, 서버가 data 없이 200을 주면 undefined가 화면까지 그대로 흘러가
+ * 렌더 중에 "Cannot read properties of undefined"로 터진다 — 즉 실패가 API 경계가 아니라
+ * 컴포넌트 트리 한복판에서 드러나고, 사용자가 보는 건 ErrorBoundary의 전면 오류 화면이다.
+ * 여기서 끊으면 실패가 나머지 API 에러와 같은 자리(catch)에서 같은 한국어 문구로 처리된다.
+ *
+ * {@code null}을 정상 본문으로 쓰는 응답(void 계열)은 이 함수를 거치지 않는다 —
+ * 그런 호출부는 애초에 반환값을 쓰지 않는다.
+ */
+export function unwrap<T>(res: AxiosResponse<ApiResponse<T>>): T {
+  const data = res.data?.data;
+  if (data === undefined || data === null) {
+    throw new Error(EMPTY_RESPONSE_MESSAGE);
+  }
+  return data;
+}
+
 // 401을 만나면 /auth/refresh로 한 번 갱신을 시도하고, 성공하면 원래 요청을 재시도한다.
 // refresh 자체가 실패하면(쿠키 만료 등) 더 이상 재시도하지 않고 그대로 에러를 던진다 — 무한 루프 방지.
 let refreshPromise: Promise<string> | null = null;
@@ -69,7 +103,7 @@ async function refreshAccessToken(): Promise<string> {
     refreshPromise = http
       .post<ApiResponse<{ accessToken: string }>>("/api/v1/auth/refresh")
       .then((res) => {
-        const token = res.data.data!.accessToken;
+        const token = unwrap(res).accessToken;
         setAccessToken(token);
         return token;
       })
@@ -125,11 +159,27 @@ function isPreAuthCall(url: string | undefined): boolean {
 http.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const original = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const original = error.config as TrackedRequestConfig | undefined;
     const isPreAuth = isPreAuthCall(original?.url);
 
     if (error.response?.status === 401 && original && !original._retried && !isPreAuth) {
       original._retried = true;
+
+      // 이 요청이 나간 뒤에 토큰이 이미 갈렸다면, 이 401은 지나간 토큰이 받아온 것이다.
+      // 재발급은 방금 끝났으니 다시 부를 이유가 없고, 새 토큰으로 한 번 더 보내면 된다.
+      //
+      // 이 가지가 없으면 401이 조금씩 어긋나 도착할 때마다 refresh가 새로 나간다.
+      // refreshPromise는 .finally에서 즉시 비워지므로 "완전히 겹친" 401만 하나로 합쳐지고,
+      // 수십~수백 ms 간격으로 흩어져 오는 실패들은 각자 refresh를 부른다. /auth/refresh는
+      // 인증 버킷(IP당 분당 10회)에 있어, 화면 하나가 병렬로 부르는 서너 개 쿼리가 동시에
+      // 만료를 만나는 것만으로 그 버킷을 다 태운다 — 공유 NAT(사무실·카페)에서는 로그인·
+      // 가입·비밀번호 재설정까지 함께 429로 막힌다.
+      const currentToken = getAccessToken();
+      if (currentToken && currentToken !== original._sentWithToken) {
+        original.headers.Authorization = `Bearer ${currentToken}`;
+        return http(original);
+      }
+
       try {
         const token = await refreshAccessToken();
         original.headers.Authorization = `Bearer ${token}`;
@@ -155,6 +205,8 @@ export { refreshAccessToken };
 const NETWORK_ERROR_MESSAGE = "서버에 연결할 수 없습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.";
 const TIMEOUT_ERROR_MESSAGE = "서버 응답이 너무 늦습니다. 잠시 후 다시 시도해 주세요.";
 const SERVER_ERROR_MESSAGE = "서버에 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.";
+// unwrap이 던지는 문구. 사용자가 할 수 있는 일이 "잠시 후 재시도"뿐이라는 점에서 5xx와 같다.
+const EMPTY_RESPONSE_MESSAGE = "서버 응답이 비어 있습니다. 잠시 후 다시 시도해 주세요.";
 
 // axios 에러에서 백엔드 공통 응답의 message를 꺼낸다. 화면에서 에러 표시할 때 공용으로 사용.
 export function apiErrorMessage(error: unknown): string {
