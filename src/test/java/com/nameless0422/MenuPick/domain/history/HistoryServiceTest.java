@@ -82,6 +82,29 @@ class HistoryServiceTest {
         assertThat(result.hasNext()).isFalse();
     }
 
+    /**
+     * 소프트 삭제된 메뉴·식당의 이름이 히스토리에 계속 보이는 것은 의도다 —
+     * 근거는 {@code HistoryService.toSummary}의 주석. 근거만 주석으로 남기면 다음 사람이
+     * "삭제된 이름이 새는 버그"로 읽고 조용히 고칠 수 있어, 계약으로 못 박아 둔다.
+     */
+    @Test
+    @DisplayName("히스토리 — 지운 메뉴·식당의 이름도 그대로 남는다 (기록 보존)")
+    void getHistories_keepsNamesOfSoftDeletedEntities() {
+        menu.softDelete(NOW.minusDays(1));
+        restaurant.softDelete(NOW.minusDays(1));
+        var history = createHistory(1L, menu, restaurant, true, NOW.minusDays(3));
+
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of(history));
+
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+
+        // "그날 김치찌개를 먹었다"는 사실은 메뉴를 나중에 지웠다고 없던 일이 되지 않는다.
+        assertThat(result.histories().get(0).menuName()).isEqualTo("김치찌개");
+        assertThat(result.histories().get(0).restaurantName()).isEqualTo("맛집A");
+    }
+
     @Test
     @DisplayName("히스토리 목록 조회 — 커서 기반 페이지네이션")
     void getHistories_withCursor() {

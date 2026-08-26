@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 
 // GET /api/v1/restaurants 목록 응답 (RestaurantResponse.RestaurantSummary — 페이지네이션 없음)
 export interface RestaurantSummary {
@@ -44,14 +44,14 @@ export interface RestaurantCreateRequest extends RestaurantUpdateRequest {
 
 export async function fetchRestaurants() {
   const res = await http.get<ApiResponse<RestaurantSummary[]>>("/api/v1/restaurants");
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function fetchRestaurant(restaurantId: number) {
   const res = await http.get<ApiResponse<RestaurantDetail>>(
     `/api/v1/restaurants/${restaurantId}`,
   );
-  return res.data.data!;
+  return unwrap(res);
 }
 
 /**
@@ -63,7 +63,7 @@ export async function fetchRestaurant(restaurantId: number) {
  */
 export async function createRestaurant(request: RestaurantCreateRequest) {
   const res = await http.post<ApiResponse<RestaurantDetail>>("/api/v1/restaurants", request);
-  return { restaurant: res.data.data!, created: res.status === 201 };
+  return { restaurant: unwrap(res), created: res.status === 201 };
 }
 
 export async function updateRestaurant(restaurantId: number, request: RestaurantUpdateRequest) {
@@ -71,7 +71,7 @@ export async function updateRestaurant(restaurantId: number, request: Restaurant
     `/api/v1/restaurants/${restaurantId}`,
     request,
   );
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function deleteRestaurant(restaurantId: number) {

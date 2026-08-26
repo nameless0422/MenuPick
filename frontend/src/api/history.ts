@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 import { fetchMenuRestaurants as fetchMenuRestaurantList } from "./menuRestaurants";
 
 // 백엔드 PickService가 실제로 기록하는 filterType 값 (History.java / PickService.java 참고).
@@ -32,7 +32,7 @@ export async function fetchHistories(cursor?: number, days?: number, size = 20) 
   const res = await http.get<ApiResponse<HistoryListResponse>>("/api/v1/history", {
     params: { cursor, days, size },
   });
-  return res.data.data!;
+  return unwrap(res);
 }
 
 // restaurantId를 함께 보내면 기록된 식당을 실제 방문한 식당으로 덮어쓴다 (HistoryService.markVisited).

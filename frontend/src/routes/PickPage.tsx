@@ -5,7 +5,8 @@ import { requestPick, type PickRequest, type PickResult } from "../api/pick";
 import { searchTags } from "../api/tags";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
-import { chipAction, chipToggle } from "../a11y/chipToggle";
+import { chipAction, chipClass, chipToggle } from "../a11y/chipToggle";
+import { useRadioGroup } from "../a11y/radioGroup";
 import { CATEGORY_PRESETS } from "../constants";
 import KakaoMap from "../maps/KakaoMap";
 import "./PickPage.css";
@@ -30,6 +31,10 @@ export default function PickPage() {
   const [excludeTags, setExcludeTags] = useState<TagSummary[]>([]);
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
+  // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
+  // 별도 요소라 legend가 자동으로 붙지 않는다.
+  const distanceLabelId = useId();
+  const distanceGroup = useRadioGroup(DISTANCE_OPTIONS, maxDistance, setMaxDistance);
 
   // ---- 슬롯머신 연출 상태 ----
   const [spinning, setSpinning] = useState(false);
@@ -176,7 +181,7 @@ export default function PickPage() {
         />
 
         <fieldset>
-          <legend>거리</legend>
+          <legend id={distanceLabelId}>거리</legend>
           <label className="pick-distance-toggle">
             <input
               type="checkbox"
@@ -194,13 +199,18 @@ export default function PickPage() {
             </p>
           )}
           {geo.status === "ready" && (
-            <div className="chip-row">
-              {DISTANCE_OPTIONS.map((meters) => (
+            /* 여기는 토글 버튼 무리가 아니라 단일 선택 그룹이다 — 항상 정확히 하나가
+               선택돼 있고 해제할 수단이 없다. aria-pressed로 두면 스크린리더가
+               "500m 이내, 눌림"만 읽고 방금 300m가 풀렸다는 사실은 전달되지 않아,
+               선택이 옮겨 간 것이 아니라 하나가 더 켜진 것처럼 들린다.
+               역할과 함께 화살표 키 이동·roving tabindex도 온다 — 근거는 useRadioGroup. */
+            <div className="chip-row" {...distanceGroup.groupProps} aria-labelledby={distanceLabelId}>
+              {DISTANCE_OPTIONS.map((meters, index) => (
                 <button
                   key={meters}
                   type="button"
-                  {...chipToggle(maxDistance === meters)}
-                  onClick={() => setMaxDistance(meters)}
+                  className={chipClass(maxDistance === meters)}
+                  {...distanceGroup.radioProps(meters, index)}
                 >
                   {formatDistance(meters)} 이내
                 </button>
