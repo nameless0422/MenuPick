@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 import type { MenuDetail } from "./menus";
 
 // 백엔드 PickRequest record와 1:1 대응 — 모든 필드는 선택이며,
@@ -32,7 +32,7 @@ export interface PickResult {
 
 export async function requestPick(request: PickRequest) {
   const res = await http.post<ApiResponse<PickResult>>("/api/v1/pick", request);
-  return res.data.data!;
+  return unwrap(res);
 }
 
 // PickResponse.DemoPickResult — 저장되지 않는 시연 결과라 id도 historyId도 없다
@@ -45,5 +45,5 @@ export interface DemoPickResult {
 // 401 재발급 경로를 타지 않는다.
 export async function requestDemoPick() {
   const res = await http.get<ApiResponse<DemoPickResult>>("/api/v1/pick/demo");
-  return res.data.data!;
+  return unwrap(res);
 }

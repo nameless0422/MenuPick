@@ -236,3 +236,91 @@ describe("콜백 화면의 문서 제목", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * 동의 화면에서 "취소"를 누르면 제공자는 code 대신 error를 싣고 돌아온다
+ * (카카오·구글 모두 OAuth 2.0 규격대로 `error=access_denied`, state는 그대로 echo).
+ * 이 분기가 없으면 "인가 코드가 없습니다"라는 기술적 문구가 떠서, 스스로 취소한
+ * 사용자가 무언가 고장 난 줄 알고 같은 버튼을 다시 누른다.
+ */
+describe("OAuthCallbackPage - 제공자가 error를 실어 보낸 경우", () => {
+  function renderWithError(state: string | null, error: string) {
+    const query = new URLSearchParams();
+    if (state !== null) query.set("state", state);
+    query.set("error", error);
+    query.set("error_description", "User denied access");
+
+    return render(
+      <MemoryRouter initialEntries={[`/oauth/kakao/callback?${query}`]}>
+        <Routes>
+          <Route path="/oauth/kakao/callback" element={<OAuthCallbackPage provider="kakao" />} />
+          <Route path="/login" element={<Landing label="로그인 화면" />} />
+          <Route path="/settings" element={<Landing label="설정 화면" />} />
+          <Route path="/menus" element={<Landing label="메뉴 화면" />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("로그인 취소는 '취소했다'고 알리고 서버로는 아무것도 보내지 않는다", async () => {
+    const state = startedState(loginAuthorizeUrl("kakao"));
+
+    renderWithError(state, "access_denied");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/취소/);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/인가 코드/);
+    expect(loginWithOAuthMock).not.toHaveBeenCalled();
+  });
+
+  it("연동 취소는 설정 화면 얘기를 하고 돌아가기도 설정으로 간다", async () => {
+    // 연동하러 온 사람에게 "로그인 화면에서 다시"라고 하면, 이미 로그인돼 있는 사용자가
+    // 로그인 화면으로 갔다가 그대로 튕겨 나온다.
+    const state = startedState(linkAuthorizeUrl("kakao"));
+
+    renderWithError(state, "access_denied");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/연동을 취소/);
+    expect(screen.getByRole("heading")).toHaveTextContent("연동하지 못했습니다");
+    expect(screen.getByRole("link", { name: "돌아가기" })).toHaveAttribute("href", "/settings");
+    expect(linkSocialAccountMock).not.toHaveBeenCalled();
+  });
+
+  it("취소가 아닌 오류는 코드를 남겨 되짚을 수 있게 한다", async () => {
+    const state = startedState(loginAuthorizeUrl("kakao"));
+
+    renderWithError(state, "invalid_scope");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid_scope");
+  });
+
+  it("제공자가 준 코드를 그대로 화면에 싣지 않는다", async () => {
+    // error 값은 제공자(그리고 주소창)가 정한다 — 문자 집합과 길이를 좁혀서 넣는다.
+    const state = startedState(loginAuthorizeUrl("kakao"));
+
+    renderWithError(state, "<img src=x onerror=alert(1)>");
+
+    const alert = await screen.findByRole("alert");
+    // 마크업으로 읽힐 문자는 문구에 남지 않고, 요소도 들어오지 않는다.
+    expect(alert.textContent).not.toMatch(/[<>"'`=/]/);
+    expect(alert.querySelector("*")).toBeNull();
+  });
+
+  it("긴 코드는 잘라서 싣는다", async () => {
+    const state = startedState(loginAuthorizeUrl("kakao"));
+
+    renderWithError(state, "e".repeat(500));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent!.length).toBeLessThan(100);
+  });
+
+  it("state가 어긋나도 '요청이 유효하지 않다'가 아니라 취소로 안내한다", async () => {
+    // 서버로 보낼 인가 코드 자체가 없는 경로다 — CSRF로 볼 것이 없는데
+    // 취소한 사용자에게 보안 실패처럼 들리는 문구를 내밀 이유가 없다.
+    startedState(loginAuthorizeUrl("kakao"));
+
+    renderWithError("남의-state", "access_denied");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/취소/);
+  });
+});

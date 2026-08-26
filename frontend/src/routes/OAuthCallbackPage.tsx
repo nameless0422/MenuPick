@@ -16,6 +16,29 @@ const DEFAULT_LANDING = "/menus";
 /** 연동은 설정 화면에서 시작하므로 끝난 자리도 거기다. */
 const SETTINGS = "/settings";
 
+/** 사용자가 동의 화면에서 "취소"를 눌렀을 때 카카오·구글이 공통으로 싣는 값(OAuth 2.0 규격). */
+const ACCESS_DENIED = "access_denied";
+
+/**
+ * 제공자가 `error` 파라미터에 실어 보낸 실패를 사용자 문구로 옮긴다.
+ *
+ * 함께 오는 `error_description`은 쓰지 않는다 — 제공자가 정하는 영어 문장이라 한국어 화면
+ * 한복판에 그대로 얹히고, 내용도 우리가 통제하지 않는다. 대신 코드만 괄호에 남겨 문의가
+ * 왔을 때 되짚을 수 있게 한다. 그 코드 역시 제공자(그리고 주소창)가 정하는 값이라
+ * 화면에 넣기 전에 문자 집합과 길이를 좁힌다.
+ */
+function providerErrorMessage(code: string, linking: boolean): string {
+  if (code === ACCESS_DENIED) {
+    return linking
+      ? "연동을 취소했습니다. 다시 하시려면 설정에서 연동을 눌러주세요."
+      : "소셜 로그인을 취소했습니다. 다시 하시려면 로그인 화면에서 눌러주세요.";
+  }
+  const safeCode = code.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+  return safeCode
+    ? `제공자가 요청을 처리하지 못했습니다. (${safeCode})`
+    : "제공자가 요청을 처리하지 못했습니다.";
+}
+
 export default function OAuthCallbackPage({ provider }: { provider: Provider }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -39,17 +62,34 @@ export default function OAuthCallbackPage({ provider }: { provider: Provider }) 
     // state를 먼저 대조한다 — 우리가 시작하지 않은 로그인(로그인 CSRF)이면
     // 인가 코드를 서버로 보내지 않고 여기서 끊는다. 통과하면 시작할 때의 모드를 돌려준다.
     const mode = consumeOAuthRequest(provider, searchParams.get("state"));
-    // 규칙(set-state-in-effect)은 "렌더에서 파생하라"고 하지만 여기서는 그럴 수 없다.
-    // consumeOAuthRequest는 이름 그대로 1회성 소비라 렌더 중에 부르면 StrictMode의 이중
-    // 렌더에서 두 번 소비돼 멀쩡한 로그인이 CSRF로 오인돼 끊긴다. 아래 인가 코드 검사도
-    // 같은 이유로 못 올라간다 — state 대조를 통과한 뒤에야 볼 값이라 순서가 곧 의미다.
+    // 아래 setError들이 규칙(set-state-in-effect)을 어기는 것처럼 보이지만, "렌더에서
+    // 파생하라"를 여기서는 지킬 수 없다. consumeOAuthRequest는 이름 그대로 1회성 소비라
+    // 렌더 중에 부르면 StrictMode의 이중 렌더에서 두 번 소비돼, 멀쩡한 로그인이 CSRF로
+    // 오인돼 끊긴다. 뒤따르는 검사들도 그 결과에 매달려 있어 함께 못 올라간다 —
+    // state 대조를 통과한 뒤에야 볼 값들이라 순서가 곧 의미다.
     // 마운트 시 한 번 돌리는 외부 작업의 실패 분기이므로 effect가 맞는 자리다.
-    if (!mode) {
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (mode === "link") setRetryPath(SETTINGS);
+
+    // 동의 화면에서 "취소"를 누르면 제공자는 code 대신 error를 싣고 돌아온다. 이 분기가
+    // 없으면 아래 "인가 코드가 없습니다"에 걸려, 스스로 취소한 사용자가 무언가 고장 난 줄
+    // 알고 같은 버튼을 다시 누른다. state 대조 뒤에 두는 이유는 두 가지다 —
+    // 어느 모드로 왔는지 알아야 문구와 돌아갈 자리가 정해지고(모르면 연동하러 온 사람에게
+    // 로그인 얘기를 한다), 저장된 state를 그 자리에서 함께 비워야 다음 시도에 남지 않는다.
+    // state가 어긋나 mode가 null이어도 이 분기를 먼저 태운다: 서버로 보낼 인가 코드 자체가
+    // 없는 경로라 CSRF로 볼 것이 없고, 취소한 사용자에게 "요청이 유효하지 않습니다"라고
+    // 하는 쪽이 더 나쁘다.
+    const providerError = searchParams.get("error");
+    if (providerError) {
       // oxlint-disable-next-line react/set-state-in-effect
+      setError(providerErrorMessage(providerError, mode === "link"));
+      return;
+    }
+
+    if (!mode) {
       setError(INVALID_REQUEST_MESSAGE);
       return;
     }
-    if (mode === "link") setRetryPath(SETTINGS);
 
     const code = searchParams.get("code");
     if (!code) {

@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 
 export interface TagSummary {
   id: number;
@@ -42,22 +42,22 @@ export async function fetchMenus(cursor?: number, size = 20) {
   const res = await http.get<ApiResponse<MenuListResponse>>("/api/v1/menus", {
     params: { cursor, size },
   });
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function fetchMenu(menuId: number) {
   const res = await http.get<ApiResponse<MenuDetail>>(`/api/v1/menus/${menuId}`);
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function createMenu(request: MenuCreateRequest) {
   const res = await http.post<ApiResponse<MenuDetail>>("/api/v1/menus", request);
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function updateMenu(menuId: number, request: MenuUpdateRequest) {
   const res = await http.put<ApiResponse<MenuDetail>>(`/api/v1/menus/${menuId}`, request);
-  return res.data.data!;
+  return unwrap(res);
 }
 
 export async function deleteMenu(menuId: number) {

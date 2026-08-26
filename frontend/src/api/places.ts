@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 
 // 백엔드가 카카오 로컬 API 응답(KakaoLocalResponse)을 그대로 프록시한다.
 // DTO의 @JsonProperty가 직렬화에도 적용되므로 JSON 키는 카카오 원본과 같은 snake_case다.
@@ -34,5 +34,5 @@ export async function searchPlacesByKeyword(query: string) {
     "/api/v1/kakao/search/keyword",
     { params: { query } },
   );
-  return res.data.data!;
+  return unwrap(res);
 }

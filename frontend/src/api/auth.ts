@@ -1,4 +1,4 @@
-import { http, type ApiResponse } from "./http";
+import { http, unwrap, type ApiResponse } from "./http";
 
 export type Provider = "kakao" | "google";
 
@@ -49,7 +49,7 @@ export async function loginWithOAuth(provider: Provider, code: string) {
   const res = await http.post<ApiResponse<{ accessToken: string }>>(`/api/v1/auth/${provider}`, {
     code,
   });
-  return res.data.data!.accessToken;
+  return unwrap(res).accessToken;
 }
 
 // ---- 소셜 계정 연동 ----
@@ -77,7 +77,7 @@ export async function linkSocialAccount(provider: Provider, code: string): Promi
     `/api/v1/auth/${provider}/link`,
     { code },
   );
-  const data = res.data.data!;
+  const data = unwrap(res);
   return { linkedProviders: toProviders(data.linkedProviders), accessToken: data.accessToken };
 }
 
@@ -86,7 +86,7 @@ export async function unlinkSocialAccount(provider: Provider): Promise<LinkResul
   const res = await http.delete<ApiResponse<{ linkedProviders: string[]; accessToken: string }>>(
     `/api/v1/auth/${provider}/link`,
   );
-  const data = res.data.data!;
+  const data = unwrap(res);
   return { linkedProviders: toProviders(data.linkedProviders), accessToken: data.accessToken };
 }
 
@@ -101,7 +101,7 @@ export async function login(email: string, password: string) {
     email,
     password,
   });
-  return res.data.data!.accessToken;
+  return unwrap(res).accessToken;
 }
 
 /** 메일 링크의 토큰으로 인증을 마치고 곧바로 로그인한다. */
@@ -109,7 +109,7 @@ export async function verifyEmail(token: string) {
   const res = await http.post<ApiResponse<{ accessToken: string }>>("/api/v1/auth/verify-email", {
     token,
   });
-  return res.data.data!.accessToken;
+  return unwrap(res).accessToken;
 }
 
 export async function resendVerification(email: string) {
@@ -125,7 +125,7 @@ export async function confirmPasswordReset(token: string, newPassword: string) {
     "/api/v1/auth/password-reset/confirm",
     { token, newPassword },
   );
-  return res.data.data!.accessToken;
+  return unwrap(res).accessToken;
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {
@@ -133,14 +133,14 @@ export async function changePassword(currentPassword: string, newPassword: strin
     currentPassword,
     newPassword,
   });
-  return res.data.data!.accessToken;
+  return unwrap(res).accessToken;
 }
 
 export async function fetchMe(): Promise<Me> {
   const res = await http.get<ApiResponse<Omit<Me, "linkedProviders"> & { linkedProviders: string[] }>>(
     "/api/v1/auth/me",
   );
-  const me = res.data.data!;
+  const me = unwrap(res);
   return { ...me, linkedProviders: toProviders(me.linkedProviders) };
 }
 

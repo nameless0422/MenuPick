@@ -16,6 +16,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -107,6 +108,78 @@ class RestaurantControllerTest extends AbstractControllerTest {
                                         new BigDecimal("37.5"), new BigDecimal("127.0"),
                                         null, null))))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * naverUrl은 화면에서 그대로 {@code <a href>}가 된다. 길이만 보고 통과시키면
+     * {@code javascript:}를 저장해 자기 브라우저에서 스크립트를 돌릴 수 있고(self-XSS),
+     * 공유·추천처럼 남의 식당이 내 화면에 그려지는 기능이 붙는 순간 저장형 XSS가 된다.
+     */
+    @Test
+    @DisplayName("POST /api/v1/restaurants - naverUrl이 javascript: 스킴이면 400")
+    void createRestaurant_javascriptUrl_rejected() throws Exception {
+        mockMvc.perform(post("/api/v1/restaurants")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RestaurantRequest.Create("진주회관", null, null,
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"),
+                                        "javascript:alert(document.cookie)", null))))
+                .andExpect(status().isBadRequest());
+
+        verify(restaurantService, never()).createRestaurant(any(), any());
+    }
+
+    @Test
+    @DisplayName("PUT /api/v1/restaurants/{id} - 수정에서도 스킴을 본다")
+    void updateRestaurant_javascriptUrl_rejected() throws Exception {
+        // 생성만 막으면 만들고 나서 고치는 경로로 그대로 들어온다.
+        mockMvc.perform(put("/api/v1/restaurants/1")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RestaurantRequest.Update("진주회관", null, null,
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"),
+                                        "javascript:alert(1)"))))
+                .andExpect(status().isBadRequest());
+
+        verify(restaurantService, never()).updateRestaurant(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/restaurants - 공백을 끼워 스킴을 감춰도 400")
+    void createRestaurant_whitespaceObfuscatedUrl_rejected() throws Exception {
+        // 브라우저는 href를 읽을 때 스킴 안의 탭·개행을 지우고 javascript로 정규화한다.
+        mockMvc.perform(post("/api/v1/restaurants")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RestaurantRequest.Create("진주회관", null, null,
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"),
+                                        "java\tscript:alert(1)", null))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/restaurants - 링크 없음(null·빈 문자열)은 그대로 통과한다")
+    void createRestaurant_blankUrl_allowed() throws Exception {
+        // 화면은 "지도 링크 없음"을 빈 입력으로 보낸다. @Pattern은 null만 건너뛰므로
+        // 빈 문자열을 함께 허용해 두지 않으면 링크 없는 저장이 전부 400이 된다.
+        var created = new RestaurantResponse.RestaurantDetail(
+                1L, "진주회관", null, null,
+                new BigDecimal("37.5"), new BigDecimal("127.0"),
+                null, null, LocalDateTime.now(), LocalDateTime.now());
+        given(restaurantService.createRestaurant(eq(1L), any(RestaurantRequest.Create.class)))
+                .willReturn(new RestaurantService.CreateResult(created, true));
+
+        mockMvc.perform(post("/api/v1/restaurants")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RestaurantRequest.Create("진주회관", null, null,
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"),
+                                        "", null))))
+                .andExpect(status().isCreated());
     }
 
     @Test

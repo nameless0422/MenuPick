@@ -748,3 +748,44 @@ describe("카드의 수정 버튼", () => {
     expect(await screen.findByRole("heading", { name: "식당 수정" })).toBeInTheDocument();
   });
 });
+
+/**
+ * `naverUrl`은 카드에서 그대로 `<a href>`가 된다. 정상 경로에서는 카카오 장소 검색이 준
+ * https만 들어가지만, 값 자체는 사용자가 정하는 필드다 — API를 직접 호출해 `javascript:`를
+ * 저장하면 클릭 한 번에 우리 오리진에서 스크립트가 돈다(self-XSS). 지금은 자기 데이터만
+ * 자기가 보므로 피해가 자신에게 갇히지만, 공유·추천처럼 남의 식당이 내 화면에 그려지는
+ * 기능이 하나 붙는 순간 저장형 XSS가 된다.
+ */
+describe("지도 보기 링크", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    fetchRestaurantsMock.mockResolvedValue([JINJU]);
+  });
+
+  it("https 주소면 링크를 건다", async () => {
+    fetchRestaurantMock.mockResolvedValue({
+      ...jinjuDetail,
+      naverUrl: "https://place.map.kakao.com/12345",
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    const link = await screen.findByRole("link", { name: "진주회관 지도 보기 (새 창)" });
+    expect(link).toHaveAttribute("href", "https://place.map.kakao.com/12345");
+  });
+
+  it("javascript: 주소는 링크로 걸지 않는다", async () => {
+    fetchRestaurantMock.mockResolvedValue({
+      ...jinjuDetail,
+      naverUrl: "javascript:alert(document.cookie)",
+    });
+
+    renderWithProviders(<RestaurantsPage />);
+
+    // 카드 자체는 그대로 떠야 한다 — 지도 보기는 부가 정보라 없어도 나머지를 쓸 수 있다.
+    expect(await screen.findByText("진주회관")).toBeInTheDocument();
+    await waitFor(() => expect(fetchRestaurantMock).toHaveBeenCalled());
+    expect(screen.queryByRole("link", { name: /지도 보기/ })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
+  });
+});

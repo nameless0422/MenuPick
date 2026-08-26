@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
-import { apiErrorMessage, http, setAccessToken, setSessionExpiredHandler } from "./http";
+import {
+  apiErrorMessage,
+  http,
+  setAccessToken,
+  setSessionExpiredHandler,
+  unwrap,
+  type ApiResponse,
+} from "./http";
 
 // 실제 네트워크 대신 adapter를 갈아 끼운다. 여기서 확인하려는 건 서버의 동작이 아니라
 // "인터셉터가 어떤 요청을 몇 번 보내는가"라서, 나간 요청 목록만 정확히 보이면 충분하다.
@@ -161,5 +168,107 @@ describe("apiErrorMessage", () => {
 
     expect(message).not.toContain("502");
     expect(message).toContain("서버");
+  });
+});
+
+describe("401 재시도 — 토큰이 이미 갈린 경우", () => {
+  /**
+   * 화면 하나가 병렬로 부르는 쿼리 서너 개가 동시에 만료를 만나는 것은 흔한 일이다.
+   * 그 401들은 몇십~몇백 ms씩 어긋나 도착하는데, refreshPromise는 .finally에서 즉시
+   * 비워지므로 "완전히 겹친" 것만 하나로 합쳐진다. 나머지는 각자 refresh를 부르고,
+   * /auth/refresh는 인증 버킷(IP당 분당 10회)에 있어 공유 NAT에서는 화면 몇 번 여는
+   * 것만으로 429에 닿는다 — 그때부터 로그인·가입·비밀번호 재설정까지 함께 막힌다.
+   */
+  it("401이 시차를 두고 도착해도 refresh는 한 번만 나간다", async () => {
+    let releaseSecond: () => void = () => {};
+    const secondBlocked = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+
+    setAccessToken("옛토큰");
+    installAdapter(async (config) => {
+      if (config.url === "/api/v1/auth/refresh") {
+        return ok(config, { success: true, data: { accessToken: "새토큰" } });
+      }
+      if (config.headers.Authorization === "Bearer 옛토큰") {
+        // 두 번째 요청의 401만 늦게 도착시킨다 — 첫 번째의 재발급이 이미 끝난 뒤다.
+        if (config.url === "/api/v1/menus") await secondBlocked;
+        throw fail(config, 401, { success: false, message: "인증이 필요합니다." });
+      }
+      return ok(config, { success: true, data: [] });
+    });
+
+    // 둘 다 옛 토큰을 달고 나간다(어댑터가 같은 틱에 호출된다).
+    const first = http.get("/api/v1/tags");
+    const second = http.get("/api/v1/menus");
+
+    await first;
+    releaseSecond();
+    await second;
+
+    expect(calls.filter((call) => call.includes("/auth/refresh"))).toHaveLength(1);
+    // 두 번째 요청은 버려지지 않고 새 토큰으로 다시 나가야 한다.
+    expect(calls.filter((call) => call === "GET /api/v1/menus")).toHaveLength(2);
+  });
+
+  it("토큰이 그대로면(진짜 만료) refresh를 부른다", async () => {
+    // 위 최적화가 "토큰이 다르면 재발급을 건너뛴다"로 새어 나가면 안 된다.
+    setAccessToken("옛토큰");
+    installAdapter(async (config) => {
+      if (config.url === "/api/v1/auth/refresh") {
+        return ok(config, { success: true, data: { accessToken: "새토큰" } });
+      }
+      if (config.headers.Authorization === "Bearer 옛토큰") {
+        throw fail(config, 401, { success: false, message: "인증이 필요합니다." });
+      }
+      return ok(config, { success: true, data: [] });
+    });
+
+    await http.get("/api/v1/menus");
+
+    expect(calls).toEqual([
+      "GET /api/v1/menus",
+      "POST /api/v1/auth/refresh",
+      "GET /api/v1/menus",
+    ]);
+  });
+});
+
+describe("unwrap", () => {
+  const config = { headers: {} } as InternalAxiosRequestConfig;
+
+  function response<T>(body: unknown): AxiosResponse<ApiResponse<T>> {
+    return { data: body, status: 200, statusText: "OK", headers: {}, config } as AxiosResponse<
+      ApiResponse<T>
+    >;
+  }
+
+  it("data가 있으면 그대로 꺼낸다", () => {
+    expect(unwrap(response<{ id: number }>({ success: true, data: { id: 7 } }))).toEqual({ id: 7 });
+  });
+
+  it("data 없이 온 200은 한국어 문구를 달고 API 경계에서 끊긴다", () => {
+    // 예전 `res.data.data!`는 undefined를 그대로 통과시켜, 실패가 화면 렌더 중에
+    // "Cannot read properties of undefined"로 드러났다 — 사용자가 보는 건 전면 오류 화면이다.
+    expect(() => unwrap(response({ success: true }))).toThrowError(/서버 응답이 비어 있습니다/);
+  });
+
+  it("data: null도 같은 실패로 본다", () => {
+    expect(() => unwrap(response({ success: true, data: null }))).toThrowError(
+      /서버 응답이 비어 있습니다/,
+    );
+  });
+
+  it("unwrap이 던진 문구는 apiErrorMessage가 그대로 화면에 올린다", () => {
+    // 화면들은 catch에서 apiErrorMessage로 문구를 만든다. 여기서 영어가 새면
+    // 한국어 화면 한복판에 axios 문구가 뜨는 원래 문제로 되돌아간다.
+    let thrown: unknown;
+    try {
+      unwrap(response({ success: true }));
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(apiErrorMessage(thrown)).toMatch(/서버 응답이 비어 있습니다/);
   });
 });
