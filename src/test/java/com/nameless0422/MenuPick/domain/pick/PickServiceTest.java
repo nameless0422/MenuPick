@@ -19,8 +19,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -87,8 +89,7 @@ class PickServiceTest {
     @Test
     @DisplayName("필터 없이 랜덤 픽 성공")
     void pick_noFilter_success() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu, chineseMenu));
+        givenCandidates(List.of(koreanMenu, japaneseMenu, chineseMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -100,57 +101,8 @@ class PickServiceTest {
         verify(historyRepository).save(any(History.class));
     }
 
-    @Test
-    @DisplayName("카테고리 필터 적용 — KOREAN만 선택하면 한식 메뉴만 픽")
-    void pick_categoryFilter() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu, chineseMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
-        PickRequest request = new PickRequest(Set.of("KOREAN"), null, null, null, null, null);
-        PickResponse.PickResult result = pickService.pick(1L, request);
 
-        assertThat(result.menu().name()).isEqualTo("김치찌개");
-    }
-
-    @Test
-    @DisplayName("태그 포함 필터 적용")
-    void pick_tagIncludeFilter() {
-        koreanMenu.addTag(tag1);
-        koreanMenu.addTag(tag2);
-        japaneseMenu.addTag(tag1);
-
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu, chineseMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
-
-        // tag1 AND tag2 → 김치찌개만 둘 다 가지고 있음
-        PickRequest request = new PickRequest(null, Set.of(1L, 2L), null, null, null, null);
-        PickResponse.PickResult result = pickService.pick(1L, request);
-
-        assertThat(result.menu().name()).isEqualTo("김치찌개");
-    }
-
-    @Test
-    @DisplayName("태그 제외 필터 적용")
-    void pick_tagExcludeFilter() {
-        koreanMenu.addTag(tag2); // 매운 태그
-        japaneseMenu.addTag(tag1);
-        chineseMenu.addTag(tag1);
-
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu, chineseMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
-
-        // 매운(tag2) 제외 → 초밥 or 짜장면
-        PickRequest request = new PickRequest(null, null, Set.of(2L), null, null, null);
-        PickResponse.PickResult result = pickService.pick(1L, request);
-
-        assertThat(result.menu().name()).isIn("초밥", "짜장면");
-    }
 
     @Test
     @DisplayName("거리 필터 적용 — Haversine으로 가까운 식당 연결된 메뉴만")
@@ -174,8 +126,7 @@ class PickServiceTest {
         setMenuRestaurants(japaneseMenu, List.of(
                 MenuRestaurant.builder().menu(japaneseMenu).restaurant(farRestaurant).build()));
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu));
+        givenCandidates(List.of(koreanMenu, japaneseMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -214,8 +165,7 @@ class PickServiceTest {
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(near).build(),
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(far).build()));
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -249,8 +199,7 @@ class PickServiceTest {
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(near).build(),
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(far).build()));
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -267,8 +216,7 @@ class PickServiceTest {
     @Test
     @DisplayName("후보가 없으면 NO_PICK_CANDIDATES 예외 발생")
     void pick_noCandidates_throwsException() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of());
+        givenCandidates(List.of());
 
         assertThatThrownBy(() -> pickService.pick(1L, null))
                 .isInstanceOf(BusinessException.class)
@@ -279,8 +227,7 @@ class PickServiceTest {
     @DisplayName("weight 가중 랜덤 — weight 높은 메뉴가 더 자주 선택됨")
     void pick_weightedRandom() {
         // koreanMenu weight=3, japaneseMenu weight=1
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu));
+        givenCandidates(List.of(koreanMenu, japaneseMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -300,8 +247,7 @@ class PickServiceTest {
     void pick_savesHistoryWithFilterConditions() {
         koreanMenu.addTag(tag1);
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -332,8 +278,7 @@ class PickServiceTest {
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(farRestaurant).build(),
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(nearRestaurant).build()));
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -358,8 +303,7 @@ class PickServiceTest {
         setMenuRestaurants(koreanMenu, List.of(
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(only).build()));
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -388,8 +332,7 @@ class PickServiceTest {
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(r1).build(),
                 MenuRestaurant.builder().menu(koreanMenu).restaurant(r2).build()));
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -406,8 +349,7 @@ class PickServiceTest {
     @Test
     @DisplayName("식당이 없는 메뉴 — 거리 필터 시 제외됨")
     void pick_menuWithoutRestaurants_filteredOutByDistance() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
 
         PickRequest request = new PickRequest(null, null, null,
                 new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
@@ -424,44 +366,13 @@ class PickServiceTest {
         assertThat(dist).isEqualTo(0.0);
     }
 
+
+    /** 조건에 맞는 메뉴가 없으면 "없다"는 답이 나가야 한다 — 조회가 비는 것은 오류가 아니다. */
     @Test
-    @DisplayName("모든 필터를 복합 적용 — 카테고리 + 태그 포함 + 거리")
-    void pick_combinedFilters() {
-        koreanMenu.addTag(tag1);
-        Restaurant nearRestaurant = Restaurant.builder()
-                .user(user).name("근처식당").address("서울")
-                .latitude(new BigDecimal("37.5670")).longitude(new BigDecimal("126.9790"))
-                .build();
-        setId(nearRestaurant, 1L);
-        setMenuRestaurants(koreanMenu, List.of(
-                MenuRestaurant.builder().menu(koreanMenu).restaurant(nearRestaurant).build()));
-
-        japaneseMenu.addTag(tag1);
-        Restaurant farRestaurant = Restaurant.builder()
-                .user(user).name("먼식당").address("부산")
-                .latitude(new BigDecimal("35.1796")).longitude(new BigDecimal("129.0756"))
-                .build();
-        setId(farRestaurant, 2L);
-        setMenuRestaurants(japaneseMenu, List.of(
-                MenuRestaurant.builder().menu(japaneseMenu).restaurant(farRestaurant).build()));
-
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
-
-        PickRequest request = new PickRequest(Set.of("KOREAN"), Set.of(1L), null,
-                new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
-        PickResponse.PickResult result = pickService.pick(1L, request);
-
-        assertThat(result.menu().name()).isEqualTo("김치찌개");
-    }
-
-    @Test
-    @DisplayName("필터 후 모든 후보 제거 시 NO_PICK_CANDIDATES")
+    @DisplayName("조건에 맞는 후보가 하나도 없으면 NO_PICK_CANDIDATES")
     void pick_allFilteredOut_throwsException() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu));
+        // 조건은 SQL이 건다. 아무것도 안 맞는 요청은 조회가 빈 목록으로 돌아오는 모습이 된다.
+        givenCandidates(List.of());
 
         PickRequest request = new PickRequest(Set.of("ITALIAN"), null, null, null, null, null);
 
@@ -470,46 +381,12 @@ class PickServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
     }
 
-    @Test
-    @DisplayName("메뉴가 여러 카테고리를 가진 경우 — OR 로직")
-    void pick_menuWithMultipleCategories_matchesAny() {
-        koreanMenu.addCategory("FUSION");
 
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
-
-        PickRequest request = new PickRequest(Set.of("FUSION"), null, null, null, null, null);
-        PickResponse.PickResult result = pickService.pick(1L, request);
-
-        assertThat(result.menu().name()).isEqualTo("김치찌개");
-    }
-
-    @Test
-    @DisplayName("태그 포함 + 제외 동시 적용")
-    void pick_tagIncludeAndExclude_combined() {
-        koreanMenu.addTag(tag1);
-        koreanMenu.addTag(tag2);
-        japaneseMenu.addTag(tag1);
-
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu, japaneseMenu, chineseMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
-
-        // tag1 포함 + tag2 제외 → japaneseMenu만
-        PickRequest request = new PickRequest(null, Set.of(1L), Set.of(2L), null, null, null);
-        PickResponse.PickResult result = pickService.pick(1L, request);
-
-        assertThat(result.menu().name()).isEqualTo("초밥");
-    }
 
     @Test
     @DisplayName("추천 시각은 주입된 Clock(KST) 기준으로 기록한다")
     void pick_recordsRecommendedAtFromClock() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -519,6 +396,22 @@ class PickServiceTest {
         verify(historyRepository).save(captor.capture());
         assertThat(captor.getValue().getRecommendedAt())
                 .isEqualTo(LocalDateTime.of(2026, 1, 15, 0, 30));
+    }
+
+    /**
+     * 후보 조회 스텁.
+     *
+     * <p>필터가 붙은 픽은 Specification 조회를, 붙지 않은 픽은 파생 쿼리를 탄다 — 어느 쪽으로
+     * 들어와도 같은 목록을 돌려준다. 이 파일이 보는 것은 "무엇이 걸러지는가"가 아니라 그 뒤의
+     * 처리(가중 랜덤·결과 목록·히스토리)이므로 여기서 조건을 흉내 낼 이유가 없고, 흉내 내면
+     * 오히려 "테스트가 정한 필터"를 검증하게 된다. 조건 자체는 실 MySQL 위에서 본다 —
+     * {@code PickCandidateQueryTest}.
+     */
+    private void givenCandidates(List<Menu> candidates) {
+        lenient().when(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
+                .thenReturn(candidates);
+        lenient().when(menuRepository.findAll(ArgumentMatchers.<Specification<Menu>>any()))
+                .thenReturn(candidates);
     }
 
     // --- 리플렉션 헬퍼 ---
@@ -545,25 +438,6 @@ class PickServiceTest {
 
     // --- 카테고리 정규화 (#87) ---
 
-    /**
-     * 저장 경로(MenuService.normalizeCategories)는 저장 직전에 trim한다. 요청 쪽을 맞추지
-     * 않으면 [" KOREAN"]이 @NotBlank를 통과하고도 저장된 "KOREAN"과 매칭되지 않아
-     * NO_PICK_CANDIDATES가 난다 — 사용자는 분명히 있는 메뉴를 두고 "조건에 맞는 메뉴가 없다"는
-     * 답을 받고, 무엇이 잘못됐는지 알 방법이 없다.
-     */
-    @Test
-    @DisplayName("카테고리 앞뒤 공백은 무시된다 — 저장된 값과 같은 모양으로 비교한다")
-    void pick_trimsRequestedCategories() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
-        given(userRepository.getReferenceById(1L)).willReturn(user);
-        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
-
-        PickRequest request = new PickRequest(Set.of("  KOREAN  "), null, null, null, null, null);
-        PickResponse.PickResult result = pickService.pick(1L, request);
-
-        assertThat(result.menu().name()).isEqualTo("김치찌개");
-    }
 
     /**
      * 히스토리에 원본을 남기면 화면에는 " KOREAN"이 보이는데 실제로 걸린 필터는 "KOREAN"이라,
@@ -572,8 +446,7 @@ class PickServiceTest {
     @Test
     @DisplayName("히스토리에도 정규화된 카테고리가 기록된다")
     void pick_recordsNormalizedCategoryInHistory() {
-        given(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .willReturn(List.of(koreanMenu));
+        givenCandidates(List.of(koreanMenu));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         ArgumentCaptor<History> saved = ArgumentCaptor.forClass(History.class);
         given(historyRepository.save(saved.capture())).willAnswer(inv -> inv.getArgument(0));

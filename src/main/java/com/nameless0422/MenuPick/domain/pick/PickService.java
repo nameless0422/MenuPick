@@ -41,18 +41,24 @@ public class PickService {
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
-        List<Menu> candidates = menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId);
-
         // 저장 경로(MenuService.normalizeCategories)가 저장 직전에 trim하므로, 요청 쪽도 같은
         // 모양으로 맞춰야 비교가 성립한다. 맞추지 않으면 [" 한식"]이 @NotBlank를 통과하고도
         // 저장된 "한식"과 매칭되지 않아 NO_PICK_CANDIDATES가 나고, 사용자는 분명히 있는
         // 메뉴를 두고 "조건에 맞는 메뉴가 없다"는 답을 받는다. 히스토리에도 " 한식"이 남는다.
         Set<String> categories = normalizeCategories(request == null ? null : request.categories());
 
-        if (request != null) {
-            candidates = filterByCategories(candidates, categories);
-            candidates = filterByTags(candidates, request.tagIds(), request.excludeTagIds());
-            candidates = filterByDistance(candidates, request.latitude(), request.longitude(), request.maxDistance());
+        List<Menu> candidates;
+        if (request == null) {
+            candidates = menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId);
+        } else {
+            // 카테고리·태그·거리(바운딩 박스)를 전부 SQL로 내린다 — 근거는 PickCandidates.
+            candidates = menuRepository.findAll(PickCandidates.of(
+                    userId, categories, request.tagIds(), request.excludeTagIds(),
+                    request.latitude(), request.longitude(), request.maxDistance()));
+            // 박스는 반경을 감싸는 사각형일 뿐이라 모서리에 반경 밖 식당이 남는다.
+            // 정밀 판정은 여기서 한 번 더 한다 — 결과 목록을 거르는 기준과 같은 함수다.
+            candidates = filterByDistance(candidates,
+                    request.latitude(), request.longitude(), request.maxDistance());
         }
 
         if (candidates.isEmpty()) {
@@ -84,39 +90,12 @@ public class PickService {
                 .collect(Collectors.toSet());
     }
 
-    private List<Menu> filterByCategories(List<Menu> menus, Set<String> categories) {
-        if (categories == null || categories.isEmpty()) return menus;
-        return menus.stream()
-                .filter(m -> !Collections.disjoint(m.getCategories(), categories))
-                .toList();
-    }
-
-    private List<Menu> filterByTags(List<Menu> menus, Set<Long> includeTagIds, Set<Long> excludeTagIds) {
-        List<Menu> result = menus;
-
-        if (includeTagIds != null && !includeTagIds.isEmpty()) {
-            result = result.stream()
-                    .filter(m -> {
-                        Set<Long> menuTagIds = m.getTags().stream()
-                                .map(Tag::getId).collect(Collectors.toSet());
-                        return menuTagIds.containsAll(includeTagIds);
-                    })
-                    .toList();
-        }
-
-        if (excludeTagIds != null && !excludeTagIds.isEmpty()) {
-            result = result.stream()
-                    .filter(m -> {
-                        Set<Long> menuTagIds = m.getTags().stream()
-                                .map(Tag::getId).collect(Collectors.toSet());
-                        return Collections.disjoint(menuTagIds, excludeTagIds);
-                    })
-                    .toList();
-        }
-
-        return result;
-    }
-
+    /**
+     * 반경 안에 살아 있는 식당이 하나라도 있는 메뉴만 남긴다.
+     *
+     * <p>SQL의 바운딩 박스({@code PickCandidates})가 이미 대부분을 걸러 낸 뒤라 여기 들어오는
+     * 건 사각형 안의 메뉴뿐이다. 그래도 이 단계가 필요하다 — 사각형의 모서리는 반경 밖이다.
+     */
     private List<Menu> filterByDistance(List<Menu> menus, BigDecimal lat, BigDecimal lng, Integer maxDistance) {
         if (lat == null || lng == null || maxDistance == null) return menus;
         return menus.stream()

@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.menu;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -9,7 +10,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-public interface MenuRepository extends JpaRepository<Menu, Long> {
+public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificationExecutor<Menu> {
 
     List<Menu> findAllByUserIdAndDeletedAtIsNull(Long userId);
 
@@ -19,6 +20,10 @@ public interface MenuRepository extends JpaRepository<Menu, Long> {
      */
     Optional<Menu> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
 
+    /**
+     * 필터 없는 픽의 후보. 조건이 붙은 픽은 {@code PickCandidates}가 만든 Specification으로
+     * 조인까지 SQL에 내려 조회한다 — 여기서 전량을 올린 뒤 자바로 거르지 않는다.
+     */
     List<Menu> findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(Long userId);
 
     List<Menu> findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(Long userId, Pageable pageable);
