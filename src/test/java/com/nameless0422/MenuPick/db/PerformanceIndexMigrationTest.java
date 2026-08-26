@@ -16,7 +16,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 인덱스 관련 마이그레이션(V3, V6)이 실제 MySQL에 적용되는지 검증한다.
+ * 인덱스 관련 마이그레이션(V3, V6, V8)이 실제 MySQL에 적용되는지 검증한다.
  * (Testcontainers MySQL에 Flyway가 순서대로 적용한 결과를 information_schema로 확인)
  */
 @DataJpaTest
@@ -111,6 +111,59 @@ class PerformanceIndexMigrationTest extends AbstractIntegrationTest {
         // 바운딩 박스로 내리는 과제(#87)가 이 인덱스를 그대로 쓴다.
         assertThat(indexColumns("restaurants", "idx_restaurants_location"))
                 .containsExactly("user_id", "latitude", "longitude");
+    }
+
+    @Test
+    @DisplayName("겹치는 인덱스 정리 마이그레이션(V8)이 성공 상태로 기록된다")
+    void v8_isApplied() {
+        Object applied = em.createNativeQuery(
+                        "SELECT success FROM flyway_schema_history WHERE version = '8'")
+                .getSingleResult();
+
+        assertThat(applied).isNotNull();
+        boolean success = (applied instanceof Boolean b) ? b : ((Number) applied).intValue() == 1;
+        assertThat(success).isTrue();
+    }
+
+    @Test
+    @DisplayName("histories에 남는 user_id 선두 인덱스는 커서 정렬용 하나뿐이다")
+    void redundantHistoryIndexDropped() {
+        // (user_id, recommended_at DESC)는 (user_id, id DESC)와 상호 배타적 선택지였다.
+        // 남겨 두면 옵티마이저가 통계에 따라 이쪽을 골라 V3이 없앤 filesort가 되살아난다.
+        // HistoryRepository의 어떤 쿼리도 recommended_at으로 정렬하지 않는다(V8 주석의 전수 대조).
+        assertThat(indexColumns("histories", "idx_histories_user_time")).isEmpty();
+        assertThat(indexColumns("histories", "idx_histories_user_id"))
+                .containsExactly("user_id", "id");
+
+        // 이 테스트의 진짜 주장은 "둘 중 하나만 남는다"이므로, 이름을 하나씩 확인하는 것으로는
+        // 부족하다 — 나중에 세 번째 user_id 선두 인덱스가 추가되면 같은 문제가 그대로 재발한다.
+        assertThat(userIdLeadingIndexes("histories")).containsExactly("idx_histories_user_id");
+    }
+
+    @Test
+    @DisplayName("인덱스를 지워도 histories의 사용자 FK는 그대로 남는다")
+    void historyUserForeignKeySurvives() {
+        // MySQL은 FK를 떠받치는 마지막 인덱스를 지우려 하면 DDL 자체를 거부한다.
+        // 남은 idx_histories_user_id가 user_id 선두라 그 역할을 대신한다는 것을 고정한다.
+        Object constraints = em.createNativeQuery(
+                        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS "
+                                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'histories' "
+                                + "AND CONSTRAINT_NAME = 'fk_histories_user'")
+                .getSingleResult();
+
+        assertThat(((Number) constraints).intValue()).isEqualTo(1);
+    }
+
+    /** 주어진 테이블에서 첫 번째 컬럼이 user_id인 인덱스 이름들(PK 포함, 중복 없이). */
+    @SuppressWarnings("unchecked")
+    private List<String> userIdLeadingIndexes(String table) {
+        return em.createNativeQuery(
+                        "SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS "
+                                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table "
+                                + "AND SEQ_IN_INDEX = 1 AND COLUMN_NAME = 'user_id' "
+                                + "ORDER BY INDEX_NAME")
+                .setParameter("table", table)
+                .getResultList();
     }
 
     @SuppressWarnings("unchecked")

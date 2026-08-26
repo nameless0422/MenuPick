@@ -81,6 +81,13 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 	finalizedBy jacocoTestReport
+
+	// ComposePortExposureTest는 컴파일된 소스가 아니라 리포 루트의 compose 파일을 읽는다.
+	// 입력으로 선언하지 않으면 compose만 고친 변경에서 test 태스크가 UP-TO-DATE로 건너뛰어,
+	// 포트를 0.0.0.0으로 되돌려 놓고도 로컬에서는 초록불이 뜬다(실제로 그렇게 동작했다).
+	inputs.files('docker-compose.prod.yml', 'docker-compose.yml')
+			.withPropertyName('composeFiles')
+			.withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 jacocoTestReport {

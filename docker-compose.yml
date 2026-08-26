@@ -41,6 +41,12 @@ services:
   # 쓰려면 앱에 아래를 준다 (application-local.yml의 기본값은 여전히 '발송 안 함'이다):
   #   SPRING_MAIL_HOST=localhost SPRING_MAIL_PORT=1025
   # 받은 메일은 http://localhost:8025 에서 본다.
+  #
+  # 여기(로컬)에만 두고 docker-compose.prod.yml에는 넣지 않는다. 운영은 실제 SMTP로 보내므로
+  # 운영에 뜬 Mailpit은 아무것도 받지 못한 채 메모리와 포트만 차지한다(issue #87). 그런데도
+  # 로컬에서 지우지 않는 이유는, 이게 없으면 로컬 검증 경로가 "링크를 로그로 확인"뿐이라
+  # 발송 동작 자체가 한 번도 실행되지 않기 때문이다(위 문단). 운영에 필요 없다는 것과
+  # 개발에 쓸모없다는 것은 다른 얘기다.
   mailpit:
     image: axllent/mailpit:latest
     container_name: menupick-mailpit
