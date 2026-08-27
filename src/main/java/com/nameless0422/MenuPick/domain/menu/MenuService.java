@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.domain.menu;
 
+import com.nameless0422.MenuPick.common.domain.VersionGuard;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuRequest;
@@ -68,6 +69,9 @@ public class MenuService {
     @Transactional
     public MenuResponse.MenuDetail updateMenu(Long userId, Long menuId, MenuRequest.Update request) {
         Menu menu = findMenuOrThrow(userId, menuId);
+        // 아무것도 고치기 전에 확인한다. 뒤로 미루면 이미 바뀐 엔티티를 들고 예외를 던지게 되고,
+        // 같은 트랜잭션 안에서 롤백에 기대는 코드가 된다.
+        VersionGuard.requireCurrentVersion(menu.getVersion(), request.version());
 
         menu.update(request.name(), request.memo(), request.weight());
 
@@ -95,6 +99,10 @@ public class MenuService {
             newTags.forEach(menu::addTag);
         }
 
+        // 버전은 flush 시점에 올라간다. 그 전에 DTO로 옮기면 응답에 **저장 전 버전**이 실려,
+        // 화면은 방금 저장하고도 곧바로 오래된 값을 들게 된다 — 같은 폼에서 한 번 더 저장하면
+        // 아무도 건드리지 않았는데 409가 난다. 그래서 매핑 전에 flush를 강제한다.
+        menuRepository.flush();
         return toDetail(menu);
     }
 
@@ -188,7 +196,8 @@ public class MenuService {
                 Set.copyOf(menu.getCategories()),
                 toTagSummaries(menu),
                 menu.getCreatedAt(),
-                menu.getUpdatedAt());
+                menu.getUpdatedAt(),
+                menu.getVersion());
     }
 
     private List<MenuResponse.TagSummary> toTagSummaries(Menu menu) {

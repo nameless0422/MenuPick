@@ -60,6 +60,7 @@ beforeEach(() => {
       isExcluded: false,
       createdAt: "2026-01-01T00:00:00",
       updatedAt: "2026-01-01T00:00:00",
+      version: 0,
     },
     restaurants: [],
   });
@@ -184,6 +185,7 @@ describe("PickPage 결과 지도", () => {
         isExcluded: false,
         createdAt: "2026-01-01T00:00:00",
         updatedAt: "2026-01-01T00:00:00",
+        version: 0,
       },
       restaurants: [
         {
@@ -259,6 +261,7 @@ describe("픽 진행·결과 통지", () => {
         isExcluded: false,
         createdAt: "2026-01-01T00:00:00",
         updatedAt: "2026-01-01T00:00:00",
+        version: 0,
       },
       restaurants: [
         { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978, distance: null },

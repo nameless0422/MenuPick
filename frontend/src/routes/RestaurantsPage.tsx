@@ -12,7 +12,7 @@ import {
 import { searchPlacesByKeyword, type KakaoPlace } from "../api/places";
 import { createMenuRestaurant } from "../api/menuRestaurants";
 import { fetchMenus } from "../api/menus";
-import { apiErrorMessage as errorMessage } from "../api/http";
+import { apiErrorCode, apiErrorMessage as errorMessage } from "../api/http";
 import { chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
@@ -463,6 +463,7 @@ function RestaurantEditForm({
   const [address, setAddress] = useState(detail.address ?? "");
   const [phone, setPhone] = useState(detail.phone ?? "");
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
+  const queryClient = useQueryClient();
 
   // 이름이 비어 제출을 막았을 때 초점을 돌려보낼 칸과, 그 사유를 버튼·입력에 묶을 id.
   const nameRef = useRef<HTMLInputElement>(null);
@@ -481,8 +482,18 @@ function RestaurantEditForm({
         latitude: detail.latitude,
         longitude: detail.longitude,
         naverUrl: detail.naverUrl,
+        // 이 폼을 그릴 때 받은 버전. 서버는 이 값으로 "그 사이 누가 먼저 고쳤는가"를 본다.
+        version: detail.version,
       }),
     onSuccess: onSaved,
+    onError: (error) => {
+      // 409는 "그 사이 누가 먼저 고쳤다"이고, 서버 메시지가 새로고침을 안내한다. 캐시를
+      // 그대로 두면 다시 열어도 같은 낡은 값이 나와 같은 409를 반복한다.
+      if (apiErrorCode(error) === "CONCURRENT_MODIFICATION") {
+        queryClient.invalidateQueries({ queryKey: ["restaurant", detail.id] });
+        queryClient.invalidateQueries({ queryKey: ["restaurants"] });
+      }
+    },
   });
 
   // "이름이 비었다"와 "요청이 나가 있다"는 성격이 다르다. 앞은 사용자가 무엇을 더 해야

@@ -268,6 +268,6 @@ public class PickService {
                 // 넘기면 필터 없는 픽(카테고리를 한 번도 건드리지 않는 경로)에서 세션이 닫힌 뒤
                 // 초기화를 시도해 LazyInitializationException으로 500이 난다.
                 Set.copyOf(menu.getCategories()), tags,
-                menu.getCreatedAt(), menu.getUpdatedAt());
+                menu.getCreatedAt(), menu.getUpdatedAt(), menu.getVersion());
     }
 }

@@ -196,7 +196,7 @@ class MenuServiceTest {
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
-                new MenuRequest.Update("수정된 메뉴", "수정 메모", 5, true, Set.of("양식"), null));
+                new MenuRequest.Update("수정된 메뉴", "수정 메모", 5, true, Set.of("양식"), null, 0L));
 
         assertThat(result.name()).isEqualTo("수정된 메뉴");
         assertThat(result.weight()).isEqualTo(5);
@@ -210,7 +210,7 @@ class MenuServiceTest {
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> menuService.updateMenu(2L, 1L,
-                new MenuRequest.Update("수정", "", 1, false, null, null)))
+                new MenuRequest.Update("수정", "", 1, false, null, null, 0L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.MENU_NOT_FOUND);
     }
@@ -231,7 +231,7 @@ class MenuServiceTest {
         Set<Tag> tagsBefore = menu.getTags();
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
-                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("한식"), Set.of(10L)));
+                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("한식"), Set.of(10L), 0L));
 
         assertThat(result.categories()).containsExactly("한식");
         assertThat(categoriesBefore).containsExactly("한식");
@@ -245,7 +245,7 @@ class MenuServiceTest {
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
-                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("양식"), null));
+                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("양식"), null, 0L));
 
         assertThat(result.categories()).containsExactly("양식");
     }
@@ -256,7 +256,7 @@ class MenuServiceTest {
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
-                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("  한식  "), null));
+                new MenuRequest.Update("김치찌개", "맛있음", 3, false, Set.of("  한식  "), null, 0L));
 
         assertThat(result.categories()).containsExactly("한식");
     }
@@ -398,7 +398,7 @@ class MenuServiceTest {
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
 
         MenuResponse.MenuDetail result = menuService.updateMenu(1L, 1L,
-                new MenuRequest.Update("김치찌개", "메모", 3, false, null, null));
+                new MenuRequest.Update("김치찌개", "메모", 3, false, null, null, 0L));
 
         assertThat(result.categories()).isEmpty();
     }

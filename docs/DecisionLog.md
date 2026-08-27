@@ -413,7 +413,9 @@
 - **결정**: ②. `menus`, `restaurants`, `menu_restaurants` 셋이다. 판정 기준은 "사용자가 자기 자신과 겹칠 수 있는 **전체 교체** 경로가 있는가". 빼는 쪽의 근거도 함께 못 박았다 — `histories`는 쓰기가 `markVisited` 하나이고 `isVisited=true` 방향의 단조 전이라 잃을 앞선 변경이 없다. `tags`·`history_filter_conditions`는 수정 엔드포인트 자체가 없고, `users`·`auth_providers`는 사용자 대면 전체 교체 경로가 없다(인증 흐름 내부의 경합은 이미 `AuthService.resolveUserWithConflictRetry`가 유니크 제약 + 재시도로 다룬다).
   충돌은 **409 `CONCURRENT_MODIFICATION`**으로 응답한다. 같은 409인 `DATA_INTEGRITY_VIOLATION`과 코드를 나누는 이유는 사용자가 할 일이 다르기 때문이다 — 저쪽은 입력을 고쳐야 하고 이쪽은 다시 불러온 뒤 그대로 저장하면 된다.
 - **트레이드오프**:
-  - **이 단계만으로는 "몇 분 전에 연 탭"이 막히지 않는다.** 서버가 저장 직전에 행을 새로 읽으면 버전도 최신이라 충돌이 감지되지 않는다. 그 경우까지 막으려면 클라이언트가 **자기가 읽은 버전을 요청에 실어 보내야** 하고, 그건 DTO·프론트까지 함께 바뀌는 별도 변경이다. 지금 단계가 확실히 막는 것은 겹쳐 있는 두 트랜잭션과 준영속 사본으로 저장하는 경로다.
+  - ~~이 단계만으로는 "몇 분 전에 연 탭"이 막히지 않는다.~~ → **해소됨.** 세 상세 응답에 `version`을 싣고 세 `Update` 요청에서 `@NotNull`로 받아, `VersionGuard`가 저장 직전에 맞춰 본다. 요청에서 버전을 빼면 400, 오래된 버전이면 409다. `Create`에는 붙이지 않는다 — 아직 없는 행에는 덮어쓸 앞선 변경이 없다.
+  - 응답에 담기는 버전은 **flush 이후** 값이어야 한다. Hibernate는 flush 시점에 버전을 올리므로, 그 전에 DTO로 옮기면 응답에 저장 전 버전이 실려 화면이 방금 저장하고도 곧바로 오래된 값을 든다 — 같은 폼에서 한 번 더 저장하면 아무도 건드리지 않았는데 409가 난다. 세 서비스가 매핑 전에 `flush()`를 강제하는 이유다.
+  - 화면은 409를 받으면 상세·목록 캐시를 무효화한다. 서버 메시지가 "새로고침한 뒤 다시 저장해주세요"라고 말하는데 캐시를 그대로 두면 그 안내가 거짓이 된다.
   - 버전 컬럼은 UPDATE마다 함께 갱신되므로, 같은 행을 매우 자주 고치는 화면이 생기면 충돌이 늘어난다. 지금 세 테이블은 모두 사람이 폼을 채워 저장하는 빈도라 해당 없다.
 - **관련**: `V9__optimistic_locking.sql`, `Menu.version`, `ErrorCode.CONCURRENT_MODIFICATION`, `GlobalExceptionHandler.handleOptimisticLockingFailure`, `domain/OptimisticLockTest`, [D-031](#d-031-스키마-변경-ddl--algorithmlock을-명시해-copy-강등을-조용한-성공-대신-실패로-만든다)
 

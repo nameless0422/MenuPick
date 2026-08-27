@@ -166,7 +166,7 @@ class MenuRestaurantServiceTest {
         given(menuRestaurantRepository.findByMenuIdAndRestaurantId(1L, 2L)).willReturn(Optional.of(link));
 
         var result = menuRestaurantService.updateMenuRestaurant(
-                1L, 1L, 2L, new MenuRestaurantRequest.Update(5, "저녁"));
+                1L, 1L, 2L, new MenuRestaurantRequest.Update(5, "저녁", 0L));
 
         assertThat(result.rating()).isEqualTo(5);
         assertThat(result.memo()).isEqualTo("저녁");
@@ -180,7 +180,7 @@ class MenuRestaurantServiceTest {
         given(menuRestaurantRepository.findByMenuIdAndRestaurantId(1L, 2L)).willReturn(Optional.of(link));
 
         assertThatThrownBy(() -> menuRestaurantService.updateMenuRestaurant(
-                1L, 1L, 2L, new MenuRestaurantRequest.Update(5, "저녁")))
+                1L, 1L, 2L, new MenuRestaurantRequest.Update(5, "저녁", 0L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.MENU_RESTAURANT_NOT_FOUND);
     }

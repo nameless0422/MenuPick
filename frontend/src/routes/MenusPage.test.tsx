@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { AxiosError } from "axios";
 import { renderWithProviders } from "../test/renderWithProviders";
 import MenusPage from "./MenusPage";
-import { createMenu, deleteMenu, fetchMenu, fetchMenus, type MenuDetail } from "../api/menus";
+import {
+  createMenu,
+  deleteMenu,
+  fetchMenu,
+  fetchMenus,
+  updateMenu,
+  type MenuDetail,
+} from "../api/menus";
 import { searchTags } from "../api/tags";
 
 vi.mock("../api/menus", () => ({
@@ -23,6 +31,7 @@ const fetchMenusMock = vi.mocked(fetchMenus);
 const fetchMenuMock = vi.mocked(fetchMenu);
 const createMenuMock = vi.mocked(createMenu);
 const deleteMenuMock = vi.mocked(deleteMenu);
+const updateMenuMock = vi.mocked(updateMenu);
 const searchTagsMock = vi.mocked(searchTags);
 
 /** 끝나지 않는 요청. "요청이 나가 있는 동안"의 화면을 붙잡아 두려면 이게 필요하다. */
@@ -56,6 +65,7 @@ const detail = (overrides: Partial<MenuDetail> = {}): MenuDetail => ({
   memo: null,
   createdAt: "2026-01-01T00:00:00",
   updatedAt: "2026-01-01T00:00:00",
+  version: 0,
   ...overrides,
 });
 
@@ -600,5 +610,62 @@ describe("태그 제안 칩", () => {
       "aria-pressed",
       "true",
     );
+  });
+});
+
+
+/**
+ * 수정 저장에 실리는 낙관적 락 버전 (issue #87).
+ *
+ * <p>서버는 이 값으로 "이 화면을 그린 뒤 누가 먼저 고쳤는가"를 판정한다. 그런데 값을 빼도
+ * 화면에서는 아무 일도 일어나지 않는다 — 저장은 그대로 되고(400이 나기 전까지는), 잃는 것은
+ * 그 사이 다른 탭이 저장한 내용뿐이다. 아무도 오류를 보지 못하므로 사람이 지킬 수 없는
+ * 계약이고, 그래서 요청 본문을 직접 본다.
+ */
+describe("메뉴 수정 - 낙관적 락 버전", () => {
+  it("상세에서 받은 버전을 그대로 실어 보낸다", async () => {
+    const user = userEvent.setup();
+    // 목록에서 온 값이 아니라 상세 응답의 버전이어야 한다 — 상세가 이 폼의 근거다.
+    fetchMenuMock.mockResolvedValue(detail({ version: 7 }));
+    updateMenuMock.mockResolvedValue(detail({ version: 8 }));
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
+    await screen.findByRole("heading", { name: "메뉴 수정" });
+    await user.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(updateMenuMock).toHaveBeenCalled());
+    expect(updateMenuMock).toHaveBeenCalledWith(1, expect.objectContaining({ version: 7 }));
+  });
+
+  it("충돌하면 사유를 남기고, 안내대로 다시 시도할 수 있게 상세를 새로 불러온다", async () => {
+    const user = userEvent.setup();
+    fetchMenuMock.mockResolvedValue(detail({ version: 7 }));
+    // 서버 메시지가 다음 행동(새로고침 후 재저장)을 말한다 — 그 문장이 사용자에게 닿아야 한다.
+    updateMenuMock.mockRejectedValue(
+      new AxiosError("conflict", undefined, undefined, undefined, {
+        status: 409,
+        data: {
+          success: false,
+          message: "다른 곳에서 먼저 수정했습니다. 새로고침한 뒤 다시 저장해주세요.",
+          errorCode: "CONCURRENT_MODIFICATION",
+        },
+      } as never),
+    );
+    renderWithProviders(<MenusPage />);
+
+    await user.click(await screen.findByRole("button", { name: "김치찌개 수정" }));
+    await screen.findByRole("heading", { name: "메뉴 수정" });
+    const callsBeforeSave = fetchMenuMock.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "저장" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/먼저 수정했습니다/);
+    // 폼은 닫히지 않는다 — 사용자가 방금 친 내용이 사라지면 다시 저장할 방법이 없다.
+    expect(screen.getByRole("heading", { name: "메뉴 수정" })).toBeInTheDocument();
+
+    // 서버 메시지는 "새로고침한 뒤 다시 저장해주세요"라고 말한다. 캐시를 그대로 두면
+    // 그 안내가 거짓이 된다 — 다시 열어도 같은 낡은 버전이 나와 같은 409를 반복한다.
+    // 그래서 화면에 문구를 띄우는 것만으로는 부족하고, 상세를 실제로 다시 불러와야 한다.
+    await waitFor(() => expect(fetchMenuMock.mock.calls.length).toBeGreaterThan(callsBeforeSave));
   });
 });
