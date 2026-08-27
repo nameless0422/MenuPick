@@ -35,16 +35,16 @@
 }
 
 .history-time {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   color: var(--text);
 }
 
 .history-restaurant {
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .history-visited-at {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   color: var(--text);
   align-self: center;
 }

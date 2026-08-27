@@ -11,7 +11,7 @@
    그대로 받으면 설정 카드 안에서만 제목이 갑자기 커져, 고친 것이 없는 화면이 바뀐 것처럼
    보인다. 색은 전역 h1,h2,h3 규칙이 이미 --text-h로 주므로 여기서 다시 적지 않는다. */
 .settings-section h2 {
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 700;
   letter-spacing: 0.04em;
   margin: 0;
@@ -26,7 +26,7 @@
 }
 
 .settings-desc {
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 /* 탈퇴 섹션은 실수로 들어오면 안 되는 영역이라 테두리로 다른 카드와 구분한다 */
@@ -50,7 +50,7 @@
 .settings-policy {
   margin: 0;
   padding-left: 20px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -69,7 +69,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .settings-withdraw {
@@ -116,7 +116,7 @@
 /* 이름과 버튼 사이를 이 항목이 밀어내 버튼이 오른쪽에 붙는다 */
 .settings-link-state {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--fs-xs);
 }
 
 /* 해제 불가 사유는 버튼 아래 줄로 내려 좁은 화면에서 버튼과 겹치지 않게 한다 */
