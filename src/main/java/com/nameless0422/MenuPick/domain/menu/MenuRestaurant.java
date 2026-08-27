@@ -35,6 +35,16 @@ public class MenuRestaurant extends BaseTimeEntity {
     @Column(columnDefinition = "TEXT")
     private String memo;
 
+    /**
+     * 낙관적 락 버전 (issue #87, V9). 근거는 {@code Menu.version} 주석과 V9 마이그레이션.
+     *
+     * <p>이 행의 수정은 {@code update(rating, memo)} 하나뿐인데 두 필드를 함께 교체한다 —
+     * 별점만 고친 탭과 메모만 고친 탭이 겹치면 한쪽이 통째로 사라진다.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Builder
     public MenuRestaurant(Menu menu, Restaurant restaurant, Integer rating, String memo) {
         this.menu = menu;

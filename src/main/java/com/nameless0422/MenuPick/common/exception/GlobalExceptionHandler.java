@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.common.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -115,6 +116,31 @@ public class GlobalExceptionHandler {
         log.warn("DataIntegrityViolationException: [{}]", e.getMostSpecificCause().getClass().getSimpleName());
         log.debug("DataIntegrityViolationException detail: {}", e.getMostSpecificCause().getMessage());
         return error(ErrorCode.DATA_INTEGRITY_VIOLATION);
+    }
+
+    /**
+     * 낙관적 락 충돌 처리 (issue #87, V9).
+     *
+     * <p>버전 컬럼이 붙은 행을 오래된 버전으로 수정하려 하면 UPDATE가 0행을 갱신하고
+     * Hibernate가 예외를 던진다. 전용 핸들러가 없으면 이 예외는 맨 아래 catch-all에 잡혀
+     * <b>500 + ERROR 스택트레이스</b>가 된다 — 서버가 고장난 것이 아니라 정상적으로
+     * 거절한 요청인데, 사용자는 "서버 내부 오류"를 보고 로그는 스택트레이스로 밀린다.
+     *
+     * <p>{@code ObjectOptimisticLockingFailureException}이 아니라 상위 타입인
+     * {@code OptimisticLockingFailureException}을 잡는다. Hibernate의
+     * {@code StaleObjectStateException}·{@code OptimisticLockException}은 스프링의 예외
+     * 변환을 거치며 어느 하위 타입이 될지가 경로마다 갈리는데(merge냐 flush냐, 엔티티를
+     * 특정할 수 있느냐), 응답은 어느 쪽이든 같아야 한다.
+     *
+     * <p>로그는 WARN이다. 정상 동작의 일부이고, 자주 찍힌다면 그것은 고장 신호가 아니라
+     * 화면이 오래된 데이터를 오래 들고 있다는 신호다.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockingFailure(
+            OptimisticLockingFailureException e) {
+        log.warn("OptimisticLockingFailureException: [{}] {}",
+                e.getClass().getSimpleName(), e.getMessage());
+        return error(ErrorCode.CONCURRENT_MODIFICATION);
     }
 
     /**

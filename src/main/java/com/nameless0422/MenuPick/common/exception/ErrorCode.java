@@ -29,6 +29,11 @@ public enum ErrorCode {
     // 분기하면 어느 쪽이 오느냐에 따라 조용히 깨진다.
     MALFORMED_REQUEST_BODY(HttpStatus.BAD_REQUEST, "요청 본문을 읽을 수 없습니다. JSON 형식을 확인해주세요."),
     DATA_INTEGRITY_VIOLATION(HttpStatus.CONFLICT, "데이터 무결성 제약 조건을 위반했습니다."),
+    // 낙관적 락 충돌(issue #87). 상태 코드는 DATA_INTEGRITY_VIOLATION과 같은 409지만 뜻이
+    // 다르다 — 저쪽은 "이 값은 저장될 수 없다"(제약 위반)이고 이쪽은 "이 값은 저장될 수
+    // 있었는데 그 사이 누가 먼저 고쳤다"이다. 사용자가 할 일도 다르다: 저쪽은 입력을 고쳐야
+    // 하고 이쪽은 다시 불러온 뒤 그대로 저장하면 된다. 그래서 메시지가 다음 행동을 말한다.
+    CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "다른 곳에서 먼저 수정했습니다. 새로고침한 뒤 다시 저장해주세요."),
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 Content-Type입니다."),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),

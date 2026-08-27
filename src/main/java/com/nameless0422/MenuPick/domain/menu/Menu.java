@@ -45,6 +45,21 @@ public class Menu extends BaseTimeEntity {
 
     private LocalDateTime deletedAt;
 
+    /**
+     * 낙관적 락 버전 (issue #87, V9).
+     *
+     * <p>이 필드가 붙으면 UPDATE에 {@code WHERE version = ?}가 함께 나가고, 0행이 갱신되면
+     * Hibernate가 예외를 던진다. 개인 데이터라 남의 변경을 잃을 일은 없지만 자기 자신과는
+     * 겹친다 — 메뉴 편집(PUT)과 가중치 일괄 조정(PATCH /menus/weights)이 같은 행을 건드리고,
+     * 후자는 한 트랜잭션에서 여러 행을 read-modify-write 한다.
+     *
+     * <p>{@code Long}이 아니라 primitive다. null 버전은 Hibernate에게 "아직 저장된 적 없는
+     * 엔티티"라는 뜻이라, 이미 DB에 있는 행을 새 행으로 오인해 INSERT를 시도하게 된다.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @ElementCollection
     @CollectionTable(name = "menu_categories",
             joinColumns = @JoinColumn(name = "menu_id"))

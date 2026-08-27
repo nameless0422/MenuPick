@@ -59,6 +59,17 @@ public class Restaurant extends BaseTimeEntity {
 
     private LocalDateTime deletedAt;
 
+    /**
+     * 낙관적 락 버전 (issue #87, V9). 근거는 {@code Menu.version} 주석과 V9 마이그레이션.
+     *
+     * <p>여기서는 전체 교체 PUT 말고도 겹치는 경로가 하나 더 있다 — 지운 식당을 같은 장소로
+     * 다시 등록하면 {@code restore()}가 새 행을 만드는 대신 그 행을 되살리며 필드를 덮어쓴다.
+     * "탭 A에서 수정 저장"과 "탭 B에서 삭제 후 재등록"이 같은 행에서 만난다.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Builder
     public Restaurant(User user, String name, String address, String phone,
                       BigDecimal latitude, BigDecimal longitude,
