@@ -19,11 +19,11 @@
    전역 h1(56px)을 그대로 받으면 안내문 한 줄이 서비스 이름만큼 커진다.
    서비스 이름은 아래 .auth-wordmark가 따로 맡는다. */
 .login-page h1 {
-  font-size: 30px;
+  font-size: 1.875rem; /* 30px */
   line-height: 120%;
   margin: 0;
   @media (max-width: 1024px) {
-    font-size: 25px;
+    font-size: 1.5625rem; /* 25px */
   }
 }
 
@@ -32,13 +32,13 @@
    간판 배색(청록 먹 + 단무지)이 로그인 전에도 한 번 보인다. */
 .auth-wordmark {
   font-family: var(--display);
-  font-size: 54px;
+  font-size: 3.375rem; /* 54px */
   font-weight: 400;
   line-height: 1;
   letter-spacing: 0.5px;
   margin: 0;
   @media (max-width: 1024px) {
-    font-size: 44px;
+    font-size: 2.75rem; /* 44px */
   }
 }
 .auth-wordmark::after {
@@ -52,7 +52,7 @@
 }
 
 .auth-tagline {
-  font-size: 15px;
+  font-size: var(--fs-md);
   margin-top: -4px;
 }
 
@@ -66,14 +66,14 @@
    26px)에 바짝 붙어, 정작 강조해야 할 "뽑힌 메뉴"가 카드 제목에 묻힌다.
    요소만 바꾸고 보이는 크기는 <strong>이던 때처럼 본문 급으로 둔다. */
 .login-demo h2 {
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 700;
   letter-spacing: 0.04em;
   margin: 0;
 }
 
 .login-demo-desc {
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .login-demo-result {
@@ -89,7 +89,7 @@
    한 번 있어서다(.auth-wordmark). 로그인 화면의 주인공은 서비스 이름이고 이 카드는
    곁가지라, 둘이 같은 목소리를 내면 무엇을 보라는 화면인지 흐려진다. */
 .login-demo-name {
-  font-size: 26px;
+  font-size: 1.625rem; /* 26px */
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.02em;
@@ -98,12 +98,12 @@
 }
 
 .login-demo-categories {
-  font-size: 13px;
+  font-size: var(--fs-xs);
 }
 
 /* 시연 결과 바로 아래에서 전환을 유도한다 (온보딩 퍼널) */
 .login-demo-cta {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   margin-top: 4px;
 }
 
@@ -118,7 +118,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--fs-xs);
   margin: 4px 0;
 }
 .auth-divider::before,
@@ -135,14 +135,14 @@
   flex-wrap: wrap;
   gap: 4px 16px;
   justify-content: space-between;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 /* 안내 문구. 에러가 아니라 성공/대기 상태를 알린다. 그냥 문장으로 두면 폼 사이에
    묻히므로, 왼쪽에 --pop 띠를 세워 "읽어야 하는 줄"이라고 표시한다. 색만 쓰지 않고
    면과 위치를 함께 바꾸므로 색을 못 봐도 구분된다. */
 .auth-notice {
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--text-h);
   background: var(--code-bg);
   border-left: 4px solid var(--pop);
@@ -178,6 +178,6 @@
 
 /* 소셜 버튼 아래에 붙는 안내 — 소셜은 가입 경로가 아니라는 사실을 누르기 전에 알린다. */
 .login-social-hint {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   margin-top: -8px;
 }

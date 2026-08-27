@@ -14,11 +14,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .pick-geo-error {
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--text);
 }
 
@@ -41,7 +41,7 @@
    상태는 그대로 바뀌고 사이의 이동만 사라진다.) */
 .pick-button {
   font-family: var(--display);
-  font-size: 24px;
+  font-size: 1.5rem; /* 24px */
   font-weight: 400;
   letter-spacing: 0.03em;
   /* --pop은 채우는 색이라 그 위 글자는 테마를 따르지 않는 --on-pop이다(7.93:1 / 9.39:1). */
@@ -87,12 +87,12 @@
 }
 
 .pick-slot {
-  font-size: 34px;
+  font-size: 2.125rem; /* 34px */
   line-height: 1;
 }
 
 .card-muted-hint {
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 /* ---- 오늘의 픽 = 식권 ----
@@ -152,7 +152,7 @@
 }
 
 .pick-result-label {
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--on-pop);
@@ -166,7 +166,7 @@
 .pick-ticket-time {
   font-family: var(--mono);
   color: var(--on-pop);
-  font-size: 13px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -184,18 +184,18 @@
    word-break: keep-all — 한글은 어디서나 끊기므로 두지 않으면 "김치찌" / "개"로 갈린다. */
 .pick-result-name {
   font-family: var(--display);
-  font-size: 46px;
+  font-size: 2.875rem; /* 46px */
   line-height: 1.1;
   letter-spacing: -0.01em;
   color: var(--text-h);
   word-break: keep-all;
   @media (max-width: 640px) {
-    font-size: 34px;
+    font-size: 2.125rem; /* 34px */
   }
 }
 
 .pick-result-memo {
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 
 .pick-restaurants {
@@ -205,7 +205,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 
 .pick-restaurants li {
@@ -223,11 +223,11 @@
 /* 거리는 읽는 글이 아니라 비교하는 값이다 — 목록에서 자릿수가 흔들리지 않게 고정폭으로. */
 .pick-restaurants .chip {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2xs);
 }
 
 .pick-restaurant-address {
-  font-size: 13px;
+  font-size: var(--fs-xs);
 }
 
 /* .card > .card-actions의 구분선(index.css)은 여기까지 닿지 않는다 —

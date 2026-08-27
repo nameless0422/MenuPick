@@ -45,7 +45,7 @@
   padding: 8px 12px;
   min-width: 140px;
   color: #14201d;
-  font: 14px/140% var(--sans);
+  font: var(--fs-sm) / 140% var(--sans);
 }
 
 .kakao-map-info strong {

@@ -19,5 +19,9 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  // tests/는 브라우저에서 도는 코드가 아니라 소스 파일 자체를 읽는 검사다. src의
+  // tsconfig(app)가 아니라 여기에 두는 이유는 그쪽의 types가 ["vite/client"]뿐이라서다 —
+  // node를 거기에 열어 주면 앱 코드 어디서나 process·Buffer가 타입 검사를 통과하게 되어,
+  // 브라우저 번들에 들어갈 수 없는 코드가 조용히 커밋된다.
+  "include": ["vite.config.ts", "tests"]
 }

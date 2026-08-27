@@ -109,7 +109,33 @@
   --display: 'Black Han Sans', var(--sans);
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  font: 18px/145% var(--sans);
+  /* ---- 글자 크기 ----
+     이 리포의 CSS에는 글자 크기가 px로만 적혀 있었다(58군데). 그러면 브라우저
+     기본 글꼴 크기를 키워 둔 사용자에게 그 설정이 통째로 무시된다 — 눈이 나빠
+     기본값을 20px로 올려 둔 사람이 이 앱만 열면 다시 18px로 돌아간다.
+     확대(브라우저 줌)는 여전히 되므로 1.4.4 위반은 아니지만, 확대는 레이아웃까지
+     통째로 키우는 거친 수단이고 "글자만 크게"라는 조정 수단은 아예 없었다.
+
+     그래서 규칙은 두 줄이다.
+       · **글자 크기는 rem** — 아래 토큰과 각 파일의 rem 값. 기준은 :root의
+         font-size: 100%, 즉 사용자가 정한 기본값(보통 16px)이다.
+       · **2.5.8이 요구하는 최소 타깃 크기(24px)와 도형 기하는 px 그대로** —
+         min-width/min-height, 식권의 절취선 좌표(--perf-y) 같은 것들이다.
+         이쪽을 rem으로 바꾸면 기본 글꼴을 **줄여** 둔 사용자에게서 24px 보장이
+         함께 줄어들어, 접근성 장치가 접근성 설정 때문에 무너진다.
+
+     px 값은 관례대로 16으로 나눈다(:root가 100%이므로 1rem = 사용자 기본값).
+     본문만 --fs-base로 한 단 키운다 — 이 앱의 읽는 글은 대부분 한 줄짜리 안내라
+     16px보다 18px이 편하다. */
+  --fs-2xs: 0.75rem; /* 12px — 거리 칩처럼 값만 담는 자리 */
+  --fs-xs: 0.8125rem; /* 13px — 칩·보조 문구 */
+  --fs-sm: 0.875rem; /* 14px — 폼 라벨·설명 */
+  --fs-md: 0.9375rem; /* 15px — 버튼·입력칸 */
+  --fs-base: 1.125rem; /* 18px — 본문 */
+
+  /* 100%를 명시한다. 값을 적지 않는 것과 결과는 같지만, 이 자리에 px를 박는 것이
+     바로 위 규칙이 막으려는 실수라 "여기는 비워 두는 자리"임을 코드로 남긴다. */
+  font-size: 100%;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -117,10 +143,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -195,9 +217,24 @@
   box-sizing: border-box;
 }
 
+/* 본문 크기는 :root가 아니라 여기서 잡는다. :root에 얹으면 1rem이 곧 본문 크기가
+   되어, 아래 모든 rem 값이 사용자 기본값이 아니라 "본문 대비 비율"로 뒤바뀐다.
+   :root를 100%로 비워 두어야 1rem = 사용자가 정한 값이라는 기준이 유지된다.
+
+   좁은 화면에서 본문만 한 단 내린다. 예전에는 이 자리에서 :root를 16px로 내렸는데,
+   그때는 하위가 전부 px라 실제로 줄어드는 것이 본문뿐이었다 — 지금은 하위가 rem이라
+   :root를 건드리면 칩·라벨까지 11% 줄어 좁은 화면에서만 글씨가 작아진다.
+   본문만 바꾸면 기본 설정에서 보이는 모습은 예전 그대로다. */
 body {
   margin: 0;
   background: var(--bg);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  line-height: 145%;
+
+  @media (max-width: 1024px) {
+    font-size: 1rem;
+  }
 }
 
 h1,
@@ -211,20 +248,20 @@ h3 {
 }
 
 h1 {
-  font-size: 56px;
+  font-size: 3.5rem; /* 56px */
   line-height: 110%;
   margin: 32px 0;
   @media (max-width: 1024px) {
-    font-size: 36px;
+    font-size: 2.25rem; /* 36px */
     margin: 20px 0;
   }
 }
 h2 {
-  font-size: 22px;
+  font-size: 1.375rem; /* 22px */
   line-height: 130%;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
-    font-size: 19px;
+    font-size: 1.1875rem; /* 19px */
   }
 }
 
@@ -234,11 +271,11 @@ h2 {
    훑을 때 지금 어느 화면인지 알 방법이 사라진다. 구조는 h1으로 두고 크기만 여기서 내린다.
    h2(22px)보다는 커야 아래 소제목과 단계가 구분된다. */
 .page h1 {
-  font-size: 28px;
+  font-size: 1.75rem; /* 28px */
   line-height: 118%;
   margin: 0;
   @media (max-width: 1024px) {
-    font-size: 23px;
+    font-size: 1.4375rem; /* 23px */
   }
 }
 p {
@@ -298,7 +335,7 @@ p {
    같은 것이 하나 더 붙는다. */
 .wordmark {
   font-family: var(--display);
-  font-size: 22px;
+  font-size: 1.375rem; /* 22px */
   line-height: 1;
   color: var(--on-brand);
   letter-spacing: 0.5px;
@@ -328,7 +365,7 @@ a {
 nav a {
   color: color-mix(in srgb, var(--on-brand) 80%, transparent);
   text-decoration: none;
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 500;
   border-radius: 999px;
   /* 인라인 요소라 높이가 폰트 메트릭에 좌우된다. 24x24(2.5.8)를 폰트에 맡기지 않고
@@ -414,7 +451,7 @@ nav a:hover:not([aria-current='page']) {
 
 button {
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-h);
   background: var(--code-bg);
@@ -460,7 +497,7 @@ input:not([type='checkbox']):not([type='radio']),
 textarea,
 select {
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
   color: var(--text-h);
   /* 카드(--surface)가 흰색이므로 입력칸은 페이지 바탕색으로 둔다 — 카드 안에서
      한 단 파인 자리로 읽힌다. 카드 밖(로그인 폼 등)에서는 테두리가 경계를 잡는다. */
@@ -536,7 +573,7 @@ input[type='radio'] {
 }
 .card-main strong {
   color: var(--text-h);
-  font-size: 17px;
+  font-size: 1.0625rem; /* 17px */
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -559,7 +596,7 @@ input[type='radio'] {
 .weight {
   color: var(--accent);
   letter-spacing: 2px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .chip-row {
@@ -569,7 +606,7 @@ input[type='radio'] {
 }
 
 .chip {
-  font-size: 13px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   line-height: 1;
   padding: 6px 11px;
@@ -637,7 +674,7 @@ input[type='radio'] {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-h);
 }
@@ -660,7 +697,7 @@ input[type='radio'] {
    확실히 다른 층으로 보이게 한다. */
 .menu-form legend,
 .pick-filters legend {
-  font-size: 12px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--text-h);
@@ -680,7 +717,7 @@ input[type='radio'] {
   background: none;
   border: none;
   padding: 0 2px;
-  font-size: 22px;
+  font-size: 1.375rem; /* 22px */
   line-height: 1;
   min-width: 24px;
   min-height: 24px;
@@ -711,7 +748,7 @@ input[type='radio'] {
 
 .error {
   color: var(--danger);
-  font-size: 14px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 
