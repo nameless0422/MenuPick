@@ -1,13 +1,37 @@
+/* 픽 히스토리 화면 전용 스타일 — 공용 클래스(index.css)에 없는 것만 정의한다 */
+
+/* 세 버튼은 "조회 기간"이라는 하나의 질문에 대한 선택지다(HistoryPage.tsx의 role="group").
+   흩어진 버튼 셋이 아니라 한 덩어리로 보이도록 종이색 홈 위에 얹는다. */
 .days-filter {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 4px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.days-filter button {
+  border-color: transparent;
+  background: transparent;
+  min-height: 30px;
+  padding: 5px 14px;
 }
 
 .days-filter button.active {
   color: var(--accent);
-  background: var(--accent-bg);
-  border-color: var(--accent-border);
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+/* 전역 button:hover(0,3,1)는 선택된 버튼도 함께 잡아 배경을 --accent-bg로 바꾼다 —
+   지금 보고 있는 기간이 마우스를 올렸다는 이유로 달라 보이면 어느 쪽이 선택인지 흐려진다.
+   :not() 둘을 달아 (0,5,1)로 올려 되돌린다. */
+.days-filter button.active:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--accent);
+  background: var(--surface);
+  border-color: var(--accent);
 }
 
 .history-time {

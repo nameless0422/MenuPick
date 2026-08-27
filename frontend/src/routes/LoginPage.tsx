@@ -44,8 +44,10 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <h1>메뉴픽</h1>
-      <p>오늘 뭐 먹지 고민을 대신 해드립니다.</p>
+      {/* 이 h1만 서비스 이름이다 — 다른 로그인 전 화면의 h1은 "비밀번호 재설정"처럼
+          화면 제목이라 같은 크기·서체로 두면 안내문이 간판처럼 커진다. */}
+      <h1 className="auth-wordmark">메뉴픽</h1>
+      <p className="auth-tagline">오늘 뭐 먹지 고민을 대신 해드립니다.</p>
 
       {/* 아무 말 없이 화면만 바뀌면 사용자는 자기가 뭘 잘못 눌렀다고 생각한다.
           "다시 로그인하면 보던 화면으로 돌아간다"까지 말하는 이유는 ProtectedRoute가

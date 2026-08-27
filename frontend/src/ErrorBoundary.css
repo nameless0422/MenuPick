@@ -14,7 +14,6 @@
 .error-boundary h1 {
   font-size: 28px;
   line-height: 118%;
-  letter-spacing: -0.28px;
   margin: 0;
   @media (max-width: 1024px) {
     font-size: 22px;

@@ -279,9 +279,22 @@ function PickResultCard({
   onRetry: () => void;
 }) {
   const { menu, restaurants } = result;
+  // 이 카드는 픽이 도착한 순간에 마운트되므로, 마운트 시각이 곧 뽑은 시각이다.
+  // 렌더마다 new Date()를 부르면 리렌더할 때마다 표에 찍힌 시각이 바뀐다 —
+  // 초기화 함수로 한 번만 붙잡아 둔다.
+  const [pickedAt] = useState(() => new Date());
   return (
     <div className="card pick-result">
-      <p className="pick-result-label">오늘의 픽 🎉</p>
+      {/* 발권부. 높이가 PickPage.css의 --perf-y와 맞물려 있어 안쪽 글자는 줄바꿈되면 안 된다. */}
+      <div className="pick-ticket-stub">
+        <span className="pick-result-label">오늘의 픽 🎉</span>
+        {/* 히스토리는 시각순으로 쌓이고 같은 메뉴가 여러 번 나올 수 있다 — 이 표를
+            나중에 히스토리에서 짚으려면 이름이 아니라 시각이 필요하다. */}
+        <time className="pick-ticket-time" dateTime={pickedAt.toISOString()}>
+          {formatTime(pickedAt)}
+        </time>
+      </div>
+      <div className="pick-ticket-body">
       <strong className="pick-result-name">{menu.name}</strong>
       {menu.memo && <p className="pick-result-memo">{menu.memo}</p>}
 
@@ -323,6 +336,7 @@ function PickResultCard({
       <div className="card-actions">
         <button onClick={onRetry}>🔁 다시 돌리기</button>
         <Link to="/history">히스토리 보기 →</Link>
+      </div>
       </div>
     </div>
   );
@@ -492,6 +506,11 @@ function TagFilter({
       )}
     </fieldset>
   );
+}
+
+/** 발권 시각 표기. 히스토리의 목록과 같은 24시간 표기라 눈으로 바로 맞춰 볼 수 있다. */
+function formatTime(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatDistance(meters: number) {

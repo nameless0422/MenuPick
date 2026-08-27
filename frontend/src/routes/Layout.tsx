@@ -42,17 +42,26 @@ export default function Layout() {
       <a className="skip-link" href="#main">
         본문으로 건너뛰기
       </a>
-      <header>
-        <nav aria-label="주요 메뉴">
-          {/* NavLink는 현재 경로일 때 aria-current="page"를 자동으로 붙인다.
-              <Link>로는 지금 어느 화면인지 알 방법이 시각적으로도 없었다. */}
-          <NavLink to="/pick">오늘 뭐 먹지</NavLink>
-          <NavLink to="/menus">메뉴</NavLink>
-          <NavLink to="/restaurants">식당</NavLink>
-          <NavLink to="/history">히스토리</NavLink>
-          <NavLink to="/settings">설정</NavLink>
-          <button onClick={() => logout()}>로그아웃</button>
-        </nav>
+      <header className="app-bar">
+        <div className="app-bar-inner">
+          {/* 서비스 이름. 링크로 만들지 않는다 — 목적지가 "오늘 뭐 먹지"와 같아
+              nav에 이름만 다른 중복 링크가 하나 더 생긴다. */}
+          <span className="wordmark">메뉴픽</span>
+          <nav aria-label="주요 메뉴">
+            {/* NavLink는 현재 경로일 때 aria-current="page"를 자동으로 붙인다.
+                <Link>로는 지금 어느 화면인지 알 방법이 시각적으로도 없었다. */}
+            <NavLink to="/pick">오늘 뭐 먹지</NavLink>
+            <NavLink to="/menus">메뉴</NavLink>
+            <NavLink to="/restaurants">식당</NavLink>
+            <NavLink to="/history">히스토리</NavLink>
+            <NavLink to="/settings">설정</NavLink>
+          </nav>
+          {/* 로그아웃은 화면을 옮기는 동작이 아니라 세션을 끊는 동작이다 — nav 안에
+              두면 랜드마크를 훑는 사용자에게 여섯 번째 목적지처럼 들린다. */}
+          <button className="nav-logout" onClick={() => logout()}>
+            로그아웃
+          </button>
+        </div>
       </header>
       {/* tabIndex={-1}이 있어야 focus()가 먹는다. 초점 순서에는 들어가지 않는다. */}
       <main id="main" ref={mainRef} tabIndex={-1}>
