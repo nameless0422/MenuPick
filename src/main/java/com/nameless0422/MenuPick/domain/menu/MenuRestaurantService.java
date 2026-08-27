@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.domain.menu;
 
+import com.nameless0422.MenuPick.common.domain.VersionGuard;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuRestaurantRequest;
@@ -72,8 +73,15 @@ public class MenuRestaurantService {
         findMenuOrThrow(userId, menuId);
 
         MenuRestaurant menuRestaurant = findLinkOrThrow(menuId, restaurantId);
+        // 아무것도 고치기 전에 확인한다 — 근거는 VersionGuard.
+        VersionGuard.requireCurrentVersion(menuRestaurant.getVersion(), request.version());
 
         menuRestaurant.update(request.rating(), request.memo());
+
+        // 버전은 flush 시점에 올라간다. 그 전에 DTO로 옮기면 응답에 **저장 전 버전**이 실려,
+        // 화면은 방금 저장하고도 곧바로 오래된 값을 들게 된다 — 같은 폼에서 한 번 더 저장하면
+        // 아무도 건드리지 않았는데 409가 난다. 그래서 매핑 전에 flush를 강제한다.
+        menuRestaurantRepository.flush();
         return toDetail(menuRestaurant);
     }
 
@@ -110,6 +118,7 @@ public class MenuRestaurantService {
                 mr.getRating(),
                 mr.getMemo(),
                 mr.getCreatedAt(),
-                mr.getUpdatedAt());
+                mr.getUpdatedAt(),
+                mr.getVersion());
     }
 }

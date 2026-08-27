@@ -36,7 +36,7 @@ class PickControllerTest extends AbstractControllerTest {
     void pick_success() throws Exception {
         var menuDetail = new MenuResponse.MenuDetail(
                 1L, "김치찌개", "맛있음", 3, false, Set.of("한식"),
-                List.of(), LocalDateTime.now(), LocalDateTime.now());
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         var restaurant = new PickResponse.RestaurantWithDistance(
                 1L, "식당A", "서울시 강남구",
                 new BigDecimal("37.4979000"), new BigDecimal("127.0276000"), 500.0);
@@ -88,7 +88,7 @@ class PickControllerTest extends AbstractControllerTest {
     void pick_withoutBody() throws Exception {
         var menuDetail = new MenuResponse.MenuDetail(
                 2L, "돈까스", null, 1, false, Set.of("일식"),
-                List.of(), LocalDateTime.now(), LocalDateTime.now());
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         var result = new PickResponse.PickResult(2L, menuDetail, List.of());
 
         given(pickService.pick(eq(1L), any())).willReturn(result);
@@ -214,7 +214,7 @@ class PickControllerTest extends AbstractControllerTest {
     void pick_atLimit_success() throws Exception {
         var menuDetail = new MenuResponse.MenuDetail(
                 3L, "비빔밥", null, 1, false, Set.of("한식"),
-                List.of(), LocalDateTime.now(), LocalDateTime.now());
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(pickService.pick(eq(1L), any())).willReturn(
                 new PickResponse.PickResult(3L, menuDetail, List.of()));
 

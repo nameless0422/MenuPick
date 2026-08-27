@@ -23,6 +23,12 @@ export interface RestaurantDetail {
   kakaoPlaceId: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 낙관적 락 버전. 수정 요청에 **그대로 되돌려 보내야** 한다 — 서버는 이 값으로
+   * "내가 이 화면을 그린 뒤 누가 먼저 고쳤는가"를 판정한다. 값을 빼면 400이고,
+   * 오래된 값을 보내면 409 CONCURRENT_MODIFICATION이다.
+   */
+  version: number;
 }
 
 // RestaurantRequest.Update — 사용자가 고칠 수 있는 값만 보낸다.
@@ -34,11 +40,14 @@ export interface RestaurantUpdateRequest {
   latitude: number;
   longitude: number;
   naverUrl?: string | null;
+  // 화면을 그릴 때 받은 RestaurantDetail.version을 그대로 싣는다.
+  version: number;
 }
 
 // RestaurantRequest.Create — 여기에만 kakaoPlaceId가 있다. 같은 장소를 이미 저장했는지
 // 서버가 이 값으로 판정한다(이름은 겹칠 수 있어 기준이 못 된다).
-export interface RestaurantCreateRequest extends RestaurantUpdateRequest {
+// version은 빼고 상속한다. 생성에는 되돌려 보낼 버전이 없다(서버도 Create에서는 받지 않는다).
+export interface RestaurantCreateRequest extends Omit<RestaurantUpdateRequest, "version"> {
   kakaoPlaceId?: string | null;
 }
 

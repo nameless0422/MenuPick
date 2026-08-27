@@ -318,6 +318,7 @@ describe("RestaurantsPage 삭제 후 초점", () => {
       kakaoPlaceId: null,
       createdAt: "2026-01-01T00:00:00",
       updatedAt: "2026-01-01T00:00:00",
+      version: 0,
     });
 
     renderWithProviders(<RestaurantsPage />);
@@ -342,6 +343,7 @@ const jinjuDetail = {
   kakaoPlaceId: null,
   createdAt: "2026-01-01T00:00:00",
   updatedAt: "2026-01-01T00:00:00",
+  version: 0,
 };
 
 /**

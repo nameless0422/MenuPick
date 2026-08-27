@@ -24,7 +24,9 @@ public class MenuResponse {
             Set<String> categories,
             List<TagSummary> tags,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            /** 낙관적 락 버전. 수정 요청에 그대로 실어 보내야 한다 — 근거는 VersionGuard. */
+            long version
     ) {}
 
     public record MenuListResponse(

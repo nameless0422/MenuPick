@@ -59,7 +59,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
         var detail = new RestaurantResponse.RestaurantDetail(
                 1L, "새 식당", "주소", "010-1234",
                 new BigDecimal("37.5665350"), new BigDecimal("126.9779692"),
-                null, null, LocalDateTime.now(), LocalDateTime.now());
+                null, null, LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(restaurantService.createRestaurant(eq(1L), any(RestaurantRequest.Create.class)))
                 .willReturn(new RestaurantService.CreateResult(detail, true));
 
@@ -80,7 +80,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
         var detail = new RestaurantResponse.RestaurantDetail(
                 1L, "진주회관", "주소", null,
                 new BigDecimal("37.5"), new BigDecimal("127.0"),
-                null, "8005012", LocalDateTime.now(), LocalDateTime.now());
+                null, "8005012", LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(restaurantService.createRestaurant(eq(1L), any(RestaurantRequest.Create.class)))
                 .willReturn(new RestaurantService.CreateResult(detail, false));
 
@@ -140,7 +140,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
                         .content(objectMapper.writeValueAsString(
                                 new RestaurantRequest.Update("진주회관", null, null,
                                         new BigDecimal("37.5"), new BigDecimal("127.0"),
-                                        "javascript:alert(1)"))))
+                                        "javascript:alert(1)", 0L))))
                 .andExpect(status().isBadRequest());
 
         verify(restaurantService, never()).updateRestaurant(any(), any(), any());
@@ -168,7 +168,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
         var created = new RestaurantResponse.RestaurantDetail(
                 1L, "진주회관", null, null,
                 new BigDecimal("37.5"), new BigDecimal("127.0"),
-                null, null, LocalDateTime.now(), LocalDateTime.now());
+                null, null, LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(restaurantService.createRestaurant(eq(1L), any(RestaurantRequest.Create.class)))
                 .willReturn(new RestaurantService.CreateResult(created, true));
 
@@ -189,7 +189,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
                 1L, "진주회관", "서울시 중구", "02-1234-5678",
                 new BigDecimal("37.5665350"), new BigDecimal("126.9779692"),
                 "https://naver.me/abc", "12345",
-                LocalDateTime.now(), LocalDateTime.now());
+                LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(restaurantService.getRestaurant(1L, 1L)).willReturn(detail);
 
         mockMvc.perform(get("/api/v1/restaurants/1")
@@ -204,7 +204,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
         var detail = new RestaurantResponse.RestaurantDetail(
                 1L, "수정됨", "새 주소", "010-9999",
                 new BigDecimal("37.5"), new BigDecimal("127.0"),
-                null, null, LocalDateTime.now(), LocalDateTime.now());
+                null, null, LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(restaurantService.updateRestaurant(eq(1L), eq(1L), any(RestaurantRequest.Update.class)))
                 .willReturn(detail);
 
@@ -213,7 +213,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new RestaurantRequest.Update("수정됨", "새 주소", "010-9999",
-                                        new BigDecimal("37.5"), new BigDecimal("127.0"), null))))
+                                        new BigDecimal("37.5"), new BigDecimal("127.0"), null, 0L))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("수정됨"));
     }

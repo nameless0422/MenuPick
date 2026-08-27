@@ -57,7 +57,7 @@ class MenuControllerTest extends AbstractControllerTest {
     void createMenu_success() throws Exception {
         var detail = new MenuResponse.MenuDetail(
                 1L, "된장찌개", "집밥", 2, false, Set.of("한식"),
-                List.of(), LocalDateTime.now(), LocalDateTime.now());
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(menuService.createMenu(eq(1L), any(MenuRequest.Create.class))).willReturn(detail);
 
         mockMvc.perform(post("/api/v1/menus")
@@ -85,7 +85,7 @@ class MenuControllerTest extends AbstractControllerTest {
     void getMenu_success() throws Exception {
         var detail = new MenuResponse.MenuDetail(
                 1L, "김치찌개", "맛있음", 3, false, Set.of(),
-                List.of(), LocalDateTime.now(), LocalDateTime.now());
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(menuService.getMenu(1L, 1L)).willReturn(detail);
 
         mockMvc.perform(get("/api/v1/menus/1")
@@ -99,14 +99,14 @@ class MenuControllerTest extends AbstractControllerTest {
     void updateMenu_success() throws Exception {
         var detail = new MenuResponse.MenuDetail(
                 1L, "수정됨", "메모", 5, true, Set.of("양식"),
-                List.of(), LocalDateTime.now(), LocalDateTime.now());
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
         given(menuService.updateMenu(eq(1L), eq(1L), any(MenuRequest.Update.class))).willReturn(detail);
 
         mockMvc.perform(put("/api/v1/menus/1")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new MenuRequest.Update("수정됨", "메모", 5, true, Set.of("양식"), null))))
+                                new MenuRequest.Update("수정됨", "메모", 5, true, Set.of("양식"), null, 0L))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("수정됨"));
     }
@@ -119,7 +119,7 @@ class MenuControllerTest extends AbstractControllerTest {
         mockMvc.perform(put("/api/v1/menus/1")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"수정됨\",\"memo\":\"메모\",\"weight\":5}"))
+                        .content("{\"name\":\"수정됨\",\"memo\":\"메모\",\"weight\":5,\"version\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.errors[0].field").value("isExcluded"));
@@ -131,7 +131,7 @@ class MenuControllerTest extends AbstractControllerTest {
         mockMvc.perform(put("/api/v1/menus/1")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"수정됨\",\"memo\":\"메모\",\"weight\":5,\"isExcluded\":null}"))
+                        .content("{\"name\":\"수정됨\",\"memo\":\"메모\",\"weight\":5,\"isExcluded\":null,\"version\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("isExcluded"));
     }
@@ -178,7 +178,7 @@ class MenuControllerTest extends AbstractControllerTest {
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"수정됨\",\"weight\":3,\"isExcluded\":false,\"memo\":\""
-                                + longMemo + "\"}"))
+                                + longMemo + "\",\"version\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("memo"));
     }
@@ -320,7 +320,7 @@ class MenuControllerTest extends AbstractControllerTest {
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new MenuRequest.Update("된장찌개", "", 1, false, null, tagIds))))
+                                new MenuRequest.Update("된장찌개", "", 1, false, null, tagIds, 0L))))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(menuService);

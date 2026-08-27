@@ -29,6 +29,11 @@ public class MenuRestaurantRequest {
             @Max(value = 5, message = "평점은 5 이하여야 합니다.")
             Integer rating,
             @Size(max = 1000, message = "메모는 1000자 이하여야 합니다.")
-            String memo
+            String memo,
+            // 화면을 그릴 때 받아 간 버전. 근거는 VersionGuard — 이게 없으면 낙관적 락은
+            // "겹쳐 있는 두 트랜잭션"만 막고 정작 흔한 손실(몇 분 전에 연 탭)은 지나간다.
+            // Create에는 붙이지 않는다. 아직 없는 행에는 덮어쓸 앞선 변경이 없다.
+            @NotNull(message = "버전(version)은 필수입니다.")
+            Long version
     ) {}
 }
