@@ -58,7 +58,12 @@ public class MenuRequest {
             Set<@NotBlank(message = "카테고리는 비어 있을 수 없습니다.")
                 @Size(max = 20, message = "카테고리는 20자 이하여야 합니다.") String> categories,
             @Size(max = 20, message = "태그는 최대 20개까지 지정할 수 있습니다.")
-            Set<Long> tagIds
+            Set<Long> tagIds,
+            // 화면을 그릴 때 받아 간 버전. 이게 없으면 낙관적 락은 "겹쳐 있는 두 트랜잭션"만
+            // 막고, 정작 흔한 손실(몇 분 전에 연 탭이 지금 저장하는 것)은 그대로 지나간다.
+            // 근거는 VersionGuard. 선택으로 두면 값을 빼는 것만으로 보호에서 빠져나갈 수 있다.
+            @NotNull(message = "버전(version)은 필수입니다.")
+            Long version
     ) {}
 
     public record BatchUpdateWeight(

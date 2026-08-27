@@ -5,7 +5,7 @@
   min-height: 260px;
   margin: 0 0 16px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r-md);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -36,16 +36,18 @@
 }
 
 /* 말풍선은 지도(카카오가 만든 DOM) 안에 붙으므로 이 파일이 아니면 손댈 곳이 없다. */
+/* 카카오 지도가 그린 흰 말풍선 안이므로 색은 테마를 따르지 않는다 — 다크 모드에서
+   --text-h를 쓰면 흰 말풍선에 흰 글자가 된다. 그래서 라이트 먹색을 값으로 박는다. */
 .kakao-map-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
   min-width: 140px;
-  color: #08060d;
-  font: 14px/140% var(--sans);
+  color: #14201d;
+  font: var(--fs-sm) / 140% var(--sans);
 }
 
 .kakao-map-info strong {
-  color: #08060d;
+  color: #14201d;
 }

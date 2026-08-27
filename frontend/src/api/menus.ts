@@ -18,6 +18,12 @@ export interface MenuDetail extends MenuSummary {
   memo: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 낙관적 락 버전. 수정 요청에 **그대로 되돌려 보내야** 한다 — 서버는 이 값으로
+   * "내가 이 화면을 그린 뒤 누가 먼저 고쳤는가"를 판정한다. 값을 빼면 400이고,
+   * 오래된 값을 보내면 409 CONCURRENT_MODIFICATION이다.
+   */
+  version: number;
 }
 
 export interface MenuListResponse {
@@ -36,6 +42,8 @@ export interface MenuCreateRequest {
 
 export interface MenuUpdateRequest extends MenuCreateRequest {
   isExcluded: boolean;
+  // 화면을 그릴 때 받은 MenuDetail.version을 그대로 싣는다.
+  version: number;
 }
 
 export async function fetchMenus(cursor?: number, size = 20) {

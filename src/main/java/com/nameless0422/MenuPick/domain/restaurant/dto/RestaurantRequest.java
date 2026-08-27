@@ -84,6 +84,10 @@ public class RestaurantRequest {
             BigDecimal longitude,
             @Size(max = 500)
             @Pattern(regexp = NAVER_URL_PATTERN, message = NAVER_URL_MESSAGE)
-            String naverUrl
+            String naverUrl,
+            // 화면을 그릴 때 받아 간 버전. 근거는 VersionGuard — 이게 없으면 낙관적 락은
+            // "겹쳐 있는 두 트랜잭션"만 막고 정작 흔한 손실(몇 분 전에 연 탭)은 지나간다.
+            @NotNull(message = "버전(version)은 필수입니다.")
+            Long version
     ) {}
 }

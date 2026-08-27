@@ -12,12 +12,11 @@
 
 /* .page h1과 같은 이유로 56px는 과하다 — 여기 h1은 서비스 이름이 아니라 상황 안내다. */
 .error-boundary h1 {
-  font-size: 28px;
+  font-size: 1.75rem; /* 28px */
   line-height: 118%;
-  letter-spacing: -0.28px;
   margin: 0;
   @media (max-width: 1024px) {
-    font-size: 22px;
+    font-size: 1.375rem; /* 22px */
   }
 }
 

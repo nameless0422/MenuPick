@@ -1,10 +1,11 @@
-/* 랜덤 픽 화면 전용 스타일 — 공용 클래스(index.css)에 없는 것만 정의한다 */
+/* 랜덤 픽 화면 전용 스타일 — 공용 클래스(index.css)에 없는 것만 정의한다.
+   이 화면의 결과 카드가 앱 전체에서 유일하게 과감한 자리다. 근거는 index.css 머리말. */
 
 .pick-filters {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 /* fieldset/legend 스타일은 .menu-form과 동일해 index.css에서 함께 정의한다 */
@@ -13,11 +14,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .pick-geo-error {
-  font-size: 14px;
+  font-size: var(--fs-sm);
   color: var(--text);
 }
 
@@ -25,62 +26,176 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin: 8px 0 20px;
+  gap: 14px;
+  margin: 12px 0 28px;
 }
 
+/* ---- 뽑기 버튼 ----
+   이 앱에서 사람이 실제로 누르는 버튼은 사실상 이것 하나다. 나머지 화면(메뉴 등록,
+   식당 저장, 히스토리)은 전부 이 한 번을 준비하는 과정이다. 그래서 다른 버튼과 같은
+   무게로 두면 화면의 초점이 어디에도 없게 된다.
+
+   흐린 그림자 대신 --stamp(어긋나게 겹친 색면)를 쓴다. 눌렀을 때 그 어긋남만큼
+   실제로 밀려 들어가므로, 화면을 못 듣는 사람에게도 "눌렸다"가 모양으로 남는다.
+   (움직임을 줄이는 설정에서는 index.css의 전역 규칙이 전환 시간을 없앤다 —
+   상태는 그대로 바뀌고 사이의 이동만 사라진다.) */
 .pick-button {
-  font-size: 22px;
-  font-weight: 600;
+  font-family: var(--display);
+  font-size: 1.5rem; /* 24px */
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  /* --pop은 채우는 색이라 그 위 글자는 테마를 따르지 않는 --on-pop이다(7.93:1 / 9.39:1). */
+  color: var(--on-pop);
+  background: var(--pop);
+  /* --pop은 라이트 바탕 대비 1.99:1이라 채운 면만으로는 버튼의 경계가 서지 않는다
+     (1.4.11). 이 테두리가 경계다 — --on-pop과 같은 먹색이라 --pop 위 7.93:1. */
+  border: 2px solid var(--on-pop);
+  border-radius: 999px;
+  box-shadow: var(--stamp);
   padding: 18px 40px;
-  border-radius: 14px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid var(--accent-border);
-  /* 320px 기기의 가용 폭은 약 270px이라 고정 280px이면 화면 밖으로 나가고
+  /* 320px 기기의 가용 폭은 약 270px이라 고정 300px이면 화면 밖으로 나가고
      가로 스크롤이 생긴다 — 좁은 화면에서는 폭에 맞춰 줄인다. */
-  min-width: min(280px, 100%);
+  min-width: min(300px, 100%);
   min-height: 74px;
+  transition: transform 90ms ease, box-shadow 90ms ease;
 }
-.pick-button:hover:not([aria-disabled="true"]) {
-  border-color: var(--accent);
-  box-shadow: var(--shadow);
+
+/* 전역 button:hover(=0,3,1)가 색을 --accent로 바꿔 이 버튼을 통째로 덮는다.
+   :not() 두 개를 그대로 달아 (0,4,0)으로 올려야 이쪽이 이긴다 — 하나만 달면
+   클래스 개수가 같아지고 전역 쪽 요소 선택자가 이긴다. */
+.pick-button:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--on-pop);
+  background: var(--pop);
+  border-color: var(--on-pop);
+  box-shadow: 7px 7px 0 var(--accent);
+  transform: translate(-2px, -2px);
 }
+
+.pick-button:active:not(:disabled):not([aria-disabled='true']) {
+  transform: translate(5px, 5px);
+  box-shadow: 0 0 0 var(--accent);
+}
+
 /* 돌리는 동안 disabled 대신 aria-disabled를 쓴다(초점을 잃지 않기 위해). 그러면 전역
    button:disabled의 흐림 처리가 걸리지 않아 시각적으로는 계속 누를 수 있어 보이므로,
-   같은 모습을 여기서 되살린다. */
-.pick-button[aria-disabled="true"] {
-  opacity: 0.5;
+   같은 모습을 여기서 되살린다. 겹친 색면도 함께 걷어야 "눌 수 있는 덩어리"로 보이지 않는다. */
+.pick-button[aria-disabled='true'] {
+  opacity: 0.6;
   cursor: default;
+  box-shadow: none;
+  transform: none;
 }
 
 .pick-slot {
-  font-size: 34px;
+  font-size: 2.125rem; /* 34px */
   line-height: 1;
 }
 
 .card-muted-hint {
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
+/* ---- 오늘의 픽 = 식권 ----
+   결과를 카드로 두면 위의 메뉴 목록·아래의 히스토리와 같은 모양이 되어, 방금 일어난
+   일이 목록의 한 줄처럼 보인다. 이 화면에서 유일하게 "받은 것"이므로 받은 물건처럼
+   생겨야 한다 — 위쪽 발권부(--pop 띠), 절취선, 그리고 양옆에 뚫린 구멍.
+
+   구멍은 카드 밖으로 반쯤 나간 원을 overflow:hidden으로 잘라 만든다. 그래서 절취선의
+   y좌표(--perf-y)와 발권부 높이가 **같은 값이어야** 한다 — 한쪽만 바꾸면 구멍이
+   절취선에서 떨어져 그냥 얼룩이 된다. */
 .pick-result {
-  border-color: var(--accent-border);
-  align-items: flex-start;
+  --perf-y: 46px;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+  /* 종이 가장자리. --border(1.3:1)로는 표가 한 장 놓인 것으로 보이지 않는다. */
+  border: 2px solid var(--text-h);
+}
+
+.pick-result::before,
+.pick-result::after {
+  content: '';
+  position: absolute;
+  /* 점선은 --perf-y부터 2px 두께로 그려지므로 그 중심은 +1px이다. */
+  top: calc(var(--perf-y) + 1px);
+  width: 20px;
+  height: 20px;
+  /* 뚫린 구멍이므로 페이지 바탕색이다 — 카드 색(--surface)을 쓰면 구멍이 아니라
+     흰 동그라미가 된다. */
+  background: var(--bg);
+  border: 2px solid var(--text-h);
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.pick-result::before {
+  left: -10px;
+}
+.pick-result::after {
+  right: -10px;
+}
+
+/* 발권부. 높이를 고정하는 이유는 위 --perf-y와 맞물려 있어서다 — 내용이 줄바꿈되어
+   높이가 늘면 구멍이 절취선에서 어긋난다. 그래서 안쪽 글자는 줄바꿈하지 않는다. */
+.pick-ticket-stub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--perf-y);
+  box-sizing: border-box;
+  padding: 0 18px;
+  background: var(--pop);
+  color: var(--on-pop);
+  white-space: nowrap;
 }
 
 .pick-result-label {
-  font-size: 14px;
-  color: var(--accent);
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--on-pop);
 }
 
+/* 뽑은 시각. 장식이 아니라 이 픽을 히스토리에서 찾는 열쇠다 — 히스토리는 시각순으로
+   쌓이고 같은 메뉴가 여러 번 나올 수 있어, 이름만으로는 어느 것인지 짚을 수 없다.
+   --mono를 <time> 전체에 걸지 않고 여기서만 거는 이유는 히스토리의 <time>이
+   "8월 27일 (목) 14:07"처럼 한글이 섞인 문장이라서다 — IBM Plex Mono에는 한글이 없어
+   숫자만 다른 서체로 튄다. 여기 내용은 "14:07"뿐이라 그럴 일이 없다. */
+.pick-ticket-time {
+  font-family: var(--mono);
+  color: var(--on-pop);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.pick-ticket-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 18px 18px;
+  /* 절취선. 구멍 두 개가 이 선의 양 끝에 앉는다. */
+  border-top: 2px dashed var(--text-h);
+}
+
+/* --display를 쓰는 두 자리 중 하나. 이 화면이 존재하는 이유가 이 한 단어다.
+   word-break: keep-all — 한글은 어디서나 끊기므로 두지 않으면 "김치찌" / "개"로 갈린다. */
 .pick-result-name {
-  font-size: 30px;
-  line-height: 1.2;
+  font-family: var(--display);
+  font-size: 2.875rem; /* 46px */
+  line-height: 1.1;
+  letter-spacing: -0.01em;
   color: var(--text-h);
+  word-break: keep-all;
+  @media (max-width: 640px) {
+    font-size: 2.125rem; /* 34px */
+  }
 }
 
 .pick-result-memo {
-  font-size: 15px;
+  font-size: var(--fs-md);
 }
 
 .pick-restaurants {
@@ -89,8 +204,8 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 15px;
+  gap: 8px;
+  font-size: var(--fs-md);
 }
 
 .pick-restaurants li {
@@ -102,14 +217,32 @@
 
 .pick-restaurants strong {
   color: var(--text-h);
-  font-weight: 500;
+  font-weight: 700;
+}
+
+/* 거리는 읽는 글이 아니라 비교하는 값이다 — 목록에서 자릿수가 흔들리지 않게 고정폭으로. */
+.pick-restaurants .chip {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
 }
 
 .pick-restaurant-address {
-  font-size: 13px;
+  font-size: var(--fs-xs);
 }
 
+/* .card > .card-actions의 구분선(index.css)은 여기까지 닿지 않는다 —
+   식권에서는 동작 줄이 카드가 아니라 발권부 아래 본문의 자식이라서다. */
+.pick-ticket-body > .card-actions {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* 조건에 맞는 메뉴가 없을 때. 식권이 나오지 않은 자리라 같은 종이지만 비어 있다. */
 .pick-empty {
   align-items: flex-start;
+  background: var(--bg);
   border-style: dashed;
+  border-color: var(--field-border);
+  box-shadow: none;
 }

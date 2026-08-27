@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Layout from "./Layout";
@@ -97,5 +97,22 @@ describe("Layout 내비게이션", () => {
     renderShell();
 
     expect(screen.getByRole("navigation", { name: "주요 메뉴" })).toBeInTheDocument();
+  });
+
+  /**
+   * 로그아웃은 화면을 옮기는 동작이 아니라 세션을 끊는 동작이다. <nav> 안에 두면
+   * 랜드마크로 건너뛴 사용자에게 다섯 개 목적지 뒤에 붙은 여섯 번째 목적지처럼
+   * 들리고, "다음 화면으로 가는 것"과 "로그인 상태를 버리는 것"이 같은 묶음에 놓인다.
+   *
+   * <p>화면상으로는 여전히 같은 줄에 나란히 있어(index.css의 .app-bar-inner) 눈으로
+   * 보는 사람에게는 달라진 것이 없다 — 그래서 되돌려 놓아도 화면만 봐서는 모른다.
+   */
+  it("로그아웃은 내비게이션 랜드마크 밖에 있다", () => {
+    renderShell();
+
+    const nav = screen.getByRole("navigation", { name: "주요 메뉴" });
+    expect(within(nav).queryByRole("button", { name: "로그아웃" })).toBeNull();
+    // 밖으로 뺐을 뿐 사라지면 안 된다.
+    expect(screen.getByRole("button", { name: "로그아웃" })).toBeInTheDocument();
   });
 });

@@ -15,7 +15,7 @@ import {
   type TagSummary,
 } from "../api/menus";
 import { createTag, searchTags } from "../api/tags";
-import { apiErrorMessage as errorMessage } from "../api/http";
+import { apiErrorCode, apiErrorMessage as errorMessage } from "../api/http";
 import { chipAction, chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
@@ -308,6 +308,14 @@ function MenuFormFields({
   const [isExcluded, setIsExcluded] = useState(initial?.isExcluded ?? false);
   const [categories, setCategories] = useState<string[]>(initial?.categories ?? []);
   const [tags, setTags] = useState<TagSummary[]>(initial?.tags ?? []);
+  // 서버가 "이 화면을 그린 뒤 누가 먼저 고쳤는가"를 판정하는 값. 다른 필드와 함께 한 번만
+  // 잡아 둔다 — 편집 중에 배경 refetch가 들어와도 이 폼이 근거로 삼은 시점은 바뀌면 안 된다.
+  //
+  // 기본값 0은 "모르면 막는다"다. menuId가 있으면 부모(MenuForm)가 상세가 도착한 뒤에야
+  // 이 컴포넌트를 만들므로 initial은 반드시 있지만, 그 전제가 언젠가 깨지면 0이 나가
+  // 서버가 409로 거절한다 — 조용히 덮어쓰는 것보다 거절이 낫다. 그래서 단언(!)을 쓰지 않는다.
+  const [version] = useState(initial?.version ?? 0);
+  const queryClient = useQueryClient();
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
   const weightLabelId = useId();
 
@@ -322,10 +330,19 @@ function MenuFormFields({
     mutationFn: () => {
       const base = { name: name.trim(), memo, weight, categories, tagIds: tags.map((t) => t.id) };
       return menuId != null
-        ? updateMenu(menuId, { ...base, isExcluded })
+        ? updateMenu(menuId, { ...base, isExcluded, version })
         : createMenu(base);
     },
     onSuccess: onSaved,
+    onError: (error) => {
+      // 409는 "그 사이 누가 먼저 고쳤다"이고, 서버 메시지가 새로고침을 안내한다. 그런데
+      // 캐시를 그대로 두면 폼을 닫았다 다시 열어도 같은 낡은 값이 나와 같은 409를 반복한다 —
+      // 안내한 행동이 실제로 통하게 만들어 둔다.
+      if (apiErrorCode(error) === "CONCURRENT_MODIFICATION") {
+        queryClient.invalidateQueries({ queryKey: ["menu", menuId] });
+        queryClient.invalidateQueries({ queryKey: ["menus"] });
+      }
+    },
   });
 
   // "이름이 아직 없다"와 "요청이 나가 있다"는 성격이 다르다. 앞은 사용자가 무엇을 더 해야

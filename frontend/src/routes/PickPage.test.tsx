@@ -60,6 +60,7 @@ beforeEach(() => {
       isExcluded: false,
       createdAt: "2026-01-01T00:00:00",
       updatedAt: "2026-01-01T00:00:00",
+      version: 0,
     },
     restaurants: [],
   });
@@ -184,6 +185,7 @@ describe("PickPage 결과 지도", () => {
         isExcluded: false,
         createdAt: "2026-01-01T00:00:00",
         updatedAt: "2026-01-01T00:00:00",
+        version: 0,
       },
       restaurants: [
         {
@@ -259,6 +261,7 @@ describe("픽 진행·결과 통지", () => {
         isExcluded: false,
         createdAt: "2026-01-01T00:00:00",
         updatedAt: "2026-01-01T00:00:00",
+        version: 0,
       },
       restaurants: [
         { id: 1, name: "진주회관", address: "서울시 중구", latitude: 37.5665, longitude: 126.978, distance: null },
@@ -579,5 +582,43 @@ describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
 
     await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
     expect(requestPickMock.mock.calls.at(-1)![0].maxDistance).toBe(2000);
+  });
+});
+
+/**
+ * 픽 결과 카드(식권)의 발권 시각.
+ *
+ * <p>이 시각은 장식이 아니다 — 히스토리는 시각순으로 쌓이고 같은 메뉴가 여러 번 나올 수
+ * 있어서, 방금 뽑은 그 한 건을 나중에 짚으려면 이름이 아니라 시각이 필요하다. 그래서
+ * 여기 찍힌 값은 <b>픽이 도착한 순간</b>이어야 하고 그 뒤로 움직이면 안 된다.
+ *
+ * <p>렌더 안에서 그냥 {@code new Date()}를 부르면 화면만 보고는 멀쩡하다 — 처음 뜰 때는
+ * 맞는 값이 찍히기 때문이다. 어긋나는 건 그 뒤에 카드가 다시 그려질 때이고(필터를 하나
+ * 누르는 것만으로 일어난다), 그때부터 표에 찍힌 시각은 "뽑은 때"가 아니라 "마지막으로
+ * 화면이 갱신된 때"가 된다. 히스토리에서 그 시각을 찾으면 아무것도 안 나온다.
+ */
+describe("PickPage 식권 발권 시각", () => {
+  it("결과가 나온 순간에 고정되고 다시 그려져도 움직이지 않는다", async () => {
+    // shouldAdvanceTime: 실제 시간이 흐르면 가짜 시계도 따라 흐른다 — 픽 연출의
+    // 최소 대기(1.2초)가 그대로 끝나야 결과 카드가 나온다.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date("2026-01-15T14:07:30"));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderWithProviders(<PickPage />);
+
+      await user.click(spinButton());
+      const ticketTime = await screen.findByText("14:07", {}, { timeout: 3000 });
+      expect(ticketTime).toHaveAttribute("datetime", expect.stringContaining("2026-01-15"));
+
+      // 한참 뒤에 카드가 다시 그려지는 상황. 결과는 그대로 붙어 있고 필터만 건드린다.
+      vi.setSystemTime(new Date("2026-01-15T15:42:00"));
+      await user.click(screen.getByRole("button", { name: "한식" }));
+
+      expect(screen.getByText("14:07")).toBeInTheDocument();
+      expect(screen.queryByText("15:42")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

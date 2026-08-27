@@ -32,7 +32,7 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
     private static MenuRestaurantResponse.MenuRestaurantDetail detail(Integer rating, String memo) {
         return new MenuRestaurantResponse.MenuRestaurantDetail(
                 1L, 10L, "진주회관", "서울시 중구", rating, memo,
-                LocalDateTime.now(), LocalDateTime.now());
+                LocalDateTime.now(), LocalDateTime.now(), 0L);
     }
 
     // --- 목록 조회 ---
@@ -171,7 +171,7 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
         mockMvc.perform(post("/api/v1/menus/1/restaurants")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"rating\":3}"))
+                        .content("{\"rating\":3,\"version\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.errors[0].field").value("restaurantId"));
@@ -229,7 +229,7 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                new MenuRestaurantRequest.Update(2, "생각보다 별로"))))
+                                new MenuRestaurantRequest.Update(2, "생각보다 별로", 0L))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.rating").value(2))
                 .andExpect(jsonPath("$.data.memo").value("생각보다 별로"));
@@ -241,7 +241,7 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
         mockMvc.perform(put("/api/v1/menus/1/restaurants/10")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"rating\":9}"))
+                        .content("{\"rating\":9,\"version\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("rating"));
 
@@ -258,7 +258,7 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
         mockMvc.perform(put("/api/v1/menus/1/restaurants/99")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"rating\":3}"))
+                        .content("{\"rating\":3,\"version\":0}"))
                 .andExpect(status().isNotFound());
     }
 
@@ -284,7 +284,7 @@ class MenuRestaurantControllerTest extends AbstractControllerTest {
         mockMvc.perform(put("/api/v1/menus/1/restaurants/10")
                         .with(authentication(AUTH))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"rating\":4,\"memo\":\"" + longMemo + "\"}"))
+                        .content("{\"rating\":4,\"memo\":\"" + longMemo + "\",\"version\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("memo"));
 

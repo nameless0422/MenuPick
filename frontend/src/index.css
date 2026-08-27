@@ -1,36 +1,141 @@
+/* ============================================================================
+   메뉴픽 디자인 시스템 — "분식집 메뉴판"
+   ----------------------------------------------------------------------------
+   이 앱이 하는 일은 하나다: 점심 앞에서 못 정하는 사람 대신 골라 준다. 그런데
+   화면은 그 일을 전혀 말하지 않고 있었다 — 시스템 폰트, 보라색 강조, 6px 라운드
+   상자. 어느 관리자 화면에 붙여도 어색하지 않은, 그래서 무엇을 하는 앱인지
+   알려주지 않는 껍데기였다.
+
+   방향은 앱이 이미 쓰고 있는 말에서 가져왔다. 슬롯머신 이모지, "오늘의 픽 🎉",
+   한식·중식·일식 칩 — 전부 동네 밥집의 어휘다. 그래서 시각 언어도 거기서 가져온다:
+
+     · 청록 간판(--brand-surface)에 단무지색 띠(--pop). 국밥집 간판의 배색이다.
+     · 굵은 고딕 손글씨체(--display)를 메뉴판 글씨처럼 딱 두 자리에만 쓴다 —
+       서비스 이름과, 뽑힌 메뉴 이름. 나머지는 전부 조용히 둔다.
+     · 뽑기 결과는 카드가 아니라 **식권**이다(PickPage.css). 이 앱에서 기억에
+       남아야 하는 화면은 그 한 장뿐이므로, 과감함도 거기에만 쓴다.
+
+   토큰 이름은 예전 것을 그대로 둔다(--text, --accent, --code-bg …). 색만 갈아
+   끼우면 이미 검증된 대비 규칙과 페이지별 CSS가 그대로 따라오기 때문이다.
+   아래 대비값은 전부 새 팔레트로 다시 계산한 값이다.
+   ========================================================================== */
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
+  /* ---- 바탕과 글자 ---- */
+  /* 페이지 바탕. 순백이 아니라 살짝 데운 종이색이다 — 카드(--surface)를 흰색으로
+     띄우려면 그 아래가 흰색이 아니어야 한다. */
+  --bg: #fbf8f1;
+  /* 카드·폼이 올라앉는 면. 목록이 바탕에서 떠 보이는 유일한 근거다. */
+  --surface: #ffffff;
+  /* 본문. --bg 위 6.16:1, --surface 위 6.53:1, --code-bg 위 5.60:1. */
+  --text: #55605c;
+  /* 제목·강조. 살짝 청록기가 도는 먹색이라 --accent와 같은 계열로 읽힌다.
+     --bg 위 15.79:1, --surface 위 16.75:1. */
+  --text-h: #14201d;
+
+  /* ---- 선 ---- */
   /* 카드 테두리·구분선 같은 장식용. 대비 요구가 없는 자리에만 쓴다. */
-  --border: #e5e4e7;
-  /* 폼 컨트롤(버튼·입력창) 전용. --border(#e5e4e7)는 흰 배경 대비 1.27:1이라
-     WCAG 1.4.11이 요구하는 3:1의 절반도 안 됐다. 입력창은 배경이 페이지와 같아
-     테두리가 "여기가 입력할 수 있는 곳"이라는 유일한 신호인데 그게 보이지 않았다.
-     이 값은 4.49:1. --border를 통째로 올리지 않는 이유는 그 토큰이 카드·nav
-     구분선 등 장식에도 널리 쓰여 디자인 전반이 흔들리기 때문이다. */
-  --field-border: #767680;
-  --code-bg: #f4f3ec;
-  /* 이전 #aa3bff는 흰 배경 대비 4.39:1로 소형 텍스트 기준(4.5:1)에 미달했다.
-     선택된 필터 칩처럼 상태를 알리는 유일한 신호에도 쓰여 한 단계 어둡게 잡았다.
-     현재 6.37:1 (흰 배경) / 5.42:1 (--accent-bg 위). 다크 토큰은 이미 통과해 그대로 둔다. */
-  --accent: #8b1fd9;
-  --accent-bg: rgba(139, 31, 217, 0.1);
-  --accent-border: rgba(139, 31, 217, 0.5);
+  --border: #e3dcce;
+  /* 폼 컨트롤(버튼·입력창) 전용. --border는 바탕 대비 1.29:1이라 1.4.11이 요구하는
+     3:1에 한참 못 미친다. 입력창은 배경이 페이지와 같아 테두리가 "여기가 입력할 수
+     있는 곳"이라는 유일한 신호인데 그게 보이지 않는다. 이 값은 --bg 위 4.50:1,
+     --surface 위 4.77:1, --code-bg 위 4.08:1. --border를 통째로 올리지 않는 이유는
+     그 토큰이 카드·구분선 등 장식에도 널리 쓰여 디자인 전반이 흔들리기 때문이다. */
+  --field-border: #6b7570;
+
+  /* 버튼·칩의 바탕. 종이보다 반 톤 눌러 눌리는 면처럼 보이게 한다. */
+  --code-bg: #f2ede2;
+
+  /* ---- 강조: 두 색으로 나눈다 ----
+     --accent(짙은 청록)는 **글자에 쓰는 색**이다. 작은 글씨에도 4.5:1을 넘긴다.
+     --pop(단무지색)은 **면을 채우는 색**이다. 밝아서 글자로 쓰면 어디서도 4.5:1을
+     못 넘긴다(--bg 위 1.99:1) — 그래서 이 토큰은 절대 글자색으로 쓰지 않고, 채운
+     면 위에 --on-pop을 얹는 방식으로만 쓴다. 이 구분이 무너지면 가장 눈에 띄는
+     색이 가장 안 읽히는 색이 된다. */
+  --accent: #0e5b4e;
+  --accent-bg: rgba(14, 91, 78, 0.1);
+  --accent-border: rgba(14, 91, 78, 0.5);
+  --pop: #f2a20c;
+  /* --pop 위에 얹는 글자. 라이트·다크 어느 쪽에서도 --pop이 밝은 색이므로 이 값은
+     테마를 따라가지 않는다 — --text-h를 쓰면 다크에서 밝은 글자가 밝은 면에
+     얹혀 1.53:1이 된다. 고정값으로 두면 두 테마 모두 7.93:1 / 9.39:1. */
+  --on-pop: #14201d;
+
+  /* ---- 간판(상단 바) ---- */
+  /* 앱 바의 바탕. 페이지 바탕과 다른 면이라 별도 토큰이다. */
+  --brand-surface: #0e5b4e;
+  /* 그 위의 글자. 7.54:1. */
+  --on-brand: #fbf8f1;
+
   /* 에러·위험 동작 색. 하드코딩하면 다크 모드에서 배경에 묻혀 메시지를 못 읽는다.
-     이전 #d0342c는 흰 배경에서는 4.99:1로 통과했지만, 전역 button 배경(--code-bg)
-     위에서 4.485:1로 4.5:1에 아슬하게 미달했다(.settings-withdraw). hover 시에는
-     배경이 더 밝아져 4.18:1까지 떨어졌다.
-     현재 5.62:1 (흰 배경) / 5.05:1 (--code-bg 위) / 4.64:1 (hover 배경 위). */
-  --danger: #c62828;
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+     --bg 위 6.16:1 / --surface 위 6.54:1 / --code-bg(버튼) 위 5.60:1 /
+     탈퇴 버튼 hover 배경 위 4.79:1. */
+  --danger: #b3261d;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* 초점 링 색. 앱 바처럼 바탕이 --brand-surface인 곳에서는 --accent가 그 위에서
+     1:1이 되어 링이 통째로 사라진다 — 그런 면에서는 이 변수를 --pop으로 덮는다
+     (.app-bar 규칙). 기본값은 --bg/--surface 위 7.54:1 / 8.00:1. */
+  --focus: var(--accent);
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
+  /* ---- 그림자 ---- */
+  /* 카드가 종이에서 떠오르는 정도. 아주 얕게 — 목록이 스무 장쯤 쌓이므로. */
+  --shadow: 0 1px 2px rgba(20, 32, 29, 0.05), 0 10px 24px -16px rgba(20, 32, 29, 0.3);
+  /* 뽑기 버튼 전용. 흐린 그림자가 아니라 어긋나게 겹친 색면이다 — 인쇄물이나
+     간판처럼 보이고, 눌렀을 때 실제로 눌려 들어가는 연출을 만들 수 있다.
+     --accent는 두 테마 모두 바탕 대비 7.54:1 / 9.57:1이라 색면이 확실히 보인다. */
+  --stamp: 5px 5px 0 var(--accent);
+
+  /* ---- 모서리 ---- */
+  --r-md: 10px;
+  --r-lg: 16px;
+
+  /* ---- 서체 ----
+     본문은 IBM Plex Sans KR. 시스템 폰트를 벗어나되 개성이 본문을 방해하지 않는
+     선에서 고른다. 로딩 실패(폰트 CDN 차단·오프라인)에도 화면은 그대로 서야 하므로
+     폴백은 예전 스택을 그대로 남긴다.
+
+     --display는 간판 글씨다. 획이 굵고 자간이 꽉 차서 아무 데나 쓰면 강조가 아니라
+     소음이 된다. 규칙은 하나다 — **서비스의 이름과, 뽑는 행위**에만 쓴다:
+       · .wordmark / .auth-wordmark — 이름
+       · .pick-button, .pick-result-name — 뽑는 버튼과 거기서 나온 메뉴 이름
+     그 외에는 쓰지 않는다. 특히 목록의 항목 이름에 번지면(메뉴·식당 카드) 한 화면에
+     같은 글씨가 스무 번 나오고, 그 순간 "뽑힌 것"과 "그냥 있는 것"의 구분이 사라진다.
+
+     --mono는 데이터용이다. 거리(500m)·시각(14:07)처럼 "읽는 글"이 아니라 "확인하는
+     값"에만 쓴다. 숫자 폭이 고정돼 목록에서 자릿수가 흔들리지 않는다. 한글이 섞인
+     문자열에는 쓰지 않는다 — IBM Plex Mono에 한글이 없어 숫자만 다른 서체로 튄다. */
+  --sans: 'IBM Plex Sans KR', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: var(--sans);
+  --display: 'Black Han Sans', var(--sans);
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ---- 글자 크기 ----
+     이 리포의 CSS에는 글자 크기가 px로만 적혀 있었다(58군데). 그러면 브라우저
+     기본 글꼴 크기를 키워 둔 사용자에게 그 설정이 통째로 무시된다 — 눈이 나빠
+     기본값을 20px로 올려 둔 사람이 이 앱만 열면 다시 18px로 돌아간다.
+     확대(브라우저 줌)는 여전히 되므로 1.4.4 위반은 아니지만, 확대는 레이아웃까지
+     통째로 키우는 거친 수단이고 "글자만 크게"라는 조정 수단은 아예 없었다.
+
+     그래서 규칙은 두 줄이다.
+       · **글자 크기는 rem** — 아래 토큰과 각 파일의 rem 값. 기준은 :root의
+         font-size: 100%, 즉 사용자가 정한 기본값(보통 16px)이다.
+       · **2.5.8이 요구하는 최소 타깃 크기(24px)와 도형 기하는 px 그대로** —
+         min-width/min-height, 식권의 절취선 좌표(--perf-y) 같은 것들이다.
+         이쪽을 rem으로 바꾸면 기본 글꼴을 **줄여** 둔 사용자에게서 24px 보장이
+         함께 줄어들어, 접근성 장치가 접근성 설정 때문에 무너진다.
+
+     px 값은 관례대로 16으로 나눈다(:root가 100%이므로 1rem = 사용자 기본값).
+     본문만 --fs-base로 한 단 키운다 — 이 앱의 읽는 글은 대부분 한 줄짜리 안내라
+     16px보다 18px이 편하다. */
+  --fs-2xs: 0.75rem; /* 12px — 거리 칩처럼 값만 담는 자리 */
+  --fs-xs: 0.8125rem; /* 13px — 칩·보조 문구 */
+  --fs-sm: 0.875rem; /* 14px — 폼 라벨·설명 */
+  --fs-md: 0.9375rem; /* 15px — 버튼·입력칸 */
+  --fs-base: 1.125rem; /* 18px — 본문 */
+
+  /* 100%를 명시한다. 값을 적지 않는 것과 결과는 같지만, 이 자리에 px를 박는 것이
+     바로 위 규칙이 막으려는 실수라 "여기는 비워 두는 자리"임을 코드로 남긴다. */
+  font-size: 100%;
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
@@ -38,29 +143,47 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    /* #2e303a는 배경 대비 1.36:1이었다. 이 값은 5.42:1. */
-    --field-border: #8b8d98;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    /* 라이트용 #d0342c는 어두운 배경에서 3.58:1까지 떨어져 읽히지 않는다.
-       이 값은 6.42:1 (--bg 위) / 5.82:1 (--code-bg 버튼 위). */
+    --bg: #131615;
+    --surface: #1b201e;
+    /* --bg 위 7.89:1 / --surface 위 7.15:1 / --code-bg 위 6.36:1 */
+    --text: #a3ada8;
+    --text-h: #f1ede3;
+    --border: #2e3532;
+    /* #2e3532는 배경 대비 1.3:1이었다. 이 값은 --bg 위 5.76:1. */
+    --field-border: #8a938e;
+    --code-bg: #232a27;
+    /* --bg 위 9.57:1 / --surface 위 8.68:1 / --accent-bg 위 6.54:1 */
+    --accent: #5ccfb4;
+    --accent-bg: rgba(92, 207, 180, 0.14);
+    --accent-border: rgba(92, 207, 180, 0.5);
+    --pop: #f7b733;
+    /* 간판은 다크에서도 간판이다 — 페이지가 어두워졌다고 이 면까지 같은 색이 되면
+       상단 바가 사라진다. 밝기 차만으로는 1.6:1이라 구분이 약해서, 아래 .app-bar가
+       --pop 띠로 경계를 한 줄 못 박는다. 그 위 글자 8.83:1. */
+    --brand-surface: #12443b;
+    --on-brand: #dfe9e4;
+    /* 라이트용 #b3261d는 어두운 배경에서 읽히지 않는다.
+       --bg 위 6.53:1 / --surface 위 5.92:1 / --code-bg 위 5.26:1 / 탈퇴 hover 위 4.56:1 */
     --danger: #ff6b63;
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 24px -16px rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* 이 디자인은 뽑기 버튼을 누를 때 실제로 눌려 들어가고, 칩·버튼이 hover에서 색을
+   옮긴다. 전정기관이 민감한 사용자에게는 그 전부가 불필요한 움직임이다 — 상태
+   변화 자체는 색과 테두리로 그대로 남으므로 전환만 걷어낸다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -74,54 +197,71 @@
    시각 사용자에게 잔상처럼 보이고, 그걸 지우려고 outline:none을 넣었다가 키보드
    사용자의 초점까지 함께 지우는 것이 이 회귀의 흔한 경로다.
 
-   --accent는 배경 대비 6.37:1(라이트) / 6.77:1(다크)로 3:1을 여유 있게 넘는다.
+   색을 --accent로 박지 않고 --focus를 거치는 이유는 앱 바 때문이다 — 거기서는
+   바탕이 --brand-surface라 --accent가 같은 색으로 겹쳐 링이 사라진다.
    offset을 2px 주는 이유는 링이 컨트롤 테두리(--field-border)와 겹쳐 서로를 지우는
    것을 막기 위해서다. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
+/* #root는 이제 폭을 잡지 않는다. 앱 바는 화면 끝까지 가는 간판이어야 하고, 폭
+   제한은 그 안쪽 내용(.app-bar-inner, .page, .login-page)이 각자 건다.
+   text-align:center도 걷어냈다 — 왼쪽 정렬이 기본이고, 가운데로 놓을 것(로그인
+   화면의 서비스 이름, 오류 화면)만 스스로 가운데로 간다. */
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
 }
 
+/* 본문 크기는 :root가 아니라 여기서 잡는다. :root에 얹으면 1rem이 곧 본문 크기가
+   되어, 아래 모든 rem 값이 사용자 기본값이 아니라 "본문 대비 비율"로 뒤바뀐다.
+   :root를 100%로 비워 두어야 1rem = 사용자가 정한 값이라는 기준이 유지된다.
+
+   좁은 화면에서 본문만 한 단 내린다. 예전에는 이 자리에서 :root를 16px로 내렸는데,
+   그때는 하위가 전부 px라 실제로 줄어드는 것이 본문뿐이었다 — 지금은 하위가 rem이라
+   :root를 건드리면 칩·라벨까지 11% 줄어 좁은 화면에서만 글씨가 작아진다.
+   본문만 바꾸면 기본 설정에서 보이는 모습은 예전 그대로다. */
 body {
   margin: 0;
+  background: var(--bg);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  line-height: 145%;
+
+  @media (max-width: 1024px) {
+    font-size: 1rem;
+  }
 }
 
 h1,
 h2,
 h3 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 700;
   color: var(--text-h);
+  /* 한글 굵은 고딕은 기본 자간이 헐거워 제목이 흩어져 보인다. */
+  letter-spacing: -0.02em;
 }
 
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
+  font-size: 3.5rem; /* 56px */
+  line-height: 110%;
   margin: 32px 0;
   @media (max-width: 1024px) {
-    font-size: 36px;
+    font-size: 2.25rem; /* 36px */
     margin: 20px 0;
   }
 }
 h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
+  font-size: 1.375rem; /* 22px */
+  line-height: 130%;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
-    font-size: 20px;
+    font-size: 1.1875rem; /* 19px */
   }
 }
 
@@ -129,21 +269,79 @@ h2 {
    페이지의 h1은 "내 메뉴" 같은 화면 제목이라 그 크기가 어울리지 않는다.
    크기 때문에 제목을 h2로 낮추면 h1이 하나도 없는 문서가 되어, 스크린리더가 제목만
    훑을 때 지금 어느 화면인지 알 방법이 사라진다. 구조는 h1으로 두고 크기만 여기서 내린다.
-   h2(24px)보다는 커야 아래 소제목과 단계가 구분된다. */
+   h2(22px)보다는 커야 아래 소제목과 단계가 구분된다. */
 .page h1 {
-  font-size: 28px;
+  font-size: 1.75rem; /* 28px */
   line-height: 118%;
-  letter-spacing: -0.28px;
-  margin: 0 0 8px;
+  margin: 0;
   @media (max-width: 1024px) {
-    font-size: 22px;
+    font-size: 1.4375rem; /* 23px */
   }
 }
 p {
   margin: 0;
 }
 
-/* ---- 전역 내비게이션 ---- */
+/* ---- 전역 내비게이션 (간판) ---- */
+
+/* 상단 바는 화면 끝까지 가는 색면이다. 스크롤해도 따라온다 — 이 앱은 목록이 길고,
+   결과를 보다가 다른 화면으로 넘어가는 일이 잦다.
+   아래 --pop 띠는 장식이 아니라 경계다. 다크 모드에서 간판 색과 페이지 바탕의
+   밝기 차가 1.6:1까지 좁아져 색만으로는 면이 나뉘어 보이지 않는다. */
+.app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--brand-surface);
+  border-bottom: 3px solid var(--pop);
+  /* 이 면 위에서는 초점 링이 --accent와 겹쳐 사라진다 — --pop으로 바꾼다(3.79:1 / 6.15:1). */
+  --focus: var(--pop);
+}
+
+.app-bar-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 10px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+
+/* 좁은 화면에서는 셋이 한 줄에 못 들어간다. 그냥 두면 nav가 안에서 두세 줄로 접히고
+   로그아웃이 그 아래 어딘가로 떨어져, 화면 위쪽 3분의 1을 붙박이 바가 먹는다.
+   줄을 명시적으로 나눈다 — 1행은 이름과 로그아웃, 2행은 내비게이션 전체.
+   order로 순서를 바꾸는 것은 시각 순서뿐이라, DOM 순서(= 초점 순서, 낭독 순서)는
+   이름 → 내비게이션 → 로그아웃 그대로다. */
+@media (max-width: 640px) {
+  .app-bar-inner {
+    padding: 8px 16px;
+    gap: 6px 12px;
+  }
+  .wordmark {
+    order: 0;
+  }
+  .nav-logout {
+    order: 1;
+  }
+  nav {
+    order: 2;
+    flex: 1 1 100%;
+  }
+}
+
+/* 서비스 이름. --display를 쓰는 두 자리 중 하나다. 링크가 아니라 표시다 —
+   "메뉴픽"이라는 이름의 링크를 하나 더 만들면 이미 다섯 개인 nav 링크에 목적지가
+   같은 것이 하나 더 붙는다. */
+.wordmark {
+  font-family: var(--display);
+  font-size: 1.375rem; /* 22px */
+  line-height: 1;
+  color: var(--on-brand);
+  letter-spacing: 0.5px;
+  /* 폰트 로딩 전 폴백(--sans)으로 그려질 때 너무 가늘어 이름이 묻힌다. */
+  font-weight: 400;
+}
 
 /* JSX는 요소 사이의 개행 공백을 지우므로, gap이 없으면 링크가 전부 붙어서 렌더된다.
    터치 타깃이 서로 맞닿아 모바일에서 오탭이 나므로 간격은 장식이 아니라 기능이다. */
@@ -151,38 +349,62 @@ nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
+  gap: 4px 4px;
 }
 
-/* 본문 링크에 색 규칙이 없어 UA 기본색에 기대고 있었다. 계산해 보면 세 브라우저 모두
-   통과하지만(라이트 9.40:1, Chrome 다크 7.48:1, Firefox 다크 6.22:1) 그건 브라우저가
-   정해 준 값이지 우리가 지킨 값이 아니다 — 기본색이 바뀌면 조용히 따라 바뀐다.
-   --accent는 6.37:1(흰 배경) / 5.73:1(--code-bg 위)로 여유가 있고, 이미 선택 상태·강조에
-   쓰는 토큰이라 링크가 그 계열로 읽히는 편이 앱 안에서 일관된다.
+/* 본문 링크에 색 규칙이 없어 UA 기본색에 기대고 있었다 — 기본색이 바뀌면 조용히
+   따라 바뀐다. --accent는 --bg 위 7.54:1 / --surface 위 8.00:1 / --code-bg 위
+   6.85:1로 여유가 있고, 이미 선택 상태·강조에 쓰는 토큰이라 링크가 그 계열로
+   읽히는 편이 앱 안에서 일관된다.
    밑줄은 UA 기본을 그대로 둔다 — 색만으로 링크를 표시하면 1.4.1에 걸린다. */
 a {
   color: var(--accent);
+  text-underline-offset: 3px;
 }
 
 nav a {
-  color: var(--text);
+  color: color-mix(in srgb, var(--on-brand) 80%, transparent);
   text-decoration: none;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  border-radius: 999px;
   /* 인라인 요소라 높이가 폰트 메트릭에 좌우된다. 24x24(2.5.8)를 폰트에 맡기지 않고
      못 박는다 — 루트가 16px로 줄어드는 좁은 화면에서 특히 흔들린다. */
   display: inline-block;
   min-height: 24px;
-  padding: 4px 0;
+  padding: 6px 12px;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 /* NavLink가 현재 경로에 붙이는 표시. 색만 바꾸면 색각 이상이 있는 사용자에게
-   현재 위치가 전달되지 않으므로(1.4.1) 굵기와 밑줄을 함께 준다. */
-nav a[aria-current="page"] {
-  color: var(--text-h);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+   현재 위치가 전달되지 않으므로(1.4.1) 굵기와 모양을 함께 바꾼다 — 예전에는 밑줄을
+   썼고 지금은 알약 모양의 채운 면이다. 채워진 칸 하나만 다르게 생겼다는 사실은
+   색을 못 봐도 남는다. 그 위 글자 7.93:1 / 9.39:1. */
+nav a[aria-current='page'] {
+  color: var(--on-pop);
+  background: var(--pop);
+  font-weight: 700;
+}
+
+nav a:hover:not([aria-current='page']) {
+  color: var(--on-brand);
+  background: color-mix(in srgb, var(--on-brand) 14%, transparent);
+}
+
+/* 로그아웃은 목적이 다른 동작이라 링크 무리에서 떼어 오른쪽으로 민다. 간판 위에
+   전역 버튼(밝은 --code-bg 바탕)을 그대로 올리면 밝은 덩어리가 하나 더 생겨
+   nav 링크보다 세게 보인다 — 여기서만 윤곽선 버튼으로 낮춘다. */
+.nav-logout {
+  margin-left: auto;
+  color: var(--on-brand);
+  background: transparent;
+  /* 1.4.11: 이 테두리가 버튼의 유일한 경계다. --pop은 간판 위 3.79:1 / 6.15:1. */
+  border: 1px solid var(--pop);
+}
+.nav-logout:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--on-pop);
+  background: var(--pop);
+  border-color: var(--pop);
 }
 
 /* 건너뛰기 링크. 평소에는 화면 밖에 두되 접근성 트리에는 남겨야 하므로
@@ -192,9 +414,9 @@ nav a[aria-current="page"] {
   left: 8px;
   top: -100%;
   z-index: 10;
-  padding: 8px 12px;
-  border-radius: 0 0 6px 6px;
-  background: var(--bg);
+  padding: 8px 14px;
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  background: var(--surface);
   color: var(--text-h);
   border: 1px solid var(--field-border);
 }
@@ -202,43 +424,49 @@ nav a[aria-current="page"] {
   top: 0;
 }
 
-nav a:hover {
-  color: var(--text-h);
-  text-decoration: underline;
-}
-
-/* 로그아웃은 목적이 다른 동작이라 링크 무리에서 떼어 오른쪽으로 민다 */
-nav button {
-  margin-left: auto;
-}
-
 /* ---- 공통 페이지/카드 UI (메뉴·식당·히스토리 화면에서 공유) ---- */
 
 .page {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  box-sizing: border-box;
   text-align: left;
-  padding: 16px 24px 48px;
+  padding: 24px 20px 64px;
 }
 
+/* 화면 제목 아래의 굵은 가로줄. 메뉴판의 구조 그대로다 — 제목과 내용을 나누는 선이
+   하나 있고, 그 아래로 항목이 쌓인다. 장식이 아니라 "여기부터 이 화면의 내용"이라는
+   경계라서, 카드 테두리(--border)보다 진하고 두껍다. */
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--text-h);
 }
 
 button {
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
+  font-weight: 600;
   color: var(--text-h);
   background: var(--code-bg);
   border: 1px solid var(--field-border);
-  border-radius: 6px;
-  padding: 6px 12px;
+  /* 알약 모양. 칩(.chip)과 같은 어휘를 쓰게 해 화면의 컨트롤이 한 벌로 보인다. */
+  border-radius: 999px;
+  padding: 7px 16px;
+  min-height: 34px;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-button:hover:not(:disabled):not([aria-disabled="true"]) {
-  border-color: var(--accent-border);
+button:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent);
 }
 /* 진행 중이거나 조건이 안 맞는 버튼을 disabled로 잠그면 초점을 받지 못해 Tab 순회에서
    통째로 빠진다 — 버튼이 있다는 사실도, 왜 못 쓰는지도 전달되지 않는다. 그래서 이 리포는
@@ -246,14 +474,14 @@ button:hover:not(:disabled):not([aria-disabled="true"]) {
    여야 하므로 같은 흐림 처리를 여기서 함께 건다 — 이게 없으면 못 누르는 버튼이 멀쩡해
    보인다. */
 button:disabled,
-button[aria-disabled="true"] {
-  /* 0.5였다. 그때 라벨(--text-h)이 버튼 배경(--code-bg) 위에서 3.73:1(라이트)까지
+button[aria-disabled='true'] {
+  /* 0.5였다. 그때 라벨(--text-h)이 버튼 배경(--code-bg) 위에서 3.73:1까지
      떨어졌다. 1.4.3의 "비활성 컨트롤" 예외에 걸려 위반은 아니지만, 이 앱에서 이 상태의
      라벨은 대부분 읽어야 하는 문구다 — "로그인 중…", "보내는 중…", "저장 중…"처럼
      지금 무슨 일이 벌어지는지가 오직 그 글자에만 있다. 게다가 aria-disabled 쪽은 애초에
      비활성이 아니라 "지금은 누를 수 없다"는 표시라 예외를 끌어다 쓸 자리도 아니다.
-     0.65에서 6.24:1(라이트) / 6.95:1(다크). 흐려 보이는 신호는 그대로 남고, hover에서
-     테두리가 안 바뀌는 것과 cursor:default가 함께 "지금은 못 누른다"를 말한다. */
+     0.65에서 4.89:1(라이트) / 6.20:1(다크). 흐려 보이는 신호는 그대로 남고, hover에서
+     색이 안 바뀌는 것과 cursor:default가 함께 "지금은 못 누른다"를 말한다. */
   opacity: 0.65;
   cursor: default;
 }
@@ -265,17 +493,34 @@ button[aria-disabled="true"] {
    빈 사각형이 되어 켜졌는지 꺼졌는지 눈으로 구분할 수 없게 된다. 이 앱에서 체크박스는
    회원 탈퇴 동의처럼 "켜야만 진행되는" 자리에 쓰여, 상태가 안 보이면 되돌릴 수 없는
    동작 앞에서 사용자가 자기가 무엇에 동의했는지 확인할 방법이 없어진다. */
-input:not([type="checkbox"]):not([type="radio"]),
+input:not([type='checkbox']):not([type='radio']),
 textarea,
 select {
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-md);
   color: var(--text-h);
+  /* 카드(--surface)가 흰색이므로 입력칸은 페이지 바탕색으로 둔다 — 카드 안에서
+     한 단 파인 자리로 읽힌다. 카드 밖(로그인 폼 등)에서는 테두리가 경계를 잡는다. */
   background: var(--bg);
   border: 1px solid var(--field-border);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border-radius: var(--r-md);
+  padding: 9px 12px;
   box-sizing: border-box;
+}
+/* 초점 링과 별개로 테두리도 함께 진해진다 — 링은 컨트롤 바깥에 떠 있고, 지금
+   글자가 들어가는 칸이 어디인지는 칸 자체가 말하는 편이 빠르다. */
+input:not([type='checkbox']):not([type='radio']):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent);
+}
+
+/* 체크박스·라디오는 브라우저 기본 위젯을 그대로 쓰되 색만 앱에 맞춘다. */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
 }
 
 .card-list {
@@ -288,28 +533,32 @@ select {
 }
 
 .card {
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  box-shadow: var(--shadow);
 }
 
-/* opacity로 흐리면 배경까지 함께 섞여 카테고리 칩이 2.36:1까지 떨어진다 —
+/* opacity로 흐리면 배경까지 함께 섞여 카테고리 칩이 읽히지 않는다 —
    "이 메뉴가 왜 제외됐는지" 판단할 정보가 안 보이게 된다. 텍스트 색은 그대로 두고
-   배경과 점선 테두리로만 제외 상태를 표시한다. */
+   배경과 점선 테두리로만 제외 상태를 표시한다. 카드가 흰 면에서 종이색으로
+   내려앉으면 "빠져 있는 항목"이라는 것이 한눈에 보인다. */
 .card-muted {
   background: var(--code-bg);
   border-style: dashed;
+  box-shadow: none;
 }
 
 /* .chip의 배경도 --code-bg다. 제외된 카드 안에서는 칩과 카드 바닥이 같은 색이 되어
-   칩의 경계가 --border 하나에만 남는데, 그 대비가 1.14:1이라 사실상 안 보인다.
+   칩의 경계가 --border 하나에만 남는데, 그 대비가 1.2:1이라 사실상 안 보인다.
    그러면 "제외됨"·카테고리 같은 칩이 배경에 녹아 "이 메뉴가 왜 제외됐는지"를 읽을 수
    없다 — .card-muted가 텍스트 색을 그대로 둔 이유(바로 위 주석)와 같은 문제가 칩에서만
-   되살아난 것이다. 배경을 --bg로 바꾸는 것으로는 안 된다(--code-bg 대비 1.11:1).
-   테두리만 폼 컨트롤용 토큰으로 올리면 4.04:1(라이트) / 4.91:1(다크)로 3:1을 넘는다. */
+   되살아난 것이다. 테두리만 폼 컨트롤용 토큰으로 올리면 --code-bg 위 4.08:1(라이트) /
+   4.64:1(다크)로 3:1을 넘는다. */
 .card-muted .chip {
   border-color: var(--field-border);
 }
@@ -324,6 +573,9 @@ select {
 }
 .card-main strong {
   color: var(--text-h);
+  font-size: 1.0625rem; /* 17px */
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* 히스토리 방문 선택 모드는 select + 버튼 3개가 한 줄에 놓여 320px 화면에서 넘친다 */
@@ -333,11 +585,18 @@ select {
   align-items: center;
   gap: 8px;
 }
+/* 동작 줄은 카드 내용에서 한 칸 떨어뜨린다 — 내용을 읽다가 버튼으로 넘어가는
+   경계가 없으면 카드가 한 덩어리로 뭉쳐 보인다. */
+.card > .card-actions {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
 
 .weight {
   color: var(--accent);
   letter-spacing: 2px;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .chip-row {
@@ -347,9 +606,10 @@ select {
 }
 
 .chip {
-  font-size: 13px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
   line-height: 1;
-  padding: 5px 10px;
+  padding: 6px 11px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--code-bg);
@@ -366,6 +626,7 @@ select {
   color: var(--text-h);
   background: transparent;
   border-style: dashed;
+  border-color: var(--field-border);
 }
 
 /* 눌러서 상태를 바꾸는 칩은 UI 컨트롤이라 경계가 보여야 한다(1.4.11).
@@ -373,25 +634,33 @@ select {
 .chip.selectable {
   cursor: pointer;
   border-color: var(--field-border);
+  background: var(--surface);
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-/* 선택 여부를 색으로만 알리면 안 된다(1.4.1). 명도만 남기면 글자 1.11:1,
-   배경 1.06:1로 사실상 구분되지 않는다. 굵기와 진한 테두리를 함께 바꾼다.
-   --accent-border(2.47:1) 대신 불투명 --accent(6.37:1)를 쓴다. */
+.chip.selectable:hover:not(.on) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* 선택 여부를 색으로만 알리면 안 된다(1.4.1). 명도만 남기면 사실상 구분되지 않는다.
+   굵기와 진한 테두리를 함께 바꾼다. --accent-border(반투명)가 아니라 불투명
+   --accent를 쓰는 이유는 그래야 테두리가 3:1을 넘기기 때문이다. */
 .chip.selectable.on {
   color: var(--accent);
   background: var(--accent-bg);
   border-color: var(--accent);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .menu-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: var(--surface);
   border: 1px solid var(--accent-border);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: var(--r-lg);
+  padding: 18px;
   margin-bottom: 16px;
+  box-shadow: var(--shadow);
 }
 .menu-form h2 {
   margin: 0;
@@ -404,8 +673,10 @@ select {
 .menu-form .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-h);
 }
 .menu-form label.inline {
   flex-direction: row;
@@ -416,15 +687,21 @@ select {
 .menu-form fieldset,
 .pick-filters fieldset {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
+  padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
+/* legend는 묶음의 이름이다. 메뉴판의 소제목처럼 작고 굵게, 자간을 벌려 본문과
+   확실히 다른 층으로 보이게 한다. */
 .menu-form legend,
 .pick-filters legend {
-  font-size: 14px;
-  padding: 0 4px;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-h);
+  padding: 0 6px;
 }
 
 .weight-picker {
@@ -432,7 +709,7 @@ select {
   align-items: center;
   gap: 2px;
 }
-/* 빈 별을 --border로 칠하면 배경 대비 1.27:1이라 화면에서 사라진다. 그러면
+/* 빈 별을 --border로 칠하면 배경 대비 1.3:1이라 화면에서 사라진다. 그러면
    "5점 만점에 3점"이 아니라 "별 세 개"로만 보여, 척도가 몇 점인지 알 수 없다.
    읽기 전용 별점(.weight)이 이미 ★/☆ 글리프로 구분하고 있으니 같은 방식으로
    맞춘다 — 색이 아니라 모양이 신호가 되므로 색각·저시력과 무관하게 읽힌다. */
@@ -440,14 +717,20 @@ select {
   background: none;
   border: none;
   padding: 0 2px;
-  font-size: 22px;
+  font-size: 1.375rem; /* 22px */
   line-height: 1;
   min-width: 24px;
   min-height: 24px;
   color: var(--text);
 }
 .weight-picker .star.on {
+  color: var(--pop);
+}
+/* 별은 배경도 테두리도 없어 전역 button:hover의 색 변화가 걸리지 않는다 —
+   가리키고 있다는 신호를 여기서 따로 준다. */
+.weight-picker .star:hover:not(:disabled) {
   color: var(--accent);
+  background: none;
 }
 .weight-picker small {
   margin-left: 8px;
@@ -465,7 +748,8 @@ select {
 
 .error {
   color: var(--danger);
-  font-size: 14px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
 }
 
 /* 화면에는 안 보이되 스크린리더에는 읽히는 텍스트. display:none이나

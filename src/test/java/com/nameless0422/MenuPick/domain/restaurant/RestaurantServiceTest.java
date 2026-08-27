@@ -223,7 +223,7 @@ class RestaurantServiceTest {
 
         RestaurantResponse.RestaurantDetail result = restaurantService.updateRestaurant(1L, 1L,
                 new RestaurantRequest.Update("수정된 식당", "새 주소", "010-9999",
-                        new BigDecimal("37.5"), new BigDecimal("127.0"), null));
+                        new BigDecimal("37.5"), new BigDecimal("127.0"), null, 0L));
 
         assertThat(result.name()).isEqualTo("수정된 식당");
     }
@@ -247,7 +247,7 @@ class RestaurantServiceTest {
         given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.updateRestaurant(2L, 1L,
-                new RestaurantRequest.Update("수정", "주소", null, null, null, null)))
+                new RestaurantRequest.Update("수정", "주소", null, null, null, null, 0L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }
@@ -279,7 +279,7 @@ class RestaurantServiceTest {
         given(restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(999L, 1L)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> restaurantService.updateRestaurant(1L, 999L,
-                new RestaurantRequest.Update("수정", "주소", null, null, null, null)))
+                new RestaurantRequest.Update("수정", "주소", null, null, null, null, 0L)))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.RESTAURANT_NOT_FOUND);
     }
