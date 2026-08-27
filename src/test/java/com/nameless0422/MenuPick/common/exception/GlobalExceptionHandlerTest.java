@@ -3,6 +3,7 @@ package com.nameless0422.MenuPick.common.exception;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.pick.DemoPickService;
 import com.nameless0422.MenuPick.domain.pick.PickController;
 import com.nameless0422.MenuPick.domain.pick.PickService;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -99,6 +101,29 @@ class GlobalExceptionHandlerTest extends AbstractControllerTest {
                         .content("{ this is not json "))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("MALFORMED_REQUEST_BODY"));
+    }
+
+    /**
+     * 낙관적 락 충돌은 고장이 아니라 정상적인 거절이다 (issue #87, V9).
+     *
+     * <p>전용 핸들러가 없으면 이 예외도 맨 아래 catch-all에 잡혀 500 + ERROR 스택트레이스가
+     * 된다 — 사용자는 "서버 내부 오류"를 보고 다시 눌러 볼 생각을 못 하고(사실은 새로고침 후
+     * 다시 저장하면 되는 상황이다), 로그는 스택트레이스로 밀린다. 405/415를 여기서 잡아 둔
+     * 것과 같은 이유다.
+     */
+    @Test
+    @DisplayName("낙관적 락 충돌은 500이 아니라 409 + CONCURRENT_MODIFICATION")
+    void optimisticLockFailure_returns409() throws Exception {
+        given(pickService.pick(anyLong(), any()))
+                .willThrow(new ObjectOptimisticLockingFailureException(Menu.class, 1L));
+
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errorCode").value("CONCURRENT_MODIFICATION"));
     }
 
     @Test
