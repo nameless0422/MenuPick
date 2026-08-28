@@ -85,3 +85,34 @@ describe("스타일 규약", () => {
     expect(root).toMatch(/font-size:\s*100%\s*;/);
   });
 });
+
+/**
+ * 정의되지 않은 커스텀 프로퍼티는 **조용히** 실패한다.
+ *
+ * <p>`color: var(--on-acccent)` 처럼 이름을 한 글자 틀리면 브라우저는 그 선언을 무효로
+ * 버리고 상속값을 쓴다. 오류도, 경고도, 화면이 깨졌다는 표시도 없다 — 채운 버튼 위
+ * 글자가 상속색으로 그려져 대비가 무너져도 눈으로는 "좀 흐리네" 정도로만 보인다.
+ *
+ * <p>이 프로젝트는 색 대비 근거를 토큰 단위로 주석에 적어 두고 있어서, 토큰 참조가
+ * 끊기면 그 근거 전체가 조용히 거짓이 된다. 그래서 참조와 정의를 맞춰 본다.
+ */
+describe("커스텀 프로퍼티", () => {
+  it("var()로 참조하는 토큰은 모두 어딘가에 정의돼 있다", () => {
+    const files = cssFiles(SRC);
+    const defined = new Set<string>();
+    const used = new Map<string, string>();
+
+    for (const file of files) {
+      const css = withoutComments(readFileSync(file, "utf8"));
+      for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) defined.add(m[1]);
+      for (const m of css.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+        const where = relative(process.cwd(), file).split(sep).join("/");
+        if (!used.has(m[1])) used.set(m[1], where);
+      }
+    }
+
+    expect(defined.size).toBeGreaterThan(10);
+    const missing = [...used].filter(([name]) => !defined.has(name));
+    expect(missing.map(([name, where]) => `${where}: var(${name})`)).toEqual([]);
+  });
+});

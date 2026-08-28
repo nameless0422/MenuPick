@@ -55,6 +55,10 @@
   --accent: #0e5b4e;
   --accent-bg: rgba(14, 91, 78, 0.1);
   --accent-border: rgba(14, 91, 78, 0.5);
+  /* --accent를 **면으로 채웠을 때** 그 위에 얹는 글자. --on-pop과 달리 이 값은 테마를
+     따라간다 — --accent 자체가 라이트에서는 짙고 다크에서는 밝기 때문이다.
+     라이트 7.54:1(#fbf8f1 on #0e5b4e) / 다크 8.80:1(#14201d on #5ccfb4). */
+  --on-accent: #fbf8f1;
   --pop: #f2a20c;
   /* --pop 위에 얹는 글자. 라이트·다크 어느 쪽에서도 --pop이 밝은 색이므로 이 값은
      테마를 따라가지 않는다 — --text-h를 쓰면 다크에서 밝은 글자가 밝은 면에
@@ -160,6 +164,8 @@
     --accent: #5ccfb4;
     --accent-bg: rgba(92, 207, 180, 0.14);
     --accent-border: rgba(92, 207, 180, 0.5);
+    /* 다크에서 --accent는 밝은 청록이다. 라이트와 같은 크림색을 얹으면 1.9:1이 된다. */
+    --on-accent: #14201d;
     --pop: #f7b733;
     /* 간판은 다크에서도 간판이다 — 페이지가 어두워졌다고 이 면까지 같은 색이 되면
        상단 바가 사라진다. 밝기 차만으로는 1.6:1이라 구분이 약해서, 아래 .app-bar가
@@ -484,6 +490,42 @@ button[aria-disabled='true'] {
      색이 안 바뀌는 것과 cursor:default가 함께 "지금은 못 누른다"를 말한다. */
   opacity: 0.65;
   cursor: default;
+}
+
+/* ---- 주요 동작 ----
+   개편 직후 화면을 렌더해 보고 나서야 드러난 결함이다: 로그인 화면의 "로그인"과
+   "카카오로 로그인"·"구글로 로그인"이 전부 같은 회색 알약이라, **이 화면에서 무엇을
+   눌러야 하는지가 어디에도 없었다.** 뽑기 버튼에만 강조를 몰아준 대가로 나머지 화면의
+   주요 동작이 통째로 평평해진 것이다.
+
+   기준을 클래스가 아니라 type="submit"으로 잡는다. 폼의 제출 버튼은 정의상 그 폼의
+   주요 동작이고(로그인·가입·저장·검색), 새 폼을 만들 때 클래스를 붙이는 걸 잊어도
+   자동으로 따라온다 — 반대로 "주요가 아닌 제출 버튼"은 이 앱에 하나도 없다.
+   .pick-button은 submit이 아니라 그대로 남는다(그쪽은 --pop 계열의 다른 강조다).
+
+   잠긴 상태는 opacity로 흐리지 않고 **평범한 버튼 모양으로 되돌린다.** 채운 면 위
+   글자를 0.65로 흐리면 4.18:1(라이트) / 3.94:1(다크)로 떨어지는데, 이 상태의 라벨은
+   대부분 "로그인 중…"·"저장 중…"처럼 지금 무슨 일이 벌어지는지가 오직 그 글자에만
+   있는 문구다. --code-bg로 되돌리면 전역 규칙의 0.65가 그대로 걸려 4.89:1 / 6.20:1이
+   되고(이미 검증된 값), "지금은 주요 동작이 아니다"라는 신호도 함께 남는다. */
+button[type='submit'] {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* 전역 button:hover(0,3,1)를 이겨야 하므로 :not() 둘을 그대로 달아 (0,4,1)로 올린다.
+   색은 --text-h를 섞어 만든다 — 라이트에서는 먹색이 섞여 어두워지고 다크에서는 크림색이
+   섞여 밝아져, 두 테마 모두 "한 단 더 눌린" 방향으로 간다. 8.54:1 / 9.45:1. */
+button[type='submit']:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--on-accent);
+  background: color-mix(in srgb, var(--accent) 85%, var(--text-h));
+  border-color: color-mix(in srgb, var(--accent) 85%, var(--text-h));
+}
+button[type='submit']:disabled,
+button[type='submit'][aria-disabled='true'] {
+  color: var(--text-h);
+  background: var(--code-bg);
+  border-color: var(--field-border);
 }
 
 /* 체크박스·라디오는 제외한다. 아래 값들(padding·border·background·border-radius)은
