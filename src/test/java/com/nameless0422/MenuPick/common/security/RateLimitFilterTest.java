@@ -414,12 +414,12 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("네이버 프록시 GET - 분당 30회 초과 시 429와 Retry-After 반환")
+    @DisplayName("카카오 프록시 GET - 분당 30회 초과 시 429와 Retry-After 반환")
     @SuppressWarnings("unchecked")
-    void naverProxy_exceedsLimit_returns429() throws ServletException, IOException {
+    void kakaoProxy_exceedsLimit_returns429() throws ServletException, IOException {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(7L, null, List.of()));
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/naver/geocode");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/kakao/search/keyword");
         request.setRemoteAddr("10.0.0.1");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -435,12 +435,12 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("네이버 프록시 GET - 30회 이내는 통과 (auth 한도 10과 별개)")
+    @DisplayName("카카오 프록시 GET - 30회 이내는 통과 (auth 한도 10과 별개)")
     @SuppressWarnings("unchecked")
-    void naverProxy_withinProxyLimit_passThrough() throws ServletException, IOException {
+    void kakaoProxy_withinProxyLimit_passThrough() throws ServletException, IOException {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(7L, null, List.of()));
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/naver/reverse-geocode");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/kakao/search/category");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:proxy:user:7")), eq("60")))

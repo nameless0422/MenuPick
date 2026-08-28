@@ -29,7 +29,7 @@ import java.util.List;
  * <p>두 종류의 버킷을 관리한다.
  * <ul>
  *   <li>인증 경로(POST /api/v1/auth/**) — 미인증 요청이므로 클라이언트 IP 기준</li>
- *   <li>외부 API 프록시 경로(GET /api/v1/kakao/**, /api/v1/naver/**) — 인증 사용자 ID 기준.
+ *   <li>외부 API 프록시 경로(GET /api/v1/kakao/**) — 인증 사용자 ID 기준.
  *       카카오/네이버 쿼터를 소모하는 경로라 개별 계정의 폭주를 막아야 한다.
  *       SecurityContext가 아직 비어 있으면 IP로 폴백한다.</li>
  *   <li>게스트 데모 픽(GET /api/v1/pick/demo) — permitAll이라 누구나 호출할 수 있으므로
@@ -125,8 +125,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/pick/demo");
 
     private static final List<RequestMatcher> PROXY_RATE_LIMITED_MATCHERS = List.of(
-            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/kakao/**"),
-            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/naver/**")
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/kakao/**")
     );
 
     private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT = new DefaultRedisScript<>(
