@@ -239,12 +239,13 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | DELETE | /restaurants/{restaurantId} | 식당 삭제 (Soft delete) | Y |
 
 
-#### 외부 장소 검색 (Naver / Kakao 프록시)
+#### 외부 장소 검색 (Kakao 프록시)
+
+> 네이버 지오코딩 프록시(`/naver/geocode`, `/naver/reverse-geocode`)는 2026-08-29에 제거했다.
+> 프론트에서 한 번도 호출되지 않았다 — 근거는 [DecisionLog D-035](DecisionLog.md).
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| GET | /naver/geocode | 주소 → 좌표 변환 (네이버 Geocoding) | Y |
-| GET | /naver/reverse-geocode | 좌표 → 주소 변환 (네이버 Reverse Geocoding) | Y |
 | GET | /kakao/search/keyword | 키워드 장소 검색 (카카오 로컬) | Y |
 | GET | /kakao/search/category | 카테고리 장소 검색 (카카오 로컬) | Y |
 
@@ -1208,9 +1209,9 @@ Refresh Token은 Redis에 userId를 키로 저장하여 강제 로그아웃(블�
 | 호출 주체 | Spring Boot 백엔드 (WebClient 사용) |
 | 타임아웃 | connect 2초 / response 3초 + 1회 재시도(200ms) — 최악 ≈6.2초. 지도 API는 사용자가 기다리는 경로라 짧게 잡는다. (연결 5초/응답 10초는 OAuth 토큰 교환용 공용 WebClient 값이다 — `SecurityConfig`) |
 | 예외 처리 | 실패 시 상태코드·응답 본문·원인 예외를 로깅한 뒤 502(BAD_GATEWAY) 계열 에러로 변환 |
-| API 키 관리 | 환경 변수 (NAVER_MAPS_CLIENT_ID/SECRET, KAKAO_REST_API_KEY) — 코드에 하드코딩 금지 |
+| API 키 관리 | 환경 변수 (KAKAO_REST_API_KEY) — 코드에 하드코딩 금지 |
 | 응답 저장 | 선택된 장소의 상호명, 주소, 좌표(WGS84)를 restaurants에 저장 |
-| 쿼터 대응 | 응답을 Redis에 캐싱 (@Cacheable — naverGeocode, naverReverseGeocode 등) |
+| 쿼터 대응 | 응답을 Redis에 캐싱 (@Cacheable — kakaoKeywordSearch, kakaoCategorySearch) |
 
 
 ### 5.2 좌표 처리
@@ -1273,7 +1274,6 @@ Spring Boot에서 ${ENV_VAR_NAME} 방식으로 주입
 | DB_URL | DB 전체 접속 URL — dev/prod 전용 (배포 대상마다 호스트가 다르므로 통째로 주입) |
 | JWT_SECRET | JWT 서명 키 (256bit 이상 랜덤 문자열) — 기본값 없음, 미설정 시 앱 기동 실패 (fail-fast) |
 | REDIS_HOST / REDIS_PORT | Redis 접속 정보 |
-| NAVER_MAPS_CLIENT_ID / NAVER_MAPS_CLIENT_SECRET | 네이버 NCP Maps API 키 |
 | KAKAO_REST_API_KEY | 카카오 로컬 API 키 |
 | KAKAO_CLIENT_ID / KAKAO_CLIENT_SECRET / KAKAO_REDIRECT_URI | 카카오 OAuth 앱 키 |
 | GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI | 구글 OAuth 앱 키 |

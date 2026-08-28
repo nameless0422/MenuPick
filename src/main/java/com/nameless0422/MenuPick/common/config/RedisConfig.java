@@ -71,8 +71,6 @@ public class RedisConfig implements CachingConfigurer {
                 .entryTtl(Duration.ofHours(1));
 
         Map<String, RedisCacheConfiguration> cacheConfigs = Map.of(
-                "naverGeocode", defaultConfig.entryTtl(Duration.ofHours(24)),
-                "naverReverseGeocode", defaultConfig.entryTtl(Duration.ofHours(24)),
                 "kakaoKeywordSearch", defaultConfig.entryTtl(Duration.ofHours(1)),
                 "kakaoCategorySearch", defaultConfig.entryTtl(Duration.ofHours(1))
         );

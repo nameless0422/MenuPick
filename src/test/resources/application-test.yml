@@ -36,13 +36,6 @@ kakao:
     keyword-search-base-url: http://localhost:0/v2/local/search/keyword.json
     category-search-base-url: http://localhost:0/v2/local/search/category.json
 
-naver:
-  maps:
-    client-id: test-naver-client-id
-    client-secret: test-naver-client-secret
-    geocode-base-url: http://localhost:0/map-geocode/v2/geocode
-    reverse-geocode-base-url: http://localhost:0/map-reversegeocode/v2/gc
-
 logging:
   level:
     com.nameless0422.MenuPick: DEBUG

@@ -3,7 +3,6 @@ package com.nameless0422.MenuPick.common.security;
 import com.nameless0422.MenuPick.domain.auth.AuthCookieProperties;
 import com.nameless0422.MenuPick.domain.auth.OAuthProperties;
 import com.nameless0422.MenuPick.domain.kakao.KakaoLocalProperties;
-import com.nameless0422.MenuPick.domain.naver.NaverMapsProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -33,7 +32,7 @@ import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class, NaverMapsProperties.class, KakaoLocalProperties.class, RateLimitProperties.class, AuthCookieProperties.class, CorsProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, OAuthProperties.class, KakaoLocalProperties.class, RateLimitProperties.class, AuthCookieProperties.class, CorsProperties.class})
 @RequiredArgsConstructor
 public class SecurityConfig {
 
