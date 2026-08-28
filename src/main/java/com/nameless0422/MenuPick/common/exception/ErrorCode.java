@@ -90,9 +90,6 @@ public enum ErrorCode {
     // --- Restaurant ---
     RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "식당을 찾을 수 없습니다."),
 
-    // --- Naver Maps ---
-    NAVER_MAPS_API_ERROR(HttpStatus.BAD_GATEWAY, "네이버 지도 API 호출에 실패했습니다."),
-
     // --- Kakao Local ---
     KAKAO_LOCAL_API_ERROR(HttpStatus.BAD_GATEWAY, "카카오 로컬 API 호출에 실패했습니다."),
 

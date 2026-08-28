@@ -29,7 +29,7 @@ import java.util.List;
  * {@code execute(RedisScript, ...)}로 카운터를 올리는데, 스텁하지 않은 목은 null을 반환하고
  * 필터는 null을 "카운트 불명 → 통과"로 처리하기 때문이다(fail-open).
  * 429 경로를 검증하려면 개별 테스트에서 {@code execute}만 스텁하면 된다
- * (예: {@code KakaoLocalControllerTest}, {@code NaverMapsControllerTest}).
+ * (예: {@code KakaoLocalControllerTest}).
  *
  * <p>하위 클래스는 {@code @WebMvcTest(XxxController.class)}와 대상 서비스의
  * {@code @MockitoBean}만 선언하면 된다.
