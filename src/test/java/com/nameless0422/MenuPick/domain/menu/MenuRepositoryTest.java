@@ -215,6 +215,21 @@ class MenuRepositoryTest extends AbstractIntegrationTest {
                 .doesNotContain(deleted.getId(), othersMenu.getId());
     }
 
+    @Test
+    @DisplayName("메뉴 보유 여부는 soft-delete된 메뉴도 \"있음\"으로 센다")
+    void existsByUserId_countsSoftDeletedMenus() {
+        // DefaultMenuProvisioner가 기본 메뉴를 두 번 넣지 않기 위해 쓰는 확인이다.
+        // deletedAt을 걸러 버리면, 기본 메뉴를 전부 지운 사용자가 다음에 이 경로를 지날 때
+        // 앱이 지운 목록을 그대로 다시 채워 넣는다.
+        assertThat(menuRepository.existsByUserId(user.getId())).isFalse();
+
+        Menu menu = save("김치찌개");
+        menu.softDelete(LocalDateTime.now());
+        menuRepository.flush();
+
+        assertThat(menuRepository.existsByUserId(user.getId())).isTrue();
+    }
+
     private Menu save(String name) {
         return menuRepository.save(Menu.builder().user(user).name(name).weight(1).build());
     }

@@ -80,7 +80,9 @@ class MigrationImmutabilityTest {
             Map.entry("V8__drop_redundant_history_index.sql",
                     "5e68e854cfdc78698c54589cc38b1cabe5c09a540363e9b8e96ccb4895854fd7"),
             Map.entry("V9__optimistic_locking.sql",
-                    "53be1d00b338ce4f93b2e818088654f9af677cefb71a2bfec29f814ab77b2490"));
+                    "53be1d00b338ce4f93b2e818088654f9af677cefb71a2bfec29f814ab77b2490"),
+            Map.entry("V10__seed_default_menus.sql",
+                    "029b22e699de0391cdb3f721619aaeeec015fe2f200c03aa7e81e43d654daf98"));
 
     @Test
     @DisplayName("이미 머지된 마이그레이션 파일은 내용이 바뀌지 않았다")
