@@ -1,14 +1,32 @@
-# 의존성 업데이트 자동 감시.
+# 의존성 감시. **버전 업데이트는 꺼 두고 보안 업데이트만 받는다.**
 #
-# 이 리포에는 취약점 스캔이 하나도 없었다. jjwt·bcprov 같은 암호 라이브러리에 CVE가 나도
-# 사람이 공지를 직접 챙기지 않으면 영영 반영되지 않는다. github-actions도 함께 보는데,
-# ci.yml의 docker-build 잡이 액션들을 커밋 SHA로 고정해 두었기 때문이다 — 고정은 공급망
-# 위험을 막는 대신 업데이트를 사람 손에 맡기므로, 그 손을 dependabot이 대신한다.
-# (frontend·test 잡은 아직 태그로 참조한다. SHA 고정 범위를 넓히는 건 #137에서 다룬다.)
+# 원래 이 파일의 목적은 CVE 대응이었다 — jjwt·bcprov 같은 암호 라이브러리에 취약점이 나도
+# 사람이 공지를 직접 챙기지 않으면 영영 반영되지 않는다. 그런데 정작 그 감시(Dependabot
+# alerts / security updates)는 리포 설정에서 꺼져 있었고, 실제로 오던 것은 전부 주간
+# 버전 업데이트 PR이었다. 목적은 달성하지 못한 채 소음만 나오고 있었던 셈이다.
+#
+# 그래서 둘을 분리했다:
+#   - 리포 설정에서 Dependabot alerts + security updates를 켰다(콘솔/API 설정이라 이 파일에
+#     나타나지 않는다. Settings → Advanced Security → Dependabot).
+#   - 이 파일의 버전 업데이트는 ecosystem마다 open-pull-requests-limit: 0으로 멈춘다.
+#
+# open-pull-requests-limit: 0이 정확히 "버전 업데이트만" 끄는 스위치다. 문서상
+# "Security update pull requests are not subject to this limit and do not count toward it"이라,
+# 취약점이 나오면 그때는 한도와 무관하게 PR이 올라온다. 파일을 통째로 지우지 않은 이유가
+# 이것이다 — 지우면 아래 설정(ecosystem·directory·그룹)까지 함께 사라져, 버전 업데이트를
+# 다시 켜고 싶을 때 근거를 처음부터 복원해야 한다.
+#
+# 되돌리려면 limit을 5로 되돌리면 된다(github-actions는 줄을 지우면 기본값 5).
 #
 # target-branch: 이 리포의 작업 흐름은 기능 브랜치 → dev → main이고 main은 배포 대상이다.
 # 기본값(default branch = main)대로 두면 의존성 PR만 dev를 건너뛰어 main으로 직행하고,
 # dev에는 없는 커밋이 main에 쌓여 다음 dev → main PR에서 lock 파일이 충돌한다.
+# 지금은 버전 업데이트가 멈춰 있어 이 값이 하는 일이 없지만, 다시 켤 때 필요한 설정이라 남긴다.
+#
+# 주의: **보안 업데이트 PR은 target-branch를 따르지 않는다.** 언제나 기본 브랜치(main)를
+# 향하고, target-branch가 지정된 블록의 커스터마이즈(그룹 등)도 적용되지 않는다. 즉 CVE PR은
+# dev를 건너뛰고 main으로 온다 — 자주 있는 일이 아니고 급한 성격이라 그 편이 낫지만, 머지한
+# 뒤에는 dev에도 반영해야 다음 dev → main PR에서 lock 파일이 충돌하지 않는다.
 version: 2
 updates:
   - package-ecosystem: gradle
@@ -16,7 +34,8 @@ updates:
     target-branch: dev
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # 0 = 버전 업데이트 중지 (보안 업데이트는 이 한도의 적용을 받지 않는다)
+    open-pull-requests-limit: 0
     groups:
       # 스프링 부트 BOM이 끌고 오는 것들은 따로 올리면 버전이 어긋난다. 한 PR로 묶는다.
       spring:
@@ -29,14 +48,18 @@ updates:
     target-branch: dev
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       # 개발 의존성은 런타임에 나가지 않아 개별 검토 가치가 낮다. 묶어서 한 번에 본다.
       dev-dependencies:
         dependency-type: development
 
+  # ci.yml의 docker-build 잡이 액션들을 커밋 SHA로 고정해 두었기 때문에 함께 본다 — 고정은
+  # 공급망 위험을 막는 대신 업데이트를 사람 손에 맡긴다. 지금은 그 손이 다시 사람이다.
+  # (frontend·test 잡은 아직 태그로 참조한다. SHA 고정 범위를 넓히는 건 #137에서 다룬다.)
   - package-ecosystem: github-actions
     directory: /
     target-branch: dev
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
