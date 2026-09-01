@@ -6,3 +6,10 @@
 Dockerfile text eol=lf
 *.conf text eol=lf
 *.sh text eol=lf
+# systemd 유닛도 리눅스가 읽는다.
+*.service text eol=lf
+*.timer text eol=lf
+# deploy/oci/ 는 통째로 서버에 복사되는 디렉터리라 확장자와 무관하게 고정한다.
+# 여기 .yml이 빠져 있어서 실제로 CRLF로 배포됐다(2026-09-01) — compose는 견뎠지만
+# 같은 경로에 셸 스크립트가 하나 들어오는 순간 shebang이 깨진다.
+deploy/oci/** text eol=lf
