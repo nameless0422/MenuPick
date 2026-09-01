@@ -5,6 +5,7 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.common.security.LoginAttemptLimiter;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.MeResponse;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
+import com.nameless0422.MenuPick.domain.menu.DefaultMenuProvisioner;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
@@ -62,6 +63,7 @@ class LocalAuthServiceTest {
     @Mock private AuthProviderRepository authProviderRepository;
     @Mock private UserHardDeleteService userHardDeleteService;
     @Mock private LoginAttemptLimiter loginAttemptLimiter;
+    @Mock private DefaultMenuProvisioner defaultMenuProvisioner;
     @Mock private AuthTokenStore authTokenStore;
     @Mock private AuthMailer authMailer;
     @Mock private TokenIssuer tokenIssuer;
@@ -107,8 +109,9 @@ class LocalAuthServiceTest {
     void setUp() {
         localAuthService = new LocalAuthService(
                 userRepository, authProviderRepository, userHardDeleteService,
-                loginAttemptLimiter, passwordEncoder, authTokenStore, authMailer,
-                tokenIssuer, new TransactionTemplate(NO_OP_TX_MANAGER), FIXED_CLOCK
+                loginAttemptLimiter, defaultMenuProvisioner, passwordEncoder,
+                authTokenStore, authMailer, tokenIssuer,
+                new TransactionTemplate(NO_OP_TX_MANAGER), FIXED_CLOCK
         );
         localAuthService.initDummyHash();
 
@@ -462,6 +465,23 @@ class LocalAuthServiceTest {
         }
 
         @Test
+        @DisplayName("새 계정에는 기본 메뉴를 넣어 준다")
+        void seedsDefaultMenusForNewAccount() {
+            AuthProvider pending = localAccount(3L, EMAIL, PASSWORD, false);
+            given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
+                    .willReturn(Optional.of(3L));
+            given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(pending));
+            given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+
+            localAuthService.verifyEmail("tok");
+
+            // 메뉴가 하나도 없으면 픽이 아예 동작하지 않는다 — 첫 화면이 빈 목록이면
+            // 가입한 사람은 뭘 먹을지 골라주는 앱에 들어와 입력부터 해야 한다.
+            verify(defaultMenuProvisioner).provision(pending.getUser());
+        }
+
+        @Test
         @DisplayName("같은 주소의 소셜 계정이 이미 있으면 그쪽에 붙이고 임시 계정을 지운다")
         void mergesIntoExistingSocialAccount() {
             AuthProvider pending = localAccount(3L, EMAIL, PASSWORD, false);
@@ -482,6 +502,10 @@ class LocalAuthServiceTest {
             assertThat(pending.getUser()).isSameAs(socialUser);
             verify(userRepository).delete(pendingUser);
             verify(tokenIssuer).issue(9L);
+
+            // 병합 대상은 이미 쓰이던 계정이라 자기 메뉴가 있다. 여기서 기본 메뉴를 넣으면
+            // 남이 정리해 둔 목록에 앱이 22개를 얹는 셈이 된다.
+            verify(defaultMenuProvisioner, never()).provision(any(User.class));
         }
 
         @Test
