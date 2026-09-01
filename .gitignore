@@ -59,3 +59,8 @@ id_ed25519*
 
 ### Agent worktrees ###
 .claude/worktrees/
+
+# DB 덤프 — 사용자 이메일과 비밀번호 해시가 그대로 들어 있다. 절대 커밋하지 않는다.
+# 서버에서 내려받은 백업은 local-backups/ 에 둔다(deploy/oci/README.md).
+local-backups/
+*.sql.gz

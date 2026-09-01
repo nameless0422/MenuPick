@@ -1,0 +1,15 @@
+[Unit]
+Description=MenuPick DB 백업을 매일 돌린다
+
+[Timer]
+# 한국 시간 새벽 4시(서버 시계는 UTC). 사용자가 거의 없는 시간대다.
+OnCalendar=*-*-* 19:00:00 UTC
+# 그 시각에 인스턴스가 꺼져 있었으면 켜진 뒤에 한 번 따라잡는다.
+# 이 서버는 상시 가동이 아니라서 이게 없으면 꺼져 있던 날의 백업이 그냥 없어진다.
+Persistent=true
+# 여러 대가 동시에 깨어나 부하가 몰리는 것을 막는 관례. 단독 서버라 실익은 작지만
+# 정확히 정각에만 도는 것보다 낫다.
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
