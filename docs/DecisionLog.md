@@ -473,6 +473,24 @@
   - 레이트리밋의 프록시 티어 테스트 2건은 지우지 않고 카카오 경로로 옮겼다. 그 테스트가 검증하는 것은 네이버가 아니라 "프록시 버킷이 auth 버킷과 별개로 30회를 센다"이고, 그 계약은 그대로 남는다.
 - **관련**: 이슈 #76(닫음), `RateLimitFilterTest`, [D-010](#d-010-restaurantskakao_place_id--naver_url-이행적-종속--3nf-위반을-의도적으로-허용)(`naver_url`은 별개라는 근거)
 
+### D-037. Dependabot은 보안 업데이트만 받는다 — 버전 업데이트 PR은 끈다
+
+- **날짜**: 2026-09-02
+- **상태**: 채택
+- **배경**: `.github/dependabot.yml`의 목적은 CVE 대응이었다 — jjwt·bcprov 같은 암호 라이브러리에 취약점이 나도 사람이 공지를 챙기지 않으면 영영 반영되지 않는다. 그런데 확인해 보니 **정작 그 감시가 꺼져 있었다**: `vulnerability-alerts`는 404(비활성), `automated-security-fixes`는 `{"enabled": false}`. 실제로 오던 것은 전부 주간 버전 업데이트 PR이었고, 2026-08-27자 4건이 한 달 가까이 열린 채 쌓여 있었다. **목적은 달성하지 못한 채 소음만 나오고 있었다.**
+- **검토한 대안**:
+  1. `dependabot.yml`을 지운다 — 소음이 즉시 사라진다 / 지금 상태에서는 의존성 감시가 0이 된다. ecosystem·디렉터리·그룹 설정도 함께 사라져 나중에 다시 켤 때 근거를 처음부터 복원해야 한다.
+  2. `interval`을 monthly로 낮추고 그룹을 넓힌다 — 설정을 그대로 두고 빈도만 줄인다 / 검토하지 않을 PR의 개수를 줄이는 것일 뿐, "쌓아 두고 안 본다"는 상태 자체는 그대로다.
+  3. **보안과 버전을 분리한다** — 리포 설정에서 Dependabot alerts + security updates를 켜고, 이 파일의 버전 업데이트는 ecosystem마다 `open-pull-requests-limit: 0`으로 멈춘다.
+- **결정**: ③. `open-pull-requests-limit: 0`이 정확히 "버전 업데이트만" 끄는 스위치다 — 문서상 *"Security update pull requests are not subject to this limit and do not count toward it."* 평소에는 PR이 오지 않고, 취약점이 나오면 그때 올라온다.
+  - 파일을 지우지 않은 이유는 아래 설정(ecosystem·directory·그룹)이 버전 업데이트를 다시 켤 때 필요한 근거이기 때문이다. 되돌리려면 limit을 5로 되돌리면 된다.
+  - 리포 설정 변경은 API/콘솔 작업이라 리포에 파일로 남지 않는다. 그래서 이 항목과 파일 주석 양쪽에 적었다.
+- **트레이드오프**:
+  - **의존성이 조용히 낡는다.** 취약점이 없는 한 스프링 부트도 프론트 패키지도 그대로 머문다. 한 번에 여러 메이저를 건너뛰면 나중의 업그레이드가 더 비싸진다 — 분기에 한 번쯤 limit을 잠깐 5로 되돌려 밀린 것을 훑는 식으로 대응한다.
+  - **보안 업데이트 PR은 `target-branch`를 따르지 않는다.** 언제나 기본 브랜치(main)를 향하고, 그 블록의 커스터마이즈(그룹 등)도 적용되지 않는다. 즉 CVE PR은 dev를 건너뛰고 main으로 온다. 급한 성격이라 그 편이 낫지만, 머지한 뒤 dev에도 반영하지 않으면 다음 dev → main PR에서 lock 파일이 충돌한다.
+  - 열려 있던 버전 업데이트 PR 4건(#185~188)은 dev로 머지했다가 되돌렸다. dev를 머지 직전 커밋으로 강제 리셋해 커밋은 남지 않았지만, **GitHub에서 PR은 MERGED로 표시된 채 남는다** — PR 레코드는 되돌릴 수 없다. 의존성은 여전히 옛 버전이므로 limit을 되돌리면 같은 업데이트가 다시 올라온다.
+- **관련**: `.github/dependabot.yml`, [GitHub Docs — Dependabot options reference](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)
+
 ## E. 법·정책
 
 ### D-022. 위치기반서비스사업 신고 — 소상공인 특례 유예 활용, 신고는 공개 시점에 재확인
