@@ -1,0 +1,33 @@
+[Unit]
+Description=MenuPick DB 백업 (mysqldump)
+# 도커가 준비되기 전에 돌면 컨테이너를 못 찾아 실패한다.
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=opc
+
+# 스크립트를 /home 아래에서 직접 실행하지 않는다.
+#
+# Oracle Linux 9는 SELinux가 Enforcing이고 홈의 파일은 user_home_t 타입이라, systemd(init_t)가
+# 그것을 실행하려 하면 203/EXEC "Permission denied"로 죽는다. 실제로 처음에 그렇게 실패했다 —
+# 같은 스크립트를 셸에서 손으로 돌리면 멀쩡히 동작해서, 스크립트가 아니라 실행 주체의
+# 문제라는 것이 드러나기까지 한 번 헤맸다.
+#
+# 그래서 배포 시 /usr/local/bin에 설치한다(deploy/oci/README.md 참고).
+# 리포의 scripts/backup-db.sh가 원본이고 이건 그 사본이므로, 스크립트를 고치면
+# 다시 설치해야 한다.
+ExecStart=/usr/local/bin/menupick-backup
+
+# $HOME에 기대지 않는다. systemd가 User= 에 대해 HOME을 채워 주기는 하지만,
+# 백업 대상 경로가 실행 환경에 따라 달라지는 것은 이 스크립트에서 특히 위험하다 —
+# 엉뚱한 곳에 쓰고도 "성공"으로 끝날 수 있다.
+Environment=APP_DIR=/home/opc/menupick
+Environment=BACKUP_DIR=/home/opc/backups
+
+# 출력은 journal로 간다. cron과 달리 실패가 조용히 사라지지 않고
+# `systemctl status menupick-backup` / `journalctl -u menupick-backup` 으로 남는다.
+# (journald 영구 보관은 /etc/systemd/journald.conf.d/persistent.conf 에서 켠다.)
+StandardOutput=journal
+StandardError=journal
