@@ -15,6 +15,15 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
     List<Menu> findAllByUserIdAndDeletedAtIsNull(Long userId);
 
     /**
+     * 기본 메뉴를 두 번 넣지 않기 위한 확인({@code DefaultMenuProvisioner}).
+     *
+     * <p>다른 조회와 달리 {@code deletedAt}을 거르지 않는다 — 여기서 묻는 것은 "지금 보이는
+     * 메뉴가 있는가"가 아니라 "이 계정이 메뉴를 가져 본 적이 있는가"이고, 기본 메뉴를 전부 지운
+     * 계정에 다시 채워 넣지 않으려면 지워진 것도 세야 한다.
+     */
+    boolean existsByUserId(Long userId);
+
+    /**
      * 조회 자체를 소유자 범위로 한정한다 — 타인의 메뉴는 "권한 없음(403)"이 아니라
      * "없음(404)"으로 처리해 리소스 존재 여부가 새어 나가지 않게 한다.
      */

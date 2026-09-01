@@ -5,6 +5,7 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.common.security.LoginAttemptLimiter;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.MeResponse;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
+import com.nameless0422.MenuPick.domain.menu.DefaultMenuProvisioner;
 import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
 import com.nameless0422.MenuPick.domain.user.User;
@@ -57,6 +58,7 @@ public class LocalAuthService {
     private final AuthProviderRepository authProviderRepository;
     private final UserHardDeleteService userHardDeleteService;
     private final LoginAttemptLimiter loginAttemptLimiter;
+    private final DefaultMenuProvisioner defaultMenuProvisioner;
     private final PasswordEncoder passwordEncoder;
     private final AuthTokenStore authTokenStore;
     private final AuthMailer authMailer;
@@ -335,6 +337,12 @@ public class LocalAuthService {
         }
 
         pending.verifyEmail(email);
+
+        // 여기가 계정이 실제로 태어나는 유일한 지점이다 — 위 병합 분기는 이미 있던 계정으로
+        // 들어가는 길이라 그 계정의 메뉴를 건드리면 안 된다. 계정 생성과 같은 트랜잭션에서
+        // 넣어, "계정은 생겼는데 메뉴만 비어 있는" 상태가 남지 않게 한다.
+        defaultMenuProvisioner.provision(pending);
+
         return new Verified(pending.getId(), null);
     }
 
