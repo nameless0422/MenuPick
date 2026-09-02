@@ -64,6 +64,26 @@ class TagRepositoryTest extends AbstractIntegrationTest {
         assertThat(found).isPresent();
     }
 
+    /**
+     * 태그 관리 화면이 쓰는 전체 목록. 파생 메서드라 이름 한 글자가 틀려도 컴파일은 되고
+     * 조건만 조용히 빠지므로, <b>남의 태그가 섞이지 않는다</b>는 것을 실제 DB로 확인한다.
+     */
+    @Test
+    @DisplayName("전체 목록은 내 태그만, 이름순으로 준다")
+    void findAllByUserIdOrderByName() {
+        User other = userRepository.save(User.builder()
+                .email("other@example.com")
+                .nickname("남")
+                .build());
+        tagRepository.save(Tag.builder().user(user).name("혼밥가능").build());
+        tagRepository.save(Tag.builder().user(user).name("맵찔이").build());
+        tagRepository.save(Tag.builder().user(other).name("남의태그").build());
+
+        List<Tag> tags = tagRepository.findAllByUserIdOrderByName(user.getId(), PageRequest.of(0, 200));
+
+        assertThat(tags).extracting(Tag::getName).containsExactly("맵찔이", "혼밥가능");
+    }
+
     @Test
     @DisplayName("태그명 prefix로 자동완성 검색한다")
     void searchByNamePattern() {
