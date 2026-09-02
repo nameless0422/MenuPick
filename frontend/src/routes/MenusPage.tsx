@@ -19,6 +19,7 @@ import { apiErrorCode, apiErrorMessage as errorMessage } from "../api/http";
 import { chipAction, chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
+import LinkedRestaurants from "./LinkedRestaurants";
 import { CATEGORY_PRESETS } from "../constants";
 
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
@@ -434,6 +435,9 @@ function MenuFormFields({
 
       <CategoryPicker selected={categories} onChange={setCategories} />
       <TagPicker selected={tags} onChange={setTags} />
+
+      {/* 새 메뉴에는 아직 연결이 있을 수 없다 — 저장 전에는 menuId도 없다. */}
+      {menuId != null && <LinkedRestaurants menuId={menuId} />}
 
       {menuId != null && (
         <label className="inline">

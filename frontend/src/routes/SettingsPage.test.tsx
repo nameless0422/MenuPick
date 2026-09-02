@@ -12,6 +12,7 @@ import {
   type Me,
 } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
+import { deleteTag, fetchAllTags } from "../api/tags";
 
 // 실제 모듈의 상수(PROVIDERS·PROVIDER_LABELS·PASSWORD_MIN_LENGTH)는 화면이 그대로 쓰므로
 // 살려 두고, 네트워크를 타는 함수만 갈아 끼운다.
@@ -24,11 +25,16 @@ vi.mock("../api/auth", async (importOriginal) => ({
 // 진짜 AuthProvider는 마운트하자마자 토큰 재발급을 호출한다. 이 화면에서 보려는 것은
 // 연동 상태 표시와 해제 동작뿐이라 세션은 상태만 바꿔 끼운다.
 vi.mock("../auth/AuthContext", () => ({ useAuth: vi.fn() }));
+// 태그 절도 마운트되자마자 목록을 부른다. 갈아 끼우지 않으면 이 화면의 모든 테스트가
+// 실패한 요청의 에러 alert를 하나씩 더 그리게 된다.
+vi.mock("../api/tags", () => ({ fetchAllTags: vi.fn(), deleteTag: vi.fn() }));
 
 const fetchMeMock = vi.mocked(fetchMe);
 const unlinkMock = vi.mocked(unlinkSocialAccount);
 const changePasswordMock = vi.mocked(changePassword);
 const useAuthMock = vi.mocked(useAuth);
+const fetchAllTagsMock = vi.mocked(fetchAllTags);
+const deleteTagMock = vi.mocked(deleteTag);
 const loginFn = vi.fn();
 
 // 로그아웃·탈퇴는 세션 훅이 쥐고 있다. 매번 새 vi.fn()을 끼우면 "요청이 나갔는가"를
@@ -83,6 +89,8 @@ beforeEach(() => {
     logout: logoutFn,
     withdraw: withdrawFn,
   });
+  fetchAllTagsMock.mockResolvedValue([]);
+  deleteTagMock.mockResolvedValue(undefined);
   // 연동 시작은 브라우저를 통째로 제공자로 보낸다. jsdom은 실제 이동을 못 하므로
   // href만 받아 두는 자리로 바꿔 놓는다.
   Object.defineProperty(window, "location", {
@@ -536,5 +544,73 @@ describe("설정 화면의 섹션 구조", () => {
     expect(screen.getByRole("region", { name: "계정" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "소셜 계정 연동" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "회원 탈퇴" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 태그는 만들 수만 있고 지울 수 없었다 — 백엔드 DELETE /api/v1/tags/{id}는 처음부터 있었지만
+ * 프론트에 호출하는 곳이 하나도 없었다. 오타로 만든 태그가 자동완성에 영영 남았다.
+ */
+describe("SettingsPage 태그 관리", () => {
+  const tag = (id: number, name: string) => ({ id, name, createdAt: "2026-01-01T00:00:00" });
+
+  it("내가 만든 태그를 보여준다", async () => {
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥"), tag(2, "맵찔이")]);
+
+    renderSettings();
+
+    expect(await screen.findByRole("button", { name: "혼밥 태그 삭제" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "맵찔이 태그 삭제" })).toBeInTheDocument();
+  });
+
+  it("태그가 없으면 어디서 만드는지 알려준다", async () => {
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([]);
+
+    renderSettings();
+
+    expect(await screen.findByText(/아직 만든 태그가 없어요/)).toBeInTheDocument();
+  });
+
+  it("태그를 삭제한다 — 확인을 거친 뒤에만", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 삭제" }));
+
+    // 다른 메뉴에까지 번지는 동작이라, 무엇이 일어나는지를 확인창이 말해야 한다.
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "'혼밥' 태그를 삭제할까요? 이 태그가 붙은 모든 메뉴에서 빠집니다.",
+    );
+    await waitFor(() => expect(deleteTagMock).toHaveBeenCalledWith(1));
+    confirmSpy.mockRestore();
+  });
+
+  it("확인을 취소하면 삭제하지 않는다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 삭제" }));
+
+    expect(deleteTagMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("메뉴가 아니라 태그만 지운다는 것을 미리 알린다", async () => {
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+
+    renderSettings();
+
+    // 확인창을 띄우기 전에도 결과를 알 수 있어야 한다 — 확인창은 이미 누른 뒤에 뜬다.
+    expect(await screen.findByText(/모든 메뉴에서 함께 빠집니다/)).toBeInTheDocument();
+    expect(screen.getByText(/메뉴 자체는 지워지지 않아요/)).toBeInTheDocument();
   });
 });

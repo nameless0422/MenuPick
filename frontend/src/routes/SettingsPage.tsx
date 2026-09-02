@@ -13,6 +13,7 @@ import {
   type Me,
   type Provider,
 } from "../api/auth";
+import { deleteTag, fetchAllTags } from "../api/tags";
 import { linkAuthorizeUrl } from "../auth/oauthUrls";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import "./SettingsPage.css";
@@ -116,6 +117,8 @@ export default function SettingsPage() {
       {/* 소셜 전용 계정에는 바꿀 비밀번호가 없다 — 폼을 띄워봐야 누르는 순간 400이 날 뿐이다. */}
       {meQuery.data?.hasPassword && <PasswordSection />}
 
+      <TagSection />
+
       <section
         className="card settings-section settings-danger"
         aria-labelledby={withdrawHeadingId}
@@ -209,6 +212,87 @@ export default function SettingsPage() {
         {withdrawMutation.isError && <p className="error" role="alert">{errorMessage(withdrawMutation.error)}</p>}
       </section>
     </div>
+  );
+}
+
+/**
+ * 태그 관리 — 만든 태그를 지우는 유일한 자리.
+ *
+ * <h2>왜 여기인가</h2>
+ *
+ * <p>메뉴 폼의 태그 고르개(TagPicker)에서는 태그를 <b>만들 수만</b> 있었다. 오타로 만든
+ * 태그가 자동완성에 영영 남아도 지울 방법이 없었다 — 백엔드 {@code DELETE /api/v1/tags/{id}}는
+ * 처음부터 있었지만 프론트에 호출하는 곳이 하나도 없었다.
+ *
+ * <p>그렇다고 고르개에 삭제 버튼을 붙이지 않는다. 거기서 칩을 누르는 동작은 "이 메뉴에서
+ * 빼기"이고 태그 삭제는 "모든 메뉴에서 없애기"인데, 두 버튼이 나란히 있으면 되돌릴 수 없는
+ * 쪽을 실수로 누르게 된다. 계정 전체에 걸리는 동작이라 설정에 둔다.
+ */
+function TagSection() {
+  const queryClient = useQueryClient();
+  const headingId = useId();
+
+  const tagsQuery = useQuery({ queryKey: ["tags", "all"], queryFn: fetchAllTags });
+  const tags = tagsQuery.data ?? [];
+
+  // 지우면 그 버튼이 사라져 초점이 <body>로 떨어진다. 남는 태그가 있으면 목록으로,
+  // 마지막 하나였으면 목록도 함께 사라지므로 섹션으로 보낸다. (이 화면의 다른 절들과 같은 처리)
+  const sectionRef = useRef<HTMLElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (tagId: number) => deleteTag(tagId),
+    onSuccess: () => {
+      (tags.length <= 1 ? sectionRef : listRef).current?.focus();
+      // 자동완성 캐시(["tags", 키워드])도 함께 턴다 — 방금 지운 태그가 제안에 남으면
+      // 눌렀을 때 404가 난다.
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+    },
+  });
+
+  return (
+    <section className="card settings-section" aria-labelledby={headingId} ref={sectionRef} tabIndex={-1}>
+      <h2 id={headingId}>태그</h2>
+      <p className="settings-desc">
+        태그를 삭제하면 그 태그가 붙어 있던 <strong>모든 메뉴에서 함께 빠집니다.</strong> 메뉴 자체는 지워지지 않아요.
+      </p>
+
+      {tagsQuery.isPending && <p className="settings-desc">불러오는 중…</p>}
+      {tagsQuery.isError && <p className="error" role="alert">{errorMessage(tagsQuery.error)}</p>}
+      {deleteMutation.isError && (
+        <p className="error" role="alert">
+          태그를 삭제하지 못했습니다. {errorMessage(deleteMutation.error)}
+        </p>
+      )}
+
+      {tagsQuery.isSuccess && tags.length === 0 && (
+        <p className="settings-desc">아직 만든 태그가 없어요. 메뉴를 수정할 때 태그를 만들 수 있어요.</p>
+      )}
+
+      {tags.length > 0 && (
+        <div className="chip-row" ref={listRef} tabIndex={-1}>
+          {tags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              className="chip chip-tag"
+              // 이름이 없으면 요소 목록에 "태그 삭제"만 태그 수만큼 반복되어 어느 것인지 알 수 없다.
+              aria-label={`${tag.name} 태그 삭제`}
+              aria-busy={deleteMutation.isPending}
+              onClick={() => {
+                if (deleteMutation.isPending) return;
+                // 되돌릴 수 없고 다른 메뉴에까지 번지는 동작이라, 무엇이 일어나는지 이름과 함께 확인시킨다.
+                if (window.confirm(`'${tag.name}' 태그를 삭제할까요? 이 태그가 붙은 모든 메뉴에서 빠집니다.`)) {
+                  deleteMutation.mutate(tag.id);
+                }
+              }}
+            >
+              #{tag.name} ✕
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
