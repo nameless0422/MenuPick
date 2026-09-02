@@ -256,6 +256,7 @@
 
 | 항목 | 출처 | 보류 사유 · 재검토 시점 |
 | --- | --- | --- |
+| 마이그레이션의 임시 테이블과 GTID | 코드 리뷰 2026-09-02 | `V10__seed_default_menus.sql`이 `CREATE TEMPORARY TABLE`을 쓴다. Flyway는 마이그레이션마다 트랜잭션을 여는데, **`enforce_gtid_consistency=ON`이면 트랜잭션 안의 `CREATE`/`DROP TEMPORARY TABLE`이 거부된다**(`ER_GTID_UNSAFE_CREATE_DROP_TEMPORARY_TABLE_IN_TRANSACTION`). 그 서버에서는 V10이 첫 문장에서 실패하고 앱이 아예 뜨지 않는다. 현재 대상(도커 `mysql:8.0`)은 `gtid_mode`가 기본 OFF라 실제로 적용에 성공했고 CI(Testcontainers)도 같은 조건이라 **어느 쪽도 이걸 잡지 못한다.** V10은 이미 적용됐고 불변이라(D-033) 고칠 수 없다 — **관리형 MySQL(GTID 강제)로 옮기는 시점에** 이 전제가 깨지므로, 그때는 기존 이력 재적용 가능성을 점검하고 앞으로의 마이그레이션은 임시 테이블 대신 파생 테이블/`INSERT ... SELECT`로 쓴다 |
 | OAuth PKCE 도입 | #4 | state로 로그인 CSRF는 차단된다. PKCE는 백엔드 토큰 교환까지 바꿔야 해 별도 과제로 분리 — 모바일 클라이언트 추가 시 필수가 되므로 그때 도입 |
 | 프록시 레이트리밋을 사용자 ID 기준으로 | #10 | 현재 IP 기준으로 동작한다(RateLimitFilter가 SecurityConfig 등록 순서상 JWT 필터보다 먼저 실행). 코드는 principal이 있으면 사용자 키를 쓰도록 이미 준비돼 있어 **필터 순서만 바꾸면 전환**된다. 쿼터 보호 목적은 IP 기준으로도 달성돼 필터 체인 재배치는 미룸 |
 | Access Token 블랙리스트 (jti) | #18 | 로그아웃·탈퇴 후에도 AT가 최대 30분 유효하다. Redis 조회를 모든 요청에 추가하는 비용이 있어, 탈퇴 이벤트가 실제 문제로 관측될 때 도입 |
