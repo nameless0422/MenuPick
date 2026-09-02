@@ -30,6 +30,15 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
                                   @Param("pattern") String pattern,
                                   Pageable pageable);
 
+    /**
+     * 태그 관리 화면용 전체 목록. 자동완성({@link #searchByNamePattern})과 달리 LIKE가 없어
+     * 파생 메서드로 충분하다 — 이스케이프할 사용자 입력이 아예 없다.
+     *
+     * <p>여기도 {@link Pageable}로 자른다. "전체"라고 해서 상한을 빼면 태그가 많은 계정의
+     * 설정 화면 한 번이 전 행을 직렬화한다.
+     */
+    List<Tag> findAllByUserIdOrderByName(Long userId, Pageable pageable);
+
     List<Tag> findAllByIdInAndUserId(Iterable<Long> ids, Long userId);
 
     @Modifying

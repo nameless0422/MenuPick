@@ -110,6 +110,46 @@ class TagServiceTest {
     }
 
     @Test
+    @DisplayName("전체 목록 - 내 태그를 이름순으로 모두 준다")
+    void listTags_returnsAllTags() throws Exception {
+        Tag tag2 = Tag.builder().user(user).name("혼술").build();
+        setId(tag2, 2L);
+        given(tagRepository.findAllByUserIdOrderByName(eq(1L), any(Pageable.class)))
+                .willReturn(List.of(tag, tag2));
+
+        List<TagResponse.TagInfo> result = tagService.listTags(1L);
+
+        assertThat(result).extracting(TagResponse.TagInfo::name).containsExactly("혼밥", "혼술");
+    }
+
+    /**
+     * 관리 화면은 "다 보여주는" 것이 목적이라 자동완성의 20개 상한을 쓰면 안 된다.
+     * 태그가 21개인 사용자가 21번째 태그를 영영 지울 수 없게 된다.
+     */
+    @Test
+    @DisplayName("전체 목록 - 자동완성보다 넉넉한 상한을 쓴다")
+    void listTags_usesLargerLimitThanAutocomplete() {
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        given(tagRepository.findAllByUserIdOrderByName(eq(1L), pageable.capture()))
+                .willReturn(List.of());
+
+        tagService.listTags(1L);
+
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(200);
+    }
+
+    /**
+     * 관리 화면을 위해 자동완성의 규칙(빈 키워드 → 빈 목록)을 바꾸지 않았다는 것을 고정한다.
+     * 바꿨다면 태그 입력창이 열리자마자 제안 칩이 쏟아진다.
+     */
+    @Test
+    @DisplayName("전체 목록은 자동완성과 다른 경로다 - 빈 키워드 검색은 여전히 비어 있다")
+    void listTags_doesNotChangeAutocomplete() {
+        assertThat(tagService.searchTags(1L, "")).isEmpty();
+        verify(tagRepository, never()).findAllByUserIdOrderByName(any(), any());
+    }
+
+    @Test
     @DisplayName("태그 생성 성공")
     void createTag_success() {
         given(tagRepository.findByUserIdAndName(1L, "혼밥")).willReturn(Optional.empty());

@@ -22,6 +22,15 @@ vi.mock("../api/menus", () => ({
   deleteMenu: vi.fn(),
   toggleExclude: vi.fn(),
 }));
+// 메뉴 수정 폼이 "연결된 식당" 섹션을 함께 그린다. 목킹하지 않으면 실제 호출이 나가
+// 실패하고, 그 섹션이 자기 role="alert"를 띄워 이 파일의 알림 단언이 둘을 보게 된다.
+// 이 파일이 보는 것은 메뉴 폼이므로 연결은 없는 상태로 고정한다 —
+// 연결 관리 자체는 LinkedRestaurants.test.tsx가 본다.
+vi.mock("../api/menuRestaurants", () => ({
+  fetchMenuRestaurants: vi.fn().mockResolvedValue({ menuRestaurants: [] }),
+  updateMenuRestaurant: vi.fn(),
+  deleteMenuRestaurant: vi.fn(),
+}));
 vi.mock("../api/tags", () => ({
   searchTags: vi.fn().mockResolvedValue([]),
   createTag: vi.fn(),

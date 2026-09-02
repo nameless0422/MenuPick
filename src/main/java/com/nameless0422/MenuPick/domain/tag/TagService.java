@@ -27,6 +27,29 @@ public class TagService {
      */
     private static final int MAX_SUGGESTIONS = 20;
 
+    /**
+     * 태그 관리 화면이 한 번에 받는 최대 개수.
+     *
+     * <p>자동완성보다 크다 — 여기서는 "다 보여주는" 것이 목적이라 20개에서 잘리면 화면이
+     * 제 일을 못 한다. 그렇다고 무제한으로 두면 태그가 많은 계정에서 설정 화면 한 번이
+     * 전 행을 직렬화하므로, 사람이 실제로 만들 수 있는 규모를 넉넉히 덮는 선에서 자른다.
+     */
+    private static final int MAX_MANAGED_TAGS = 200;
+
+    /**
+     * 내 태그 전체. 태그 관리 화면(설정)에서 쓴다.
+     *
+     * <p>{@link #searchTags}를 빈 키워드로 부르는 것으로 대신하지 않는다. 그쪽은 자동완성이라
+     * 키워드가 비면 <b>의도적으로</b> 빈 목록을 준다 — 아무것도 입력하지 않은 입력창 아래에
+     * 태그 20개를 펼치지 않기 위해서다. 그 규칙을 관리 화면 때문에 바꾸면 자동완성이 달라진다.
+     */
+    public List<TagResponse.TagInfo> listTags(Long userId) {
+        return tagRepository.findAllByUserIdOrderByName(userId, PageRequest.of(0, MAX_MANAGED_TAGS))
+                .stream()
+                .map(t -> new TagResponse.TagInfo(t.getId(), t.getName(), t.getCreatedAt()))
+                .toList();
+    }
+
     public List<TagResponse.TagInfo> searchTags(Long userId, String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return List.of();

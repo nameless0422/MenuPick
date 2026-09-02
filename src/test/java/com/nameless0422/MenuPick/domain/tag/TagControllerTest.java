@@ -15,6 +15,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -40,6 +41,38 @@ class TagControllerTest extends AbstractControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data[0].name").value("혼밥"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/tags?all=true - 태그 관리 화면용 전체 목록")
+    void listTags_success() throws Exception {
+        given(tagService.listTags(1L))
+                .willReturn(List.of(new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now())));
+
+        mockMvc.perform(get("/api/v1/tags")
+                        .param("all", "true")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("혼밥"));
+
+        // all=true면 키워드 검색은 아예 타지 않는다.
+        verify(tagService, never()).searchTags(any(), any());
+    }
+
+    /**
+     * {@code all}을 빠뜨린 요청이 전체 목록으로 새면 태그 입력창이 열리자마자 제안 칩이
+     * 쏟아진다 — 자동완성은 빈 키워드에 빈 목록이 오는 것에 의존한다.
+     */
+    @Test
+    @DisplayName("GET /api/v1/tags - all이 없으면 기본은 자동완성이다")
+    void searchTags_isTheDefault() throws Exception {
+        given(tagService.searchTags(1L, "")).willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/tags").with(authentication(AUTH)))
+                .andExpect(status().isOk());
+
+        verify(tagService).searchTags(1L, "");
+        verify(tagService, never()).listTags(any());
     }
 
     @Test
