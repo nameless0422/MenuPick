@@ -122,6 +122,12 @@ jacocoTestReport {
  *
  * 분기(BRANCH)를 함께 보는 이유: 라인만 보면 예외 경로·경계 조건을 한 번도 타지 않고도
  * 수치가 채워진다. 이 프로젝트에서 실제로 위험한 코드는 대부분 그 분기 쪽에 있다.
+ *
+ * <p><b>2026-09-02 상향</b>: LINE 0.88 → 0.91, BRANCH 0.75 → 0.79.
+ * D-030이 하한을 실측보다 3~5%p 아래로 잡되 "실측이 올라가도 하한은 자동으로 따라 오르지
+ * 않는다. 큰 폭으로 벌어지면 사람이 올려야 한다"고 적어 뒀다. 당시 실측은 LINE 91.8% /
+ * BRANCH 79.7%였고 지금은 94.5% / 82.7%다 — 격차가 6.5%p / 7.7%p로 벌어져 래칫이 사실상
+ * 아무것도 막지 못하는 상태였다. 다시 3~4%p 아래로 당긴다.
  */
 jacocoTestCoverageVerification {
 	dependsOn jacocoTestReport
@@ -129,11 +135,11 @@ jacocoTestCoverageVerification {
 		rule {
 			limit {
 				counter = 'LINE'
-				minimum = 0.88
+				minimum = 0.91
 			}
 			limit {
 				counter = 'BRANCH'
-				minimum = 0.75
+				minimum = 0.79
 			}
 		}
 	}

@@ -333,14 +333,32 @@ public class LocalAuthService {
 
             // 인증 전이라 로그인한 적이 없고, 따라서 딸린 데이터도 없다.
             userRepository.delete(pending);
+
+            // 병합 대상에도 기본 메뉴를 채운다.
+            //
+            // 원래는 "이미 있던 계정이니 메뉴도 있다"고 보고 건너뛰었다. 그 전제는 V10이 채워 준
+            // 계정에는 맞지만, **V10이 건너뛴 계정에는 성립하지 않는다.** 두 경우가 있다.
+            //   - 탈퇴 중이던 계정: V10의 `deleted_at IS NULL` 조건에서 빠진다. 유예기간 안에
+            //     이 경로로 되살아나면 메뉴가 0개인 채로 남고, 앱에는 그걸 채울 다른 경로가 없다
+            //     (provision은 아래 신규 계정 분기에서만 불리고 V10은 한 번만 돈다).
+            //   - 이메일 없이 만들어진 레거시 소셜 계정: V4가 `email IS NOT NULL`인 행만
+            //     email_verified=1로 채웠으므로 V10의 `email_verified = 1` 조건에서 빠진다.
+            //     로그인은 정상적으로 되지만(AuthService.resolveUser는 이 값을 보지 않는다)
+            //     메뉴는 영영 비어 있다.
+            // 둘 다 "메뉴가 없어 픽이 아예 동작하지 않는" 상태 — 기본 메뉴 기능이 막으려던 것이다.
+            //
+            // provision은 existsByUserId로 가드돼 있어 메뉴가 하나라도 있으면 0을 반환하고
+            // 아무것도 하지 않는다. 그래서 "남의 메뉴를 건드리지 않는다"는 원래 의도는 그대로다.
+            defaultMenuProvisioner.provision(target);
+
             return new Verified(target.getId(), null);
         }
 
         pending.verifyEmail(email);
 
-        // 여기가 계정이 실제로 태어나는 유일한 지점이다 — 위 병합 분기는 이미 있던 계정으로
-        // 들어가는 길이라 그 계정의 메뉴를 건드리면 안 된다. 계정 생성과 같은 트랜잭션에서
-        // 넣어, "계정은 생겼는데 메뉴만 비어 있는" 상태가 남지 않게 한다.
+        // 계정이 실제로 태어나는 지점이다. 계정 생성과 같은 트랜잭션에서 넣어, "계정은 생겼는데
+        // 메뉴만 비어 있는" 상태가 남지 않게 한다. (위 병합 분기도 같은 이유로 부르지만, 그쪽은
+        // 이미 있는 계정이라 provision의 가드가 실제로 일하는 경우가 드물다 — 근거는 그 주석.)
         defaultMenuProvisioner.provision(pending);
 
         return new Verified(pending.getId(), null);
