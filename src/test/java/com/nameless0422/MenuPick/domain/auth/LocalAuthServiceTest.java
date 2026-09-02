@@ -503,9 +503,14 @@ class LocalAuthServiceTest {
             verify(userRepository).delete(pendingUser);
             verify(tokenIssuer).issue(9L);
 
-            // 병합 대상은 이미 쓰이던 계정이라 자기 메뉴가 있다. 여기서 기본 메뉴를 넣으면
-            // 남이 정리해 둔 목록에 앱이 22개를 얹는 셈이 된다.
-            verify(defaultMenuProvisioner, never()).provision(any(User.class));
+            // 병합 대상에도 provision을 부른다. 예전에는 "이미 쓰이던 계정이니 메뉴가 있다"고 보고
+            // 부르지 않았는데, V10이 건너뛴 계정(탈퇴 중이었거나 email_verified=0인 레거시 소셜)에는
+            // 그 전제가 성립하지 않아 메뉴 0개로 남았다.
+            //
+            // "남이 정리해 둔 목록에 22개를 얹지 않는다"는 보호는 사라지지 않았다 — 호출부가 아니라
+            // provision 안의 existsByUserId 가드가 맡는다(메뉴가 하나라도 있으면 0을 반환).
+            // 그래서 이 단언은 "무조건 넣는다"가 아니라 "판단을 가드에 맡긴다"는 뜻이다.
+            verify(defaultMenuProvisioner).provision(socialUser);
         }
 
         @Test
@@ -538,6 +543,16 @@ class LocalAuthServiceTest {
             verify(userRepository).delete(pendingUser);
             verify(userHardDeleteService, never()).purge(anyLong());
             verify(tokenIssuer).issue(9L);
+
+            // 되살아난 계정에도 기본 메뉴를 채울 기회를 준다.
+            //
+            // V10은 `deleted_at IS NULL`로 탈퇴 계정을 건너뛰었다. 그래서 메뉴가 0개인 채로 탈퇴한
+            // 계정이 이 경로로 돌아오면, 채워 줄 다른 경로가 앱에 없다 — 마이그레이션은 한 번만 돌고
+            // provision은 신규 계정 분기에서만 불렸다. 사용자는 빈 목록을 받고 픽이 아예 동작하지
+            // 않는다. 기본 메뉴 기능이 막으려던 바로 그 상태다.
+            //
+            // 원래 메뉴를 갖고 탈퇴한 계정은 그 메뉴가 그대로 살아 있으므로 가드가 걸러 낸다.
+            verify(defaultMenuProvisioner).provision(withdrawn);
         }
 
         @Test
