@@ -1,6 +1,8 @@
 # 빌드 스테이지. 이미지 태그는 패치까지 고정한다 — 떠 있는 태그는 같은 Dockerfile로도
 # 매번 다른 결과를 만들어, 롤백했는데 다르게 동작하는 상황을 만든다.
-FROM node:22.12.0-alpine AS build
+# jsdom 30과 그 전이 의존성은 Node 22 계열에서 최소 22.22.2를 요구한다. 더 낮은
+# 버전도 당장은 설치되지만 EBADENGINE 상태라 다음 의존성 갱신에서 빌드가 깨질 수 있다.
+FROM node:22.22.2-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -29,6 +31,13 @@ RUN npm run build
 FROM nginx:1.27.3-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# 기본 nginx.conf의 events 블록은 worker_connections가 1024다. HTTP/2 부하 테스트에서
+# 클라이언트 연결과 upstream 연결이 이 한도를 함께 소비해, 앱보다 nginx가 먼저
+# "worker_connections are not enough"로 요청을 거절했다. 컨테이너의 open-files 한도는
+# 65535이므로 4096은 그 범위 안에서 충분한 여유를 주면서 무제한으로 키우지 않는 값이다.
+RUN sed -i 's/worker_connections  *1024;/worker_connections  4096;/' /etc/nginx/nginx.conf \
+    && grep -q 'worker_connections  4096;' /etc/nginx/nginx.conf
 
 # localhost가 아니라 127.0.0.1을 쓴다 — 컨테이너 안에서 localhost는 ::1로 풀리는데
 # nginx.conf가 `listen 80`이라 IPv4에만 바인딩되어 healthcheck가 항상 실패한다.
