@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
@@ -60,6 +61,7 @@ class PickServiceIntegrationTest extends AbstractIntegrationTest {
     private static final BigDecimal BASE_LNG = new BigDecimal("126.9779692");
 
     @Autowired private MenuRepository menuRepository;
+    @Autowired private MenuRestaurantRepository menuRestaurantRepository;
     @Autowired private HistoryRepository historyRepository;
     @Autowired private RestaurantRepository restaurantRepository;
     @Autowired private TagRepository tagRepository;
@@ -72,7 +74,7 @@ class PickServiceIntegrationTest extends AbstractIntegrationTest {
     @BeforeEach
     void setUp() {
         pickService = new PickService(menuRepository, historyRepository, userRepository,
-                tagRepository, FIXED_CLOCK);
+                tagRepository, menuRestaurantRepository, FIXED_CLOCK);
         me = userRepository.save(User.builder().email("me@example.com").nickname("나").build());
     }
 

@@ -35,6 +35,16 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
      */
     List<Menu> findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(Long userId);
 
+    /**
+     * 필터를 하나도 걸지 않아도 뽑을 것이 있는가. 후보가 비었을 때 "필터가 좁아서"인지
+     * "애초에 뽑을 메뉴가 없어서"인지를 가른다.
+     *
+     * <p>{@link #existsByUserId}와 묻는 것이 다르다. 그쪽은 "가져 본 적이 있는가"라
+     * 지운 것까지 세지만, 여기는 지금 뽑힐 수 있는 것만 센다 — 전부 추천 제외해 둔 계정도
+     * 여기서는 "없음"이다(할 일이 "제외를 풀어라"로 같기 때문에 따로 가르지 않는다).
+     */
+    boolean existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(Long userId);
+
     List<Menu> findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(Long userId, Pageable pageable);
 
     List<Menu> findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(

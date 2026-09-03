@@ -622,3 +622,81 @@ describe("PickPage 식권 발권 시각", () => {
     }
   });
 });
+
+/**
+ * 후보가 빈 이유는 셋이고 사용자가 해야 할 일이 각각 다르다.
+ *
+ * 전에는 셋을 하나로 뭉쳐 "필터를 풀거나 메뉴를 추가해 보세요"라고만 했다. 기본 메뉴 22개를
+ * 받고 시작한 신규 사용자가 거리 필터를 켜면 정확히 이 화면을 보는데, 그에게 메뉴를 더
+ * 추가하라는 것은 틀린 조언이다 — 메뉴는 넘치고 없는 것은 식당 연결이다.
+ */
+describe("PickPage 후보가 없을 때의 안내", () => {
+  /** 백엔드 에러 코드를 실은 axios 형태의 거절. apiErrorCode가 읽는 자리와 같아야 한다. */
+  const apiError = (errorCode: string) =>
+    Object.assign(new Error("Request failed"), {
+      isAxiosError: true,
+      response: { status: 404, data: { success: false, errorCode, message: "없음" } },
+    });
+
+  it("식당 연결이 없으면 식당 화면으로 보낸다 — 메뉴를 추가하라고 하지 않는다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValue(apiError("NO_LINKED_RESTAURANTS"));
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    expect(
+      await screen.findByText(/식당이 연결되어 있어야 해요/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    // 반경을 넓히라고 하면 안 된다 — 연결이 0건이면 아무리 넓혀도 결과가 없다.
+    expect(screen.queryByText(/반경을 넓혀 보세요/)).toBeNull();
+    expect(screen.getByRole("link", { name: /식당 관리하러 가기/ })).toHaveAttribute(
+      "href",
+      "/restaurants",
+    );
+  });
+
+  it("뽑을 메뉴가 없으면 메뉴 화면으로 보내고 추천 제외도 짚어 준다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValue(apiError("NO_PICKABLE_MENUS"));
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    expect(
+      await screen.findByText(/뽑을 메뉴가 없어요/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    // 메뉴가 있는데 전부 제외해 둔 경우도 같은 코드로 오므로 그 길도 알려 줘야 한다.
+    expect(screen.getByText(/다시 포함시켜 주세요/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /내 메뉴 관리하러 가기/ })).toHaveAttribute(
+      "href",
+      "/menus",
+    );
+  });
+
+  it("조건이 좁은 경우에는 필터와 반경을 풀라고 안내한다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValue(apiError("NO_PICK_CANDIDATES"));
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    expect(
+      await screen.findByText(/조건에 맞는 메뉴가 없어요/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    // 여기서는 연결이 있으므로 반경을 넓히면 실제로 결과가 나온다.
+    expect(screen.getByText(/반경을 넓혀 보세요/)).toBeInTheDocument();
+  });
+
+  it("모르는 에러는 안내 카드가 아니라 일반 에러로 띄운다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValue(apiError("SERVER_ERROR"));
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    // 빈 결과 안내를 아무 실패에나 붙이면 서버 장애가 "메뉴가 없다"로 둔갑한다.
+    expect(await screen.findByRole("alert", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByText(/관리하러 가기/)).toBeNull();
+  });
+});

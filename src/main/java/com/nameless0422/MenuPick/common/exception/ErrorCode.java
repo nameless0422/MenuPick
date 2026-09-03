@@ -94,7 +94,13 @@ public enum ErrorCode {
     KAKAO_LOCAL_API_ERROR(HttpStatus.BAD_GATEWAY, "카카오 로컬 API 호출에 실패했습니다."),
 
     // --- Pick ---
+    // 후보가 비는 이유는 셋이고, 사용자가 해야 할 일이 각각 다르다. 하나로 뭉뚱그리면
+    // 화면이 틀린 조언을 하게 된다 — 메뉴 23개를 가진 사용자에게 "메뉴를 추가해 보세요"라고.
     NO_PICK_CANDIDATES(HttpStatus.NOT_FOUND, "필터 조건에 맞는 메뉴가 없습니다."),
+    /** 뽑을 메뉴 자체가 없다 — 한 개도 없거나, 있는 것이 전부 추천 제외 상태다. */
+    NO_PICKABLE_MENUS(HttpStatus.NOT_FOUND, "추천할 수 있는 메뉴가 없습니다."),
+    /** 거리 필터를 켰는데 식당이 연결된 메뉴가 하나도 없다 — 반경을 늘려도 달라지지 않는다. */
+    NO_LINKED_RESTAURANTS(HttpStatus.NOT_FOUND, "식당이 연결된 메뉴가 없습니다."),
 
     // --- History ---
     HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다.");

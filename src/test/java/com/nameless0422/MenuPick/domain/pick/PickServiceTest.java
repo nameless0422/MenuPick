@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
@@ -44,6 +45,7 @@ class PickServiceTest {
     @Mock private HistoryRepository historyRepository;
     @Mock private UserRepository userRepository;
     @Mock private TagRepository tagRepository;
+    @Mock private MenuRestaurantRepository menuRestaurantRepository;
 
     /** 추천 시각 검증을 위해 KST 고정 시계를 쓴다. */
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -62,7 +64,7 @@ class PickServiceTest {
     @BeforeEach
     void setUp() {
         pickService = new PickService(menuRepository, historyRepository, userRepository,
-                tagRepository, FIXED_CLOCK);
+                tagRepository, menuRestaurantRepository, FIXED_CLOCK);
 
         user = User.builder().email("test@test.com").nickname("테스터").build();
         setId(user, 1L);
@@ -214,13 +216,15 @@ class PickServiceTest {
     }
 
     @Test
-    @DisplayName("후보가 없으면 NO_PICK_CANDIDATES 예외 발생")
-    void pick_noCandidates_throwsException() {
+    @DisplayName("뽑을 메뉴가 아예 없으면 NO_PICKABLE_MENUS — 필터를 풀라고 하면 안 된다")
+    void pick_noMenusAtAll_throwsNoPickableMenus() {
         givenCandidates(List.of());
+        // 필터를 다 풀어도 뽑을 것이 없는 상태
+        given(menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L)).willReturn(false);
 
         assertThatThrownBy(() -> pickService.pick(1L, null))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
+                .extracting("errorCode").isEqualTo(ErrorCode.NO_PICKABLE_MENUS);
     }
 
     @Test
@@ -346,10 +350,37 @@ class PickServiceTest {
 
     // --- 엣지 케이스 ---
 
+    /**
+     * 기본 메뉴 22개를 받고 시작한 신규 사용자가 거리 필터를 켰을 때의 상태다 —
+     * 메뉴는 넘치는데 식당 연결이 0건이다. 여기서 NO_PICK_CANDIDATES를 주면 화면이
+     * "필터를 풀거나 메뉴를 추가하라"고 안내하는데, 둘 다 이 사용자에게는 소용이 없다.
+     * 반경을 넓히라는 조언도 마찬가지다 — 연결이 없으면 아무리 넓혀도 후보는 비어 있다.
+     */
     @Test
-    @DisplayName("식당이 없는 메뉴 — 거리 필터 시 제외됨")
-    void pick_menuWithoutRestaurants_filteredOutByDistance() {
+    @DisplayName("식당이 연결된 메뉴가 하나도 없는데 거리로 뽑으면 NO_LINKED_RESTAURANTS")
+    void pick_noLinkedRestaurants_throwsNoLinkedRestaurants() {
         givenCandidates(List.of(koreanMenu));
+        given(menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L)).willReturn(true);
+        given(menuRestaurantRepository.existsLinkedRestaurantForUser(1L)).willReturn(false);
+
+        PickRequest request = new PickRequest(null, null, null,
+                new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
+
+        assertThatThrownBy(() -> pickService.pick(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NO_LINKED_RESTAURANTS);
+    }
+
+    /**
+     * 연결은 있는데 전부 반경 밖인 경우. 이때는 반경을 넓히면 결과가 나오므로
+     * NO_LINKED_RESTAURANTS가 아니라 "조건이 좁다"여야 한다.
+     */
+    @Test
+    @DisplayName("연결은 있는데 전부 반경 밖이면 NO_PICK_CANDIDATES — 반경을 넓히면 된다")
+    void pick_linksExistButOutOfRange_throwsNoPickCandidates() {
+        givenCandidates(List.of(koreanMenu));
+        given(menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L)).willReturn(true);
+        given(menuRestaurantRepository.existsLinkedRestaurantForUser(1L)).willReturn(true);
 
         PickRequest request = new PickRequest(null, null, null,
                 new BigDecimal("37.5666"), new BigDecimal("126.9784"), 1000);
@@ -358,6 +389,7 @@ class PickServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
     }
+
 
     @Test
     @DisplayName("같은 좌표 — Haversine 거리 0m")
@@ -373,12 +405,17 @@ class PickServiceTest {
     void pick_allFilteredOut_throwsException() {
         // 조건은 SQL이 건다. 아무것도 안 맞는 요청은 조회가 빈 목록으로 돌아오는 모습이 된다.
         givenCandidates(List.of());
+        // 뽑을 메뉴는 있다 — 좁은 것은 필터 쪽이다.
+        given(menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L)).willReturn(true);
 
         PickRequest request = new PickRequest(Set.of("ITALIAN"), null, null, null, null, null);
 
         assertThatThrownBy(() -> pickService.pick(1L, request))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
+        // 거리를 켜지 않았으면 연결 여부는 물어볼 일이 아니다. 물어보면 카테고리·태그가
+        // 좁아서 빈 것을 "식당을 연결하라"고 잘못 안내하게 된다.
+        verify(menuRestaurantRepository, never()).existsLinkedRestaurantForUser(any());
     }
 
 
