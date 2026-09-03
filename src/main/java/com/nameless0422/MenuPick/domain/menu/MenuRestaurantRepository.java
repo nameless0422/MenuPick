@@ -17,6 +17,24 @@ public interface MenuRestaurantRepository extends JpaRepository<MenuRestaurant, 
     boolean existsByMenuIdAndRestaurantId(Long menuId, Long restaurantId);
 
     /**
+     * 이 사용자에게 <b>식당이 연결된 메뉴가 하나라도</b> 있는가.
+     *
+     * <p>거리 필터로 후보가 비었을 때 "반경을 늘리면 되는 상황"인지 "반경과 무관하게 연결이
+     * 아예 없는 상황"인지를 가르는 데 쓴다. 둘을 구분하지 않으면 화면이 반경을 늘리라고
+     * 조언하는데 아무리 늘려도 결과가 없다 — 기본 메뉴 22개로 시작한 신규 사용자가 정확히
+     * 이 상태다(메뉴는 많고 연결은 0건).
+     *
+     * <p>양쪽의 soft delete를 모두 본다. 지운 메뉴나 지운 식당의 링크는 후보 근거가 되지
+     * 못하므로({@code PickCandidates}의 같은 조건), 여기서 세면 "연결이 있다"고 답해 놓고
+     * 픽은 계속 비는 어긋남이 생긴다.
+     */
+    @Query("select count(mr) > 0 from MenuRestaurant mr " +
+            "where mr.menu.user.id = :userId " +
+            "and mr.menu.deletedAt is null " +
+            "and mr.restaurant.deletedAt is null")
+    boolean existsLinkedRestaurantForUser(@Param("userId") Long userId);
+
+    /**
      * 식당 soft-delete 시 해당 식당을 참조하는 메뉴-식당 링크를 일괄 정리한다.
      * 링크는 soft-delete 대상이 아니므로(단순 연결 테이블) 물리 삭제한다.
      */
