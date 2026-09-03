@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
@@ -36,6 +37,8 @@ public class PickService {
     private final HistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
+    /** 후보가 빈 이유를 가려낼 때만 쓴다 — {@link #diagnoseEmpty}. */
+    private final MenuRestaurantRepository menuRestaurantRepository;
     /** 추천 시각을 KST 기준으로 기록한다 — 히스토리 days 필터와 기준 시간대를 맞춘다. */
     private final Clock clock;
 
@@ -62,7 +65,7 @@ public class PickService {
         }
 
         if (candidates.isEmpty()) {
-            throw new BusinessException(ErrorCode.NO_PICK_CANDIDATES);
+            throw new BusinessException(diagnoseEmpty(userId, request));
         }
 
         Menu picked = weightedRandom(candidates);
@@ -78,6 +81,42 @@ public class PickService {
                 request, categories);
 
         return new PickResponse.PickResult(history.getId(), toDetail(picked), restaurants);
+    }
+
+    /**
+     * 후보가 왜 비었는지 가려낸다. <b>사용자가 해야 할 일이 다르기 때문에</b> 가른다.
+     *
+     * <p>전에는 셋을 모두 {@link ErrorCode#NO_PICK_CANDIDATES}로 뭉쳤고, 화면은 그걸 받아
+     * "필터를 풀거나 메뉴를 추가해 보세요"라고 안내했다. 그런데 기본 메뉴 22개를 받고 시작한
+     * 신규 사용자가 거리 필터를 켜면 정확히 이 에러가 나는데, 그에게 메뉴를 더 추가하라는 것은
+     * <b>틀린 조언</b>이다 — 메뉴는 넘치고 없는 것은 식당 연결이다. 반경을 늘리라는 조언도
+     * 마찬가지로 소용이 없다. 연결이 0건이면 반경이 지구 반 바퀴여도 후보는 비어 있다.
+     *
+     * <p>후보가 빈 경로에서만 도는 추가 조회다. 정상 픽에는 한 건도 붙지 않는다.
+     */
+    private ErrorCode diagnoseEmpty(Long userId, PickRequest request) {
+        // 1. 필터를 다 풀어도 뽑을 것이 없다 — 메뉴가 없거나 전부 추천 제외다.
+        if (!menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId)) {
+            return ErrorCode.NO_PICKABLE_MENUS;
+        }
+        // 2. 거리로 걸렀는데 애초에 식당이 연결된 메뉴가 하나도 없다.
+        if (distanceRequested(request)
+                && !menuRestaurantRepository.existsLinkedRestaurantForUser(userId)) {
+            return ErrorCode.NO_LINKED_RESTAURANTS;
+        }
+        // 3. 그 밖 — 조건이 좁다. 거리를 켰지만 연결은 있는 경우(전부 반경 밖)도 여기다.
+        return ErrorCode.NO_PICK_CANDIDATES;
+    }
+
+    /**
+     * 셋 중 하나라도 없으면 거리 필터를 걸지 않은 요청이다 —
+     * {@link #filterByDistance}·{@link #withinDistance}가 쓰는 것과 같은 판정이어야 한다.
+     */
+    private static boolean distanceRequested(PickRequest request) {
+        return request != null
+                && request.latitude() != null
+                && request.longitude() != null
+                && request.maxDistance() != null;
     }
 
     /** 앞뒤 공백만 다른 값이 다른 카테고리로 취급되지 않도록 저장 경로와 같은 모양으로 맞춘다. */

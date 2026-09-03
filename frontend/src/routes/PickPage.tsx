@@ -21,6 +21,38 @@ type GeoState =
   | { status: "ready"; latitude: number; longitude: number }
   | { status: "error" };
 
+/**
+ * 후보가 비었을 때 무엇을 하라고 할 것인가.
+ *
+ * 셋을 하나로 뭉쳐 두면 화면이 틀린 조언을 한다. 기본 메뉴 22개를 받고 시작한 신규 사용자가
+ * 거리 필터를 켜면 후보가 비는데, 그에게 "메뉴를 추가해 보세요"는 도움이 되지 않는다 —
+ * 메뉴는 넘치고 없는 것은 식당 연결이다. 서버가 이유를 코드로 갈라 준다.
+ */
+const EMPTY_REASONS: Record<
+  string,
+  { message: string; cta: string; to: string } | undefined
+> = {
+  NO_PICKABLE_MENUS: {
+    message:
+      "뽑을 메뉴가 없어요. 메뉴를 추가하거나, 추천에서 빼 둔 메뉴가 있다면 다시 포함시켜 주세요.",
+    cta: "내 메뉴 관리하러 가기",
+    to: "/menus",
+  },
+  NO_LINKED_RESTAURANTS: {
+    // 반경을 넓히라고 하지 않는다 — 연결이 0건이면 아무리 넓혀도 후보는 비어 있다.
+    message:
+      "거리로 뽑으려면 메뉴에 식당이 연결되어 있어야 해요. 아직 연결된 식당이 없어서 반경을 넓혀도 결과가 나오지 않아요. 식당을 저장한 뒤 메뉴에 연결해 주세요.",
+    cta: "식당 관리하러 가기",
+    to: "/restaurants",
+  },
+  NO_PICK_CANDIDATES: {
+    message:
+      "조건에 맞는 메뉴가 없어요. 필터를 풀거나, 거리로 뽑는 중이라면 반경을 넓혀 보세요.",
+    cta: "내 메뉴 관리하러 가기",
+    to: "/menus",
+  },
+};
+
 export default function PickPage() {
   // 필터 <section>을 랜드마크로 세우려면 이름이 필요하다 — 그 이름을 주는 제목의 id.
   const filtersHeadingId = useId();
@@ -148,7 +180,8 @@ export default function PickPage() {
   const revealed = !busy;
   const result = revealed && pickMutation.isSuccess ? pickMutation.data : null;
   const error = revealed && pickMutation.isError ? pickMutation.error : null;
-  const noCandidates = error != null && apiErrorCode(error) === "NO_PICK_CANDIDATES";
+  // 후보가 비는 이유는 셋이고 할 일이 각각 다르다 — 서버가 코드로 갈라 준다(PickService.diagnoseEmpty).
+  const emptyReason = error == null ? undefined : EMPTY_REASONS[apiErrorCode(error) ?? ""];
 
   return (
     <div className="page">
@@ -257,14 +290,14 @@ export default function PickPage() {
         {(spinning || pickMutation.isPending) && <p className="sr-only">메뉴를 뽑는 중…</p>}
         {result && <PickResultCard result={result} onRetry={spin} />}
 
-        {noCandidates && (
+        {emptyReason && (
           <div className="card pick-empty">
-            <p>조건에 맞는 메뉴가 없어요 — 필터를 풀거나 메뉴를 추가해 보세요.</p>
-            <Link to="/menus">내 메뉴 관리하러 가기 →</Link>
+            <p>{emptyReason.message}</p>
+            <Link to={emptyReason.to}>{emptyReason.cta} →</Link>
           </div>
         )}
       </div>
-      {error && !noCandidates && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
+      {error && !emptyReason && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
     </div>
   );
 }
