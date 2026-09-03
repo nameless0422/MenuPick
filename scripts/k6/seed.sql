@@ -36,10 +36,15 @@
 -- 부하 테스트 관점에서는 "픽이 전부 404"로 보여, 원인을 앱에서 찾게 된다.
 -- 실제로 이 스크립트를 검증하다 그 상태를 만들었다.
 --
--- 콜레이션까지 지정하는 이유: MySQL 8에서 `SET NAMES utf8mb4`만 쓰면 연결 콜레이션이
--- utf8mb4_0900_ai_ci가 되는데, 스키마 컬럼은 utf8mb4_unicode_ci다(V1__init_schema.sql).
--- 그 상태로 세션 변수와 컬럼을 LIKE로 비교하면 "Illegal mix of collations"로 죽는다.
-SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- 콜레이션까지 지정하는 이유: 세션 변수와 컬럼을 LIKE로 비교하는 곳이 있어(아래 가드,
+-- 8절의 id 조회) 둘의 콜레이션이 어긋나면 "Illegal mix of collations"로 죽는다.
+--
+-- 값은 **스키마를 따라간다.** V1은 utf8mb4_unicode_ci로 시작했지만
+-- V7__emoji_safe_collation.sql이 데이터베이스와 전 테이블을 utf8mb4_0900_ai_ci로 옮겼다
+-- (unicode_ci는 이모지를 서로 같다고 봐서 🍕 = 🍔가 참이 된다). 이 파일은 V7 이후로도
+-- unicode_ci에 고정돼 있어 실행하면 line 80에서 즉시 죽었다 — 2026-09-04 첫 실행에서
+-- 드러났다. 스키마 콜레이션을 또 바꾸면 여기도 같이 바꿔야 한다.
+SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- ---------------------------------------------------------------
 -- 0. 프로파일 파라미터
