@@ -2,7 +2,10 @@
 # 매번 다른 결과를 만들어, 롤백했는데 다르게 동작하는 상황을 만든다.
 # jsdom 30과 그 전이 의존성은 Node 22 계열에서 최소 22.22.2를 요구한다. 더 낮은
 # 버전도 당장은 설치되지만 EBADENGINE 상태라 다음 의존성 갱신에서 빌드가 깨질 수 있다.
-FROM node:22.22.2-alpine AS build
+# 정적 번들은 아키텍처와 무관하다. 멀티아키텍처 배포에서 이 단계를 TARGETPLATFORM으로
+# 실행하면 arm64용 npm/tsc/vite가 QEMU 위에서 돌아 이미지 게시가 장시간 멈춘다.
+# 빌드 호스트에서 한 번만 네이티브로 만들고, 아래 nginx 런타임만 대상별로 조립한다.
+FROM --platform=$BUILDPLATFORM node:22.22.2-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
