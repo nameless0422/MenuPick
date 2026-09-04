@@ -42,6 +42,45 @@ docker exec menupick-web nginx -t && docker exec menupick-web nginx -s reload
 docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml up -d
 ```
 
+CI가 `main`의 백엔드·프론트 이미지를 같은 커밋 SHA로 GHCR에 게시한다. 운영 서버에서는
+`.env`의 `APP_VERSION`을 그 **전체 SHA**로 바꾸고 두 이미지를 명시적으로 받은 뒤 app/web만
+재생성한다. MySQL·Redis를 함께 재시작할 이유는 없다.
+
+```bash
+cd ~/menupick
+docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml --env-file .env pull app web
+docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml --env-file .env up -d app web
+```
+
+배포 후에는 "컨테이너가 떠 있다"에서 끝내지 않고 아래 계약을 확인한다.
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml --env-file .env ps
+docker exec menupick-app curl -fsS http://localhost:9090/actuator/health/readiness
+docker exec menupick-web sh -c 'grep worker_connections /etc/nginx/nginx.conf; ulimit -n'
+curl -kfsS -o /dev/null -w '%{http_code}\n' https://localhost/
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' http://localhost/
+```
+
+기대값은 app/web `healthy`, readiness `UP`, `worker_connections 4096`, `ulimit -n 65535`,
+HTTPS `200`, HTTP `301 → https`다. 이미지 아키텍처는 OCI Ampere A1에서 `arm64`여야 한다.
+
+### 2026-09-04 용량 수정 배포 기록
+
+- 배포 SHA: `dcede22b95830da6ccf6ea67a5c51f02f4ef7fca` (PR #212~#215)
+- nginx `worker_connections`: `1024 → 4096`
+- web `nofile`: `65535` 유지
+- 프론트 빌드 이미지: Node `22.22.2`; 빌드 스테이지를 `$BUILDPLATFORM`에 고정해
+  amd64 GitHub Actions 러너에서 정적 번들을 네이티브로 만들고 arm64 런타임 이미지에 복사
+- CI: backend/frontend 테스트와 두 이미지의 `linux/amd64,linux/arm64` 게시 성공
+- 운영 확인: app/web healthy, readiness UP, HTTPS 200, HTTP 301, 두 이미지 arm64,
+  최근 nginx `worker_connections`/파일 디스크립터 오류 없음
+
+첫 main 게시(`7c46df7`, Actions run `33819290871`)는 프론트 Node 빌드까지 arm64 QEMU에서
+실행해 장시간 정체되어 취소했다. `frontend/Dockerfile`의 빌드 스테이지를
+`FROM --platform=$BUILDPLATFORM`으로 고친 뒤 run `33822647518`에서 프론트 멀티아키텍처
+이미지까지 정상 게시됐다. 이 때문에 Dockerfile 계약 테스트는 해당 줄을 고정한다.
+
 nginx 설정을 바꿨으면 **반드시 `nginx -t`로 먼저 검증**한다. 잘못된 설정으로 reload하면
 nginx는 옛 설정을 유지하지만, 재시작하면 그대로 죽는다.
 

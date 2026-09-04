@@ -253,12 +253,20 @@ LoadTestPlan.md 1절이 세운 가설("커넥션 획득 타임아웃 5초라 포
 앱까지 도달해 커넥션 풀 앞에서 대기하다 타임아웃된다. 고쳐서 빨라진 것이 아니라,
 **고장 난 곳이 어디인지가 비로소 정직하게 보이게 된 것이다.**
 
-#### 발견 3 — 다음 천장은 `worker_connections`다 (미조치)
+#### 발견 3 — 다음 천장은 `worker_connections`였다 (후속 조치 완료)
 
-FD를 푼 뒤 같은 부하에서 `1024 worker_connections are not enough`가 8,315건 나온다.
-워커당 1024 × 4워커 = 4,096 동시 연결이 다음 한도다. 다만 **지금 이걸 올릴 이유는 없다** —
-그 앞에 커넥션 풀(10)이 있어서, nginx를 더 열어봐야 대기열만 길어진다. 커넥션 풀을
-손대기로 결정하면 그때 함께 올린다.
+FD를 푼 뒤 같은 부하에서 `1024 worker_connections are not enough`가 8,315건 나왔다.
+워커당 1024 × 4워커 = 4,096 동시 연결이 다음 한도였다.
+
+**2026-09-04 후속 조치**: `frontend/Dockerfile`이 이미지의 nginx 전역 설정을
+`worker_connections 4096`으로 바꾸고, 계약 테스트가 그 값을 고정한다(PR #212).
+운영 서버에는 SHA `dcede22`의 arm64 이미지가 배포됐으며, 컨테이너 안에서
+`worker_connections 4096`과 `ulimit -n 65535`를 확인했다. 최근 로그에도
+`worker_connections are not enough`와 `No file descriptors available`가 없다.
+
+이 변경은 처리량 천장을 4배로 올렸다는 뜻이 아니다. 프록시의 인위적인 소켓 한도를
+제거해 실제 1차 병목인 DB 커넥션 풀을 가리지 않게 한 것이다. 다음 부하 회차에서는
+nginx 오류 0건과 Hikari active/pending을 함께 확인해야 한다.
 
 #### 남은 권고
 
