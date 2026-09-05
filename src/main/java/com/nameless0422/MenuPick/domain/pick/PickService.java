@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 public class PickService {
 
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
+    private static final int RECENT_RECOMMENDATION_DAYS = 3;
 
     private final MenuRepository menuRepository;
     private final HistoryRepository historyRepository;
@@ -68,6 +69,18 @@ public class PickService {
             throw new BusinessException(diagnoseEmpty(userId, request));
         }
 
+        Set<Long> recentMenuIds = new HashSet<>(historyRepository.findDistinctMenuIdsRecommendedSince(
+                userId, LocalDateTime.now(clock).minusDays(RECENT_RECOMMENDATION_DAYS)));
+        List<Menu> freshCandidates = candidates.stream()
+                .filter(menu -> !recentMenuIds.contains(menu.getId()))
+                .toList();
+        // 모든 후보가 최근에 나왔으면 원래 후보로 폴백한다. 중복 방지는 추천 품질 규칙이지
+        // 사용자를 NO_PICK_CANDIDATES로 막는 새 필터가 아니다.
+        boolean avoidedRecentRecommendation = !freshCandidates.isEmpty();
+        if (avoidedRecentRecommendation) {
+            candidates = freshCandidates;
+        }
+
         Menu picked = weightedRandom(candidates);
 
         BigDecimal lat = request != null ? request.latitude() : null;
@@ -80,7 +93,28 @@ public class PickService {
         History history = saveHistory(userId, picked, findNearestRestaurant(picked, lat, lng),
                 request, categories);
 
-        return new PickResponse.PickResult(history.getId(), toDetail(picked), restaurants);
+        return new PickResponse.PickResult(
+                history.getId(), toDetail(picked), restaurants,
+                buildRecommendationReasons(picked, request, categories, avoidedRecentRecommendation));
+    }
+
+    private List<String> buildRecommendationReasons(
+            Menu picked, PickRequest request, Set<String> categories, boolean avoidedRecentRecommendation) {
+        List<String> reasons = new ArrayList<>();
+        reasons.add("선호도 " + picked.getWeight() + "/5를 반영했어요");
+        if (!categories.isEmpty()) {
+            reasons.add("선택한 카테고리에 맞아요");
+        }
+        if (request != null && request.tagIds() != null && !request.tagIds().isEmpty()) {
+            reasons.add("포함 태그 조건에 맞아요");
+        }
+        if (request != null && request.maxDistance() != null) {
+            reasons.add("설정한 거리 안에서 찾았어요");
+        }
+        if (avoidedRecentRecommendation) {
+            reasons.add("최근 " + RECENT_RECOMMENDATION_DAYS + "일간 추천되지 않았어요");
+        }
+        return List.copyOf(reasons);
     }
 
     /**

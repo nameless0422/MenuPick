@@ -312,6 +312,9 @@ function PickResultCard({
   onRetry: () => void;
 }) {
   const { menu, restaurants } = result;
+  // 백엔드와 프론트 이미지가 교체되는 짧은 전환 구간에 구버전 응답을 받아도 카드 전체가
+  // 깨지지 않게 한다. reasons는 부가 설명이지 픽 결과의 필수 데이터가 아니다.
+  const reasons = result.reasons ?? [];
   // 이 카드는 픽이 도착한 순간에 마운트되므로, 마운트 시각이 곧 뽑은 시각이다.
   // 렌더마다 new Date()를 부르면 리렌더할 때마다 표에 찍힌 시각이 바뀐다 —
   // 초기화 함수로 한 번만 붙잡아 둔다.
@@ -330,6 +333,15 @@ function PickResultCard({
       <div className="pick-ticket-body">
       <strong className="pick-result-name">{menu.name}</strong>
       {menu.memo && <p className="pick-result-memo">{menu.memo}</p>}
+
+      {reasons.length > 0 && (
+        <div className="pick-reasons" aria-label="추천 이유">
+          <strong>이 메뉴를 고른 이유</strong>
+          <ul>
+            {reasons.map((reason) => <li key={reason}>{reason}</li>)}
+          </ul>
+        </div>
+      )}
 
       {(menu.categories.length > 0 || menu.tags.length > 0) && (
         <div className="chip-row">

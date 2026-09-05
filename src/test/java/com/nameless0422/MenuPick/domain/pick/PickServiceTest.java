@@ -103,6 +103,38 @@ class PickServiceTest {
         verify(historyRepository).save(any(History.class));
     }
 
+    @Test
+    @DisplayName("최근 3일에 추천한 메뉴는 다른 후보가 있으면 제외한다")
+    void pick_avoidsRecentlyRecommendedMenu() {
+        givenCandidates(List.of(koreanMenu, japaneseMenu));
+        given(historyRepository.findDistinctMenuIdsRecommendedSince(
+                1L, LocalDateTime.of(2026, 1, 12, 0, 30))).willReturn(List.of(koreanMenu.getId()));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L, null);
+
+        assertThat(result.menu().name()).isEqualTo("초밥");
+        assertThat(result.reasons()).contains(
+                "선호도 1/5를 반영했어요",
+                "최근 3일간 추천되지 않았어요");
+    }
+
+    @Test
+    @DisplayName("모든 후보가 최근 추천이면 원래 후보로 폴백한다")
+    void pick_fallsBackWhenEveryCandidateWasRecentlyRecommended() {
+        givenCandidates(List.of(koreanMenu));
+        given(historyRepository.findDistinctMenuIdsRecommendedSince(
+                1L, LocalDateTime.of(2026, 1, 12, 0, 30))).willReturn(List.of(koreanMenu.getId()));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L, null);
+
+        assertThat(result.menu().name()).isEqualTo("김치찌개");
+        assertThat(result.reasons()).doesNotContain("최근 3일간 추천되지 않았어요");
+    }
+
 
 
 

@@ -63,6 +63,7 @@ beforeEach(() => {
       version: 0,
     },
     restaurants: [],
+    reasons: ["선호도 1/5를 반영했어요", "최근 3일간 추천되지 않았어요"],
   });
 
   Object.defineProperty(navigator, "geolocation", {
@@ -77,6 +78,18 @@ beforeEach(() => {
 
 const distanceToggle = () => screen.getByRole("checkbox", { name: /내 위치 기준으로/ });
 const spinButton = () => screen.getByRole("button", { name: /오늘의 메뉴 뽑기/ });
+
+it("픽 결과에 서버가 계산한 추천 이유를 표시한다", async () => {
+  const user = userEvent.setup();
+  renderWithProviders(<PickPage />);
+
+  await user.click(spinButton());
+
+  expect(await screen.findByText("이 메뉴를 고른 이유", {}, { timeout: 3000 })).toBeInTheDocument();
+  const reasons = screen.getByLabelText("추천 이유");
+  expect(within(reasons).getByText("선호도 1/5를 반영했어요")).toBeInTheDocument();
+  expect(within(reasons).getByText("최근 3일간 추천되지 않았어요")).toBeInTheDocument();
+});
 
 describe("PickPage 거리 필터 — 위치 요청 취소", () => {
   it("취소한 뒤 위치가 도착해도 필터가 스스로 켜지지 않는다", async () => {

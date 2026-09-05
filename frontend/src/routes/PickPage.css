@@ -198,6 +198,22 @@
   font-size: var(--fs-md);
 }
 
+.pick-reasons {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: var(--fs-sm);
+}
+
+.pick-reasons strong {
+  color: var(--text-h);
+}
+
+.pick-reasons ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
 .pick-restaurants {
   list-style: none;
   margin: 0;
