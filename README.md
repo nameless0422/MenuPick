@@ -116,6 +116,7 @@ ssh opc@146.56.116.44 'tar -xf ~/main.tar -C ~/menupick'
 
 ## docs
 
+- [CurrentStatus.md](docs/CurrentStatus.md) — 현재 구현·배포·운영 상태와 다음 제품 과제
 - [Specification.md](docs/Specification.md) — 전체 스펙 문서 (기능 스펙 단일 진입점, 로드맵)
 - [Planning.md](docs/Planning.md) — 기술 설계 계획서 (스택, API, 데이터 모델, 인증, 리스크)
 - [DecisionLog.md](docs/DecisionLog.md) — 설계·구현 결정 기록 (왜 이렇게 만들었는지, 검토한 대안, 트레이드오프). **진행하면서 계속 갱신**
@@ -128,4 +129,4 @@ ssh opc@146.56.116.44 'tar -xf ~/main.tar -C ~/menupick'
 
 -----
 
-이 README 파일은 개발 진행 상황에 따라 업데이트될 예정입니다. 
+이 README 파일은 개발 진행 상황에 따라 업데이트될 예정입니다.
