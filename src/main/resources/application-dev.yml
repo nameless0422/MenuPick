@@ -9,7 +9,7 @@ spring:
     hikari:
       # 운영(prod)과 동일 값 — 스테이징에서 풀 고갈/타임아웃 거동을 운영과 같은 조건으로 관찰하기 위함.
       # 근거는 application-prod.yml 주석 참고 (단일 VM 전제).
-      maximum-pool-size: 10
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:10}
       connection-timeout: 5000
 
   jpa:
