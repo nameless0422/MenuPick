@@ -28,4 +28,9 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
             Long userId, LocalDateTime after, Pageable pageable);
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
+
+    @Query("select distinct h.menu.id from History h " +
+            "where h.user.id = :userId and h.menu is not null and h.recommendedAt >= :since")
+    List<Long> findDistinctMenuIdsRecommendedSince(
+            @Param("userId") Long userId, @Param("since") LocalDateTime since);
 }

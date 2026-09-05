@@ -11,8 +11,15 @@ public class PickResponse {
     public record PickResult(
             Long historyId,
             MenuResponse.MenuDetail menu,
-            List<RestaurantWithDistance> restaurants
-    ) {}
+            List<RestaurantWithDistance> restaurants,
+            List<String> reasons
+    ) {
+        /** 기존 호출부와 API 테스트가 이유 필드 추가와 독립적으로 동작하도록 둔 호환 생성자. */
+        public PickResult(Long historyId, MenuResponse.MenuDetail menu,
+                          List<RestaurantWithDistance> restaurants) {
+            this(historyId, menu, restaurants, List.of());
+        }
+    }
 
     /**
      * 좌표를 함께 내려준다 — 픽 결과 화면이 추천 식당을 지도에 찍는데, 이게 없으면
