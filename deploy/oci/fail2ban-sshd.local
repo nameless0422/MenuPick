@@ -1,0 +1,12 @@
+# /etc/fail2ban/jail.d/menupick-sshd.local 로 설치한다.
+# 정상 관리자는 공개키 한 번으로 인증되므로 짧은 재시도 창을 허용할 이유가 없다.
+[sshd]
+enabled = true
+backend = systemd
+maxretry = 3
+findtime = 10m
+bantime = 1h
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 1d
+

@@ -84,6 +84,31 @@ HTTPS `200`, HTTP `301 → https`다. 이미지 아키텍처는 OCI Ampere A1에
 nginx 설정을 바꿨으면 **반드시 `nginx -t`로 먼저 검증**한다. 잘못된 설정으로 reload하면
 nginx는 옛 설정을 유지하지만, 재시작하면 그대로 죽는다.
 
+## SSH 및 스캔 방어
+
+공개 IP의 22번에는 계정명을 무작위 대입하는 봇이 계속 접근한다. OCI 보안 목록에서 22번
+소스를 관리자 IP로 제한하는 것이 1차 방어이며, 서버 내부에는 다음 설정을 함께 적용한다.
+
+```bash
+sudo install -m 0600 deploy/oci/sshd-hardening.conf \
+  /etc/ssh/sshd_config.d/10-menupick-hardening.conf
+sudo sshd -t
+sudo systemctl reload sshd
+
+sudo dnf install -y oracle-epel-release-el9
+sudo dnf install -y --enablerepo=ol9_developer_EPEL fail2ban fail2ban-firewalld
+sudo install -m 0644 deploy/oci/fail2ban-sshd.local \
+  /etc/fail2ban/jail.d/menupick-sshd.local
+sudo fail2ban-client -t
+sudo systemctl enable --now fail2ban
+sudo fail2ban-client status sshd
+```
+
+SSH는 `opc` 공개키 로그인만 허용하고 root·비밀번호·키보드 대화식 인증을 거부한다.
+fail2ban은 10분 안에 3번 실패한 IP를 1시간 차단하며, 반복되면 최대 1일까지 늘린다.
+적용할 때는 기존 SSH 세션을 유지한 채 **새 세션 로그인이 성공하는지 확인한 뒤** 종료한다.
+nginx는 `/.env`, `/.git` 등 모든 숨김파일 경로를 404로 반환한다.
+
 ## 백업
 
 ```bash
