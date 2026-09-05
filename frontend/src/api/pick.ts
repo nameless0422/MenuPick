@@ -28,6 +28,7 @@ export interface PickResult {
   historyId: number;
   menu: MenuDetail;
   restaurants: PickRestaurant[];
+  reasons?: string[];
 }
 
 export async function requestPick(request: PickRequest) {
