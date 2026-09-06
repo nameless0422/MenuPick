@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
+import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
@@ -33,6 +34,8 @@ public class PickService {
 
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
     private static final int RECENT_RECOMMENDATION_DAYS = 3;
+    private static final int FEEDBACK_WINDOW_DAYS = 30;
+    private static final int MAX_FEEDBACK_ADJUSTMENT = 2;
 
     private final MenuRepository menuRepository;
     private final HistoryRepository historyRepository;
@@ -69,8 +72,9 @@ public class PickService {
             throw new BusinessException(diagnoseEmpty(userId, request));
         }
 
+        LocalDateTime now = LocalDateTime.now(clock);
         Set<Long> recentMenuIds = new HashSet<>(historyRepository.findDistinctMenuIdsRecommendedSince(
-                userId, LocalDateTime.now(clock).minusDays(RECENT_RECOMMENDATION_DAYS)));
+                userId, now.minusDays(RECENT_RECOMMENDATION_DAYS)));
         List<Menu> freshCandidates = candidates.stream()
                 .filter(menu -> !recentMenuIds.contains(menu.getId()))
                 .toList();
@@ -81,7 +85,9 @@ public class PickService {
             candidates = freshCandidates;
         }
 
-        Menu picked = weightedRandom(candidates);
+        Map<Long, Integer> feedbackAdjustments = feedbackAdjustments(
+                userId, now.minusDays(FEEDBACK_WINDOW_DAYS));
+        Menu picked = weightedRandom(candidates, feedbackAdjustments);
 
         BigDecimal lat = request != null ? request.latitude() : null;
         BigDecimal lng = request != null ? request.longitude() : null;
@@ -95,11 +101,13 @@ public class PickService {
 
         return new PickResponse.PickResult(
                 history.getId(), toDetail(picked), restaurants,
-                buildRecommendationReasons(picked, request, categories, avoidedRecentRecommendation));
+                buildRecommendationReasons(picked, request, categories, avoidedRecentRecommendation,
+                        feedbackAdjustments.getOrDefault(picked.getId(), 0)));
     }
 
     private List<String> buildRecommendationReasons(
-            Menu picked, PickRequest request, Set<String> categories, boolean avoidedRecentRecommendation) {
+            Menu picked, PickRequest request, Set<String> categories, boolean avoidedRecentRecommendation,
+            int feedbackAdjustment) {
         List<String> reasons = new ArrayList<>();
         reasons.add("선호도 " + picked.getWeight() + "/5를 반영했어요");
         if (!categories.isEmpty()) {
@@ -113,6 +121,9 @@ public class PickService {
         }
         if (avoidedRecentRecommendation) {
             reasons.add("최근 " + RECENT_RECOMMENDATION_DAYS + "일간 추천되지 않았어요");
+        }
+        if (feedbackAdjustment != 0) {
+            reasons.add("최근 " + FEEDBACK_WINDOW_DAYS + "일간 선택 피드백을 반영했어요");
         }
         return List.copyOf(reasons);
     }
@@ -197,8 +208,21 @@ public class PickService {
         return distance <= maxDistance;
     }
 
-    private Menu weightedRandom(List<Menu> menus) {
-        int totalWeight = menus.stream().mapToInt(Menu::getWeight).sum();
+    private Map<Long, Integer> feedbackAdjustments(Long userId, LocalDateTime since) {
+        Map<Long, Integer> scores = new HashMap<>();
+        historyRepository.findMenuIdsByFeedbackSince(userId, RecommendationFeedback.ACCEPTED, since)
+                .forEach(menuId -> scores.merge(menuId, 1, Integer::sum));
+        historyRepository.findMenuIdsByFeedbackSince(userId, RecommendationFeedback.REJECTED, since)
+                .forEach(menuId -> scores.merge(menuId, -1, Integer::sum));
+        scores.replaceAll((menuId, score) -> Math.max(-MAX_FEEDBACK_ADJUSTMENT,
+                Math.min(MAX_FEEDBACK_ADJUSTMENT, score)));
+        return scores;
+    }
+
+    private Menu weightedRandom(List<Menu> menus, Map<Long, Integer> feedbackAdjustments) {
+        int totalWeight = menus.stream()
+                .mapToInt(menu -> effectiveWeight(menu, feedbackAdjustments))
+                .sum();
 
         // weight는 1~5로 검증되지만, 과거 데이터·직접 DB 수정 등으로 합이 0 이하가 되면
         // nextInt(bound)가 IllegalArgumentException을 던진다. 균등 랜덤으로 폴백한다.
@@ -209,12 +233,16 @@ public class PickService {
         int random = ThreadLocalRandom.current().nextInt(totalWeight);
         int cumulative = 0;
         for (Menu menu : menus) {
-            cumulative += menu.getWeight();
+            cumulative += effectiveWeight(menu, feedbackAdjustments);
             if (random < cumulative) {
                 return menu;
             }
         }
         return menus.get(menus.size() - 1);
+    }
+
+    static int effectiveWeight(Menu menu, Map<Long, Integer> feedbackAdjustments) {
+        return Math.max(1, menu.getWeight() + feedbackAdjustments.getOrDefault(menu.getId(), 0));
     }
 
     /**
