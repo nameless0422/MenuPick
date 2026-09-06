@@ -4,13 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
+import { recordPickFeedback } from "../api/history";
 import { searchTags } from "../api/tags";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 
 vi.mock("../api/pick", () => ({ requestPick: vi.fn() }));
+vi.mock("../api/history", () => ({ recordPickFeedback: vi.fn() }));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]) }));
 
 const requestPickMock = vi.mocked(requestPick);
+const recordPickFeedbackMock = vi.mocked(recordPickFeedback);
 const searchTagsMock = vi.mocked(searchTags);
 const HONBAP = { id: 7, name: "혼밥", createdAt: "2026-01-01T00:00:00" };
 
@@ -45,6 +48,8 @@ beforeEach(() => {
   resetKakaoSdkForTest();
   delete window.kakao;
   requestPickMock.mockReset();
+  recordPickFeedbackMock.mockReset();
+  recordPickFeedbackMock.mockResolvedValue(undefined);
   // 태그 제안을 쓰는 테스트가 뒤 테스트로 새지 않게 매번 빈 목록으로 되돌린다.
   searchTagsMock.mockResolvedValue([]);
   // 이 파일이 보는 것은 픽 요청에 무엇이 실려 나가는지이므로 응답은 최소 형태로 고정한다.
@@ -89,6 +94,17 @@ it("픽 결과에 서버가 계산한 추천 이유를 표시한다", async () =
   const reasons = screen.getByLabelText("추천 이유");
   expect(within(reasons).getByText("선호도 1/5를 반영했어요")).toBeInTheDocument();
   expect(within(reasons).getByText("최근 3일간 추천되지 않았어요")).toBeInTheDocument();
+});
+
+it("픽 결과에서 별로예요 피드백을 저장한다", async () => {
+  const user = userEvent.setup();
+  renderWithProviders(<PickPage />);
+  await user.click(spinButton());
+
+  await user.click(await screen.findByRole("button", { name: /별로예요/ }, { timeout: 3000 }));
+
+  await waitFor(() => expect(recordPickFeedbackMock).toHaveBeenCalledWith(1, "REJECTED"));
+  expect(await screen.findByText("의견을 저장했어요.")).toBeInTheDocument();
 });
 
 describe("PickPage 거리 필터 — 위치 요청 취소", () => {

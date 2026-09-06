@@ -73,6 +73,13 @@ public class HistoryService {
         historyRepository.delete(history);
     }
 
+    @Transactional
+    public void recordFeedback(Long userId, Long historyId, RecommendationFeedback feedback) {
+        History history = historyRepository.findByIdAndUserId(historyId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        history.recordFeedback(feedback);
+    }
+
     /**
      * 히스토리 한 줄을 응답으로 옮긴다.
      *

@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "histories")
@@ -37,6 +38,10 @@ public class History {
 
     @Column(nullable = false)
     private boolean isVisited;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private RecommendationFeedback recommendationFeedback;
 
     @Column(nullable = false)
     private LocalDateTime recommendedAt;
@@ -68,6 +73,10 @@ public class History {
         if (restaurant != null) {
             this.restaurant = restaurant;
         }
+    }
+
+    public void recordFeedback(RecommendationFeedback feedback) {
+        this.recommendationFeedback = Objects.requireNonNull(feedback);
     }
 
     public void addFilterCondition(String filterType, String filterValue) {

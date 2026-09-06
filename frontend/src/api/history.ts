@@ -47,6 +47,12 @@ export async function deleteHistory(historyId: number) {
   await http.delete<ApiResponse<null>>(`/api/v1/history/${historyId}`);
 }
 
+export type RecommendationFeedback = "ACCEPTED" | "REJECTED";
+
+export async function recordPickFeedback(historyId: number, feedback: RecommendationFeedback) {
+  await http.patch<ApiResponse<null>>(`/api/v1/history/${historyId}/feedback`, { feedback });
+}
+
 // 메뉴에 연결된 식당 목록 — 방문 처리 시 실제 방문 식당을 고를 수 있는 후보로 사용.
 // 같은 백엔드 DTO를 두 곳에서 각자 선언하면 nullability가 갈린다(실제로 갈려 있었다).
 // 타입 정의는 menuRestaurants.ts 하나로 두고 여기서는 다시 내보내기만 한다.
