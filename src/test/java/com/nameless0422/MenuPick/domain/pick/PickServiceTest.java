@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
+import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
@@ -276,6 +277,34 @@ class PickServiceTest {
         // weight=3 vs weight=1 → 김치찌개가 약 75% 선택되어야 함 (±10% 여유)
         int koreanCount = counts.getOrDefault("김치찌개", 0);
         assertThat(koreanCount).isBetween(600, 900);
+    }
+
+    @Test
+    @DisplayName("최근 피드백은 저장 가중치를 바꾸지 않고 추천 유효 가중치만 보정한다")
+    void pick_appliesRecentFeedbackToEffectiveWeight() {
+        givenCandidates(List.of(koreanMenu));
+        given(historyRepository.findMenuIdsByFeedbackSince(
+                1L, RecommendationFeedback.ACCEPTED, LocalDateTime.of(2025, 12, 16, 0, 30)))
+                .willReturn(List.of(1L, 1L, 1L));
+        given(historyRepository.findMenuIdsByFeedbackSince(
+                1L, RecommendationFeedback.REJECTED, LocalDateTime.of(2025, 12, 16, 0, 30)))
+                .willReturn(List.of());
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L, null);
+
+        assertThat(koreanMenu.getWeight()).isEqualTo(3);
+        assertThat(result.reasons()).contains("최근 30일간 선택 피드백을 반영했어요");
+        verify(historyRepository).findMenuIdsByFeedbackSince(
+                1L, RecommendationFeedback.ACCEPTED, LocalDateTime.of(2025, 12, 16, 0, 30));
+    }
+
+    @Test
+    @DisplayName("피드백 보정은 ±2로 제한하고 유효 가중치는 최소 1을 유지한다")
+    void effectiveWeight_boundsFeedbackAdjustment() {
+        assertThat(PickService.effectiveWeight(japaneseMenu, Map.of(2L, -2))).isEqualTo(1);
+        assertThat(PickService.effectiveWeight(koreanMenu, Map.of(1L, 2))).isEqualTo(5);
     }
 
     @Test

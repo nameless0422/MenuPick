@@ -33,4 +33,12 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
             "where h.user.id = :userId and h.menu is not null and h.recommendedAt >= :since")
     List<Long> findDistinctMenuIdsRecommendedSince(
             @Param("userId") Long userId, @Param("since") LocalDateTime since);
+
+    @Query("select h.menu.id from History h " +
+            "where h.user.id = :userId and h.menu is not null " +
+            "and h.recommendationFeedback = :feedback and h.recommendedAt >= :since")
+    List<Long> findMenuIdsByFeedbackSince(
+            @Param("userId") Long userId,
+            @Param("feedback") RecommendationFeedback feedback,
+            @Param("since") LocalDateTime since);
 }
