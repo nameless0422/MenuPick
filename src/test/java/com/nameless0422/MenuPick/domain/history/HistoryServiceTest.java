@@ -240,6 +240,18 @@ class HistoryServiceTest {
                 .extracting("errorCode").isEqualTo(ErrorCode.HISTORY_NOT_FOUND);
     }
 
+    @Test
+    @DisplayName("픽 피드백을 히스토리에 기록하고 다시 선택하면 덮어쓴다")
+    void recordFeedback_successAndOverwrite() {
+        var history = createHistory(1L, menu, restaurant, false, NOW);
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+
+        historyService.recordFeedback(1L, 1L, RecommendationFeedback.REJECTED);
+        historyService.recordFeedback(1L, 1L, RecommendationFeedback.ACCEPTED);
+
+        assertThat(history.getRecommendationFeedback()).isEqualTo(RecommendationFeedback.ACCEPTED);
+    }
+
     // --- 엣지 케이스 ---
 
     @Test

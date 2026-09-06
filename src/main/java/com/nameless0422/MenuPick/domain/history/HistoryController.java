@@ -5,6 +5,7 @@ import com.nameless0422.MenuPick.domain.history.dto.HistoryRequest;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,6 +36,15 @@ public class HistoryController {
             @RequestBody(required = false) HistoryRequest.VisitRequest request) {
         historyService.markVisited(userId, historyId,
                 request != null ? request.restaurantId() : null);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @PatchMapping("/{historyId}/feedback")
+    public ResponseEntity<ApiResponse<Void>> recordFeedback(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long historyId,
+            @Valid @RequestBody HistoryRequest.FeedbackRequest request) {
+        historyService.recordFeedback(userId, historyId, request.feedback());
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
