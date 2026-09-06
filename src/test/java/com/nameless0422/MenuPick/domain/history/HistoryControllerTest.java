@@ -120,6 +120,28 @@ class HistoryControllerTest extends AbstractControllerTest {
     }
 
     @Test
+    @DisplayName("PATCH /api/v1/history/{id}/feedback - 픽 피드백 기록")
+    void recordFeedback_success() throws Exception {
+        mockMvc.perform(patch("/api/v1/history/1/feedback")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"feedback\":\"REJECTED\"}"))
+                .andExpect(status().isOk());
+
+        verify(historyService).recordFeedback(1L, 1L, RecommendationFeedback.REJECTED);
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/history/{id}/feedback - 잘못된 값은 400")
+    void recordFeedback_invalidValue() throws Exception {
+        mockMvc.perform(patch("/api/v1/history/1/feedback")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"feedback\":\"MAYBE\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("DELETE /api/v1/history/{id} - 삭제 성공")
     void deleteHistory_success() throws Exception {
         mockMvc.perform(delete("/api/v1/history/1")

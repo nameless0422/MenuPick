@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { requestPick, type PickRequest, type PickResult } from "../api/pick";
+import { recordPickFeedback, type RecommendationFeedback } from "../api/history";
 import { searchTags } from "../api/tags";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
@@ -315,6 +316,11 @@ function PickResultCard({
   // 백엔드와 프론트 이미지가 교체되는 짧은 전환 구간에 구버전 응답을 받아도 카드 전체가
   // 깨지지 않게 한다. reasons는 부가 설명이지 픽 결과의 필수 데이터가 아니다.
   const reasons = result.reasons ?? [];
+  const [feedback, setFeedback] = useState<RecommendationFeedback | null>(null);
+  const feedbackMutation = useMutation({
+    mutationFn: (value: RecommendationFeedback) => recordPickFeedback(result.historyId, value),
+    onSuccess: (_, value) => setFeedback(value),
+  });
   // 이 카드는 픽이 도착한 순간에 마운트되므로, 마운트 시각이 곧 뽑은 시각이다.
   // 렌더마다 new Date()를 부르면 리렌더할 때마다 표에 찍힌 시각이 바뀐다 —
   // 초기화 함수로 한 번만 붙잡아 둔다.
@@ -379,9 +385,18 @@ function PickResultCard({
       )}
 
       <div className="card-actions">
+        <button onClick={() => feedbackMutation.mutate("ACCEPTED")}
+          disabled={feedbackMutation.isPending} aria-pressed={feedback === "ACCEPTED"}>
+          👍 이걸로 먹을래요
+        </button>
+        <button onClick={() => feedbackMutation.mutate("REJECTED")}
+          disabled={feedbackMutation.isPending} aria-pressed={feedback === "REJECTED"}>
+          👎 별로예요
+        </button>
         <button onClick={onRetry}>🔁 다시 돌리기</button>
         <Link to="/history">히스토리 보기 →</Link>
       </div>
+      {feedback && <p className="card-muted-hint" role="status">의견을 저장했어요.</p>}
       </div>
     </div>
   );
