@@ -10,7 +10,8 @@ import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 
 vi.mock("../api/pick", () => ({ requestPick: vi.fn() }));
 vi.mock("../api/history", () => ({ recordPickFeedback: vi.fn() }));
-vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]) }));
+vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]), fetchAllTags: vi.fn().mockResolvedValue([]) }));
+vi.mock("../api/pickPreferences", () => ({ fetchDefaultExcludedTagIds: vi.fn().mockResolvedValue([]) }));
 
 const requestPickMock = vi.mocked(requestPick);
 const recordPickFeedbackMock = vi.mocked(recordPickFeedback);

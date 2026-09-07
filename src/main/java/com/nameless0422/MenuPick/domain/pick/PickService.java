@@ -41,6 +41,7 @@ public class PickService {
     private final HistoryRepository historyRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
+    private final DefaultPickPreferenceService defaultPickPreferenceService;
     /** 후보가 빈 이유를 가려낼 때만 쓴다 — {@link #diagnoseEmpty}. */
     private final MenuRestaurantRepository menuRestaurantRepository;
     /** 추천 시각을 KST 기준으로 기록한다 — 히스토리 days 필터와 기준 시간대를 맞춘다. */
@@ -48,6 +49,17 @@ public class PickService {
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
+        if (request == null || request.excludeTagIds() == null) {
+            Set<Long> defaults = defaultPickPreferenceService.getDefaultExcludedTagIds(userId);
+            if (!defaults.isEmpty()) {
+                request = new PickRequest(
+                        request == null ? null : request.categories(),
+                        request == null ? null : request.tagIds(), defaults,
+                        request == null ? null : request.latitude(),
+                        request == null ? null : request.longitude(),
+                        request == null ? null : request.maxDistance());
+            }
+        }
         // 저장 경로(MenuService.normalizeCategories)가 저장 직전에 trim하므로, 요청 쪽도 같은
         // 모양으로 맞춰야 비교가 성립한다. 맞추지 않으면 [" 한식"]이 @NotBlank를 통과하고도
         // 저장된 "한식"과 매칭되지 않아 NO_PICK_CANDIDATES가 나고, 사용자는 분명히 있는

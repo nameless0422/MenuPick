@@ -74,7 +74,8 @@ class PickServiceIntegrationTest extends AbstractIntegrationTest {
     @BeforeEach
     void setUp() {
         pickService = new PickService(menuRepository, historyRepository, userRepository,
-                tagRepository, menuRestaurantRepository, FIXED_CLOCK);
+                tagRepository, new DefaultPickPreferenceService(tagRepository),
+                menuRestaurantRepository, FIXED_CLOCK);
         me = userRepository.save(User.builder().email("me@example.com").nickname("나").build());
     }
 
