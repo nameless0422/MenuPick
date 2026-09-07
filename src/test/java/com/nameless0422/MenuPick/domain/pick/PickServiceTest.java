@@ -47,6 +47,7 @@ class PickServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private TagRepository tagRepository;
     @Mock private MenuRestaurantRepository menuRestaurantRepository;
+    @Mock private DefaultPickPreferenceService defaultPickPreferenceService;
 
     /** 추천 시각 검증을 위해 KST 고정 시계를 쓴다. */
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -65,7 +66,7 @@ class PickServiceTest {
     @BeforeEach
     void setUp() {
         pickService = new PickService(menuRepository, historyRepository, userRepository,
-                tagRepository, menuRestaurantRepository, FIXED_CLOCK);
+                tagRepository, defaultPickPreferenceService, menuRestaurantRepository, FIXED_CLOCK);
 
         user = User.builder().email("test@test.com").nickname("테스터").build();
         setId(user, 1L);
@@ -102,6 +103,20 @@ class PickServiceTest {
         assertThat(result.menu()).isNotNull();
         assertThat(result.menu().name()).isIn("김치찌개", "초밥", "짜장면");
         verify(historyRepository).save(any(History.class));
+    }
+
+    @Test
+    @DisplayName("제외 태그를 생략하면 저장된 기본 제외 태그를 적용한다")
+    void pick_appliesDefaultExcludedTagsWhenOmitted() {
+        given(defaultPickPreferenceService.getDefaultExcludedTagIds(1L)).willReturn(Set.of(2L));
+        givenCandidates(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        pickService.pick(1L, null);
+
+        verify(menuRepository).findAll(ArgumentMatchers.<Specification<Menu>>any());
+        verify(menuRepository, never()).findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(any());
     }
 
     @Test

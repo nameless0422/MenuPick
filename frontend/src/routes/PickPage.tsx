@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { requestPick, type PickRequest, type PickResult } from "../api/pick";
 import { recordPickFeedback, type RecommendationFeedback } from "../api/history";
-import { searchTags } from "../api/tags";
+import { fetchAllTags, searchTags } from "../api/tags";
+import { fetchDefaultExcludedTagIds } from "../api/pickPreferences";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import { chipAction, chipClass, chipToggle } from "../a11y/chipToggle";
@@ -62,6 +63,20 @@ export default function PickPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [includeTags, setIncludeTags] = useState<TagSummary[]>([]);
   const [excludeTags, setExcludeTags] = useState<TagSummary[]>([]);
+  const defaultsQuery = useQuery({
+    queryKey: ["pick-preferences"],
+    queryFn: async () => {
+      const [ids, tags] = await Promise.all([fetchDefaultExcludedTagIds(), fetchAllTags()]);
+      return tags.filter((tag) => ids.includes(tag.id));
+    },
+  });
+  const defaultsApplied = useRef(false);
+  useEffect(() => {
+    if (!defaultsApplied.current && defaultsQuery.data) {
+      defaultsApplied.current = true;
+      setExcludeTags(defaultsQuery.data.map(({ id, name }) => ({ id, name })));
+    }
+  }, [defaultsQuery.data]);
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
   // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
@@ -113,7 +128,8 @@ export default function PickPage() {
   const buildRequest = (): PickRequest => ({
     ...(categories.length > 0 && { categories }),
     ...(includeTags.length > 0 && { tagIds: includeTags.map((t) => t.id) }),
-    ...(excludeTags.length > 0 && { excludeTagIds: excludeTags.map((t) => t.id) }),
+    // 빈 배열도 보낸다. 그래야 기본 제외 태그를 이번 픽에서 전부 해제한 의사가 서버에 전달된다.
+    excludeTagIds: excludeTags.map((t) => t.id),
     ...(geo.status === "ready" && {
       latitude: geo.latitude,
       longitude: geo.longitude,

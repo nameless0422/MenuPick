@@ -13,6 +13,7 @@ import {
 } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import { deleteTag, fetchAllTags } from "../api/tags";
+import { fetchDefaultExcludedTagIds, updateDefaultExcludedTagIds } from "../api/pickPreferences";
 
 // 실제 모듈의 상수(PROVIDERS·PROVIDER_LABELS·PASSWORD_MIN_LENGTH)는 화면이 그대로 쓰므로
 // 살려 두고, 네트워크를 타는 함수만 갈아 끼운다.
@@ -28,6 +29,9 @@ vi.mock("../auth/AuthContext", () => ({ useAuth: vi.fn() }));
 // 태그 절도 마운트되자마자 목록을 부른다. 갈아 끼우지 않으면 이 화면의 모든 테스트가
 // 실패한 요청의 에러 alert를 하나씩 더 그리게 된다.
 vi.mock("../api/tags", () => ({ fetchAllTags: vi.fn(), deleteTag: vi.fn() }));
+vi.mock("../api/pickPreferences", () => ({
+  fetchDefaultExcludedTagIds: vi.fn(), updateDefaultExcludedTagIds: vi.fn(),
+}));
 
 const fetchMeMock = vi.mocked(fetchMe);
 const unlinkMock = vi.mocked(unlinkSocialAccount);
@@ -35,6 +39,8 @@ const changePasswordMock = vi.mocked(changePassword);
 const useAuthMock = vi.mocked(useAuth);
 const fetchAllTagsMock = vi.mocked(fetchAllTags);
 const deleteTagMock = vi.mocked(deleteTag);
+const fetchPreferencesMock = vi.mocked(fetchDefaultExcludedTagIds);
+const updatePreferencesMock = vi.mocked(updateDefaultExcludedTagIds);
 const loginFn = vi.fn();
 
 // 로그아웃·탈퇴는 세션 훅이 쥐고 있다. 매번 새 vi.fn()을 끼우면 "요청이 나갔는가"를
@@ -91,6 +97,8 @@ beforeEach(() => {
   });
   fetchAllTagsMock.mockResolvedValue([]);
   deleteTagMock.mockResolvedValue(undefined);
+  fetchPreferencesMock.mockResolvedValue([]);
+  updatePreferencesMock.mockImplementation(async (ids) => ids);
   // 연동 시작은 브라우저를 통째로 제공자로 보낸다. jsdom은 실제 이동을 못 하므로
   // href만 받아 두는 자리로 바꿔 놓는다.
   Object.defineProperty(window, "location", {

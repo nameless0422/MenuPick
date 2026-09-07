@@ -60,4 +60,15 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
     @Modifying(flushAutomatically = true)
     @Query(value = "DELETE FROM menu_tags WHERE tag_id = :tagId", nativeQuery = true)
     void deleteMenuTagsByTagId(@Param("tagId") Long tagId);
+
+    @Query(value = "SELECT tag_id FROM user_default_excluded_tags WHERE user_id = :userId", nativeQuery = true)
+    List<Long> findDefaultExcludedTagIds(@Param("userId") Long userId);
+
+    @Modifying
+    @Query(value = "DELETE FROM user_default_excluded_tags WHERE user_id = :userId", nativeQuery = true)
+    void deleteDefaultExcludedTags(@Param("userId") Long userId);
+
+    @Modifying
+    @Query(value = "INSERT INTO user_default_excluded_tags(user_id, tag_id) VALUES (:userId, :tagId)", nativeQuery = true)
+    void insertDefaultExcludedTag(@Param("userId") Long userId, @Param("tagId") Long tagId);
 }
