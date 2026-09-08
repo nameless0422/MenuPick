@@ -1,6 +1,6 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-07 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-09 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
@@ -69,19 +69,36 @@
 
 ## 현재 운영 상태
 
-2026-09-05 사용자 요청으로 외부 서비스를 잠시 중지했다.
+**2026-09-09 재기동 완료.** 컨테이너 5개 모두 실행 중이며 `9e7b695`(#236)를 서비스한다.
 
 | 컨테이너 | 상태 |
 | --- | --- |
-| `menupick-app` | 정지 |
-| `menupick-web` | 정지 |
+| `menupick-app` | 실행 (`9e7b695`) |
+| `menupick-web` | 실행 (`9e7b695`) |
 | `menupick-mysql` | 실행 유지 |
 | `menupick-redis` | 실행 유지 |
 | `menupick-mailpit` | 실행 유지 |
 
-운영 app/web은 중지 당시 버전에 고정돼 있으며, 이후 main에서 게시된 이미지는 아직 기동
-배포하지 않았다. 서비스를 다시 열 때 `.env`의 `APP_VERSION`을 최신 main 커밋 SHA로 갱신한
-뒤 app/web만 기동하고 Flyway 적용, readiness, HTTPS, 숨김파일 404를 재검증한다.
+2026-09-05부터 9/9까지는 app/web을 내려 둔 상태였다(개발 중이라 의도적으로 중지). 재기동
+시점에 `becb317`(#221)에서 `9e7b695`(#236)로 15개 PR 분을 한 번에 올렸고, 그 과정에서
+**V11·V12가 운영 DB에 처음 적용됐다** — `histories`에 `is_visited`·`recommendation_feedback`
+추가, `user_default_excluded_tags` 생성. 둘 다 `success=1`이고 기존 데이터는 그대로였다
+(users 2 / menus 23 / restaurants 1 / links 1 / histories 1, 배포 전후 동일).
+
+재기동 검증 항목은 모두 통과했다 — Flyway 적용, readiness `UP`, HTTPS 200, `:80` → 301,
+숨김파일(`/.env`, `/.git/*`) 404, 그리고 컨테이너 재생성 후에도 유지되는 nginx
+`worker_connections 4096` / `nofile 65535`.
+
+### 메일 발송 — 개발 서버는 Mailpit
+
+`MAIL_HOST=mailpit`, `MAIL_PORT=1025`. 실제 공급자를 가리키던 것을 2026-09-09에 바꿨다.
+테스트 계정을 만들 때마다 진짜 메일이 밖으로 나가고, 존재하지 않는 주소로는 인증 링크를
+받을 방법이 아예 없기 때문이다(토큰은 Redis에 해시로만 저장돼 서버에서 원문을 꺼낼 수 없다).
+받은 메일은 `http://localhost:8025`(SSH 터널)에서 본다.
+
+**정식 서비스 전환 시 실제 SMTP 공급자로 되돌릴 것.** 그대로 두면 가입자가 인증 메일을
+영영 못 받는데 앱은 정상 기동하므로 아무도 알아채지 못한다. 근거와 절차는
+[.env.prod.example](../.env.prod.example)의 MAIL 절에 함께 적어 뒀다.
 
 ## 다음 제품 과제
 
