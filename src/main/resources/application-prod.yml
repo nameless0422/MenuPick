@@ -128,7 +128,9 @@ management:
         #   hikaricp.connections.pending  — 커넥션 풀(10) 고갈. 톰캣 스레드가 DB 대기로 잠기는 신호
         #   executor.queued{name=mailTaskExecutor} — 메일 큐(100) 적체. 차면 발송이 요청 스레드로 넘어온다
         #   jvm.memory.used{area=heap}    — mem_limit 1536m의 75%가 힙 상한
-        include: health, metrics
+        #   kpi                           — 추천 품질 KPI 3종(Specification.md 8장). 서비스 전체
+        #                                    집계라 사용자별 API가 아니라 이 포트에 둔다(KpiEndpoint)
+        include: health, metrics, kpi
 
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:true}

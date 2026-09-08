@@ -94,7 +94,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, metrics
+        include: health, metrics, kpi
   endpoint:
     health:
       # 헬스체크는 SecurityConfig에서 permitAll이므로, 비인증 호출자에게 DB/Redis 커넥션 상세를 노출하지 않는다.
