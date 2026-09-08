@@ -116,7 +116,7 @@
 | 외부 API | 카카오 로컬(장소 검색) | 백엔드 프록시, WebClient. 네이버 NCP Maps는 걷어냈다(D-035) |
 | Frontend | React + Vite + TypeScript | Axios 인터셉터 기반 토큰 갱신 |
 | Infra | Docker + Docker Compose | Oracle Cloud Free Tier ARM(Ampere A1) VM 한 대에서 운영 중 — `docker-compose.prod.yml` + `deploy/oci/` 오버레이 |
-| CI / 품질 | GitHub Actions, k6 부하 테스트 스크립트 | `scripts/k6/load-test.js` |
+| CI / 품질 | GitHub Actions, Vitest, Playwright Chromium 핵심 여정 E2E, k6 부하 테스트 | `frontend/e2e/core-journey.spec.ts`, `scripts/k6/load-test.js` |
 | 문서화 | springdoc OpenAPI (Swagger UI) | local/dev 프로파일만 노출 |
 
 ---
