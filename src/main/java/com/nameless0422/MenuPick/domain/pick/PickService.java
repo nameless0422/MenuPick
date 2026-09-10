@@ -85,8 +85,15 @@ public class PickService {
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
-        Set<Long> recentMenuIds = new HashSet<>(historyRepository.findDistinctMenuIdsRecommendedSince(
-                userId, now.minusDays(RECENT_RECOMMENDATION_DAYS)));
+        LocalDateTime recentSince = now.minusDays(RECENT_RECOMMENDATION_DAYS);
+        List<HistoryRepository.MenuRecommendationSignals> recommendationSignals =
+                historyRepository.findMenuRecommendationSignalsSince(
+                        userId, now.minusDays(FEEDBACK_WINDOW_DAYS),
+                        RecommendationFeedback.ACCEPTED, RecommendationFeedback.REJECTED);
+        Set<Long> recentMenuIds = recommendationSignals.stream()
+                .filter(signal -> !signal.getLatestRecommendedAt().isBefore(recentSince))
+                .map(HistoryRepository.MenuRecommendationSignals::getMenuId)
+                .collect(Collectors.toSet());
         List<Menu> freshCandidates = candidates.stream()
                 .filter(menu -> !recentMenuIds.contains(menu.getId()))
                 .toList();
@@ -97,8 +104,7 @@ public class PickService {
             candidates = freshCandidates;
         }
 
-        Map<Long, Integer> feedbackAdjustments = feedbackAdjustments(
-                userId, now.minusDays(FEEDBACK_WINDOW_DAYS));
+        Map<Long, Integer> feedbackAdjustments = feedbackAdjustments(recommendationSignals);
         Menu picked = weightedRandom(candidates, feedbackAdjustments);
 
         BigDecimal lat = request != null ? request.latitude() : null;
@@ -220,14 +226,17 @@ public class PickService {
         return distance <= maxDistance;
     }
 
-    private Map<Long, Integer> feedbackAdjustments(Long userId, LocalDateTime since) {
+    static Map<Long, Integer> feedbackAdjustments(
+            List<HistoryRepository.MenuRecommendationSignals> recommendationSignals) {
         Map<Long, Integer> scores = new HashMap<>();
-        historyRepository.findMenuIdsByFeedbackSince(userId, RecommendationFeedback.ACCEPTED, since)
-                .forEach(menuId -> scores.merge(menuId, 1, Integer::sum));
-        historyRepository.findMenuIdsByFeedbackSince(userId, RecommendationFeedback.REJECTED, since)
-                .forEach(menuId -> scores.merge(menuId, -1, Integer::sum));
-        scores.replaceAll((menuId, score) -> Math.max(-MAX_FEEDBACK_ADJUSTMENT,
-                Math.min(MAX_FEEDBACK_ADJUSTMENT, score)));
+        recommendationSignals.forEach(signal -> {
+            long score = signal.getFeedbackScore() == null ? 0L : signal.getFeedbackScore();
+            int bounded = (int) Math.max(-MAX_FEEDBACK_ADJUSTMENT,
+                    Math.min(MAX_FEEDBACK_ADJUSTMENT, score));
+            if (bounded != 0) {
+                scores.put(signal.getMenuId(), bounded);
+            }
+        });
         return scores;
     }
 

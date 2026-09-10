@@ -123,8 +123,8 @@ class PickServiceTest {
     @DisplayName("최근 3일에 추천한 메뉴는 다른 후보가 있으면 제외한다")
     void pick_avoidsRecentlyRecommendedMenu() {
         givenCandidates(List.of(koreanMenu, japaneseMenu));
-        given(historyRepository.findDistinctMenuIdsRecommendedSince(
-                1L, LocalDateTime.of(2026, 1, 12, 0, 30))).willReturn(List.of(koreanMenu.getId()));
+        givenRecommendationSignals(List.of(signal(koreanMenu.getId(),
+                LocalDateTime.of(2026, 1, 12, 0, 30), 0L)));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -140,8 +140,8 @@ class PickServiceTest {
     @DisplayName("모든 후보가 최근 추천이면 원래 후보로 폴백한다")
     void pick_fallsBackWhenEveryCandidateWasRecentlyRecommended() {
         givenCandidates(List.of(koreanMenu));
-        given(historyRepository.findDistinctMenuIdsRecommendedSince(
-                1L, LocalDateTime.of(2026, 1, 12, 0, 30))).willReturn(List.of(koreanMenu.getId()));
+        givenRecommendationSignals(List.of(signal(koreanMenu.getId(),
+                LocalDateTime.of(2026, 1, 12, 0, 30), 0L)));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -149,6 +149,21 @@ class PickServiceTest {
 
         assertThat(result.menu().name()).isEqualTo("김치찌개");
         assertThat(result.reasons()).doesNotContain("최근 3일간 추천되지 않았어요");
+    }
+
+    @Test
+    @DisplayName("최근 3일 경계보다 1초 전 추천은 오래된 것으로 보고 fresh 이유를 표시한다")
+    void pick_treatsOneSecondBeforeRecentCutoffAsFresh() {
+        givenCandidates(List.of(koreanMenu));
+        givenRecommendationSignals(List.of(signal(koreanMenu.getId(),
+                LocalDateTime.of(2026, 1, 12, 0, 29, 59), 0L)));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L, null);
+
+        assertThat(result.menu().name()).isEqualTo("김치찌개");
+        assertThat(result.reasons()).contains("최근 3일간 추천되지 않았어요");
     }
 
 
@@ -298,12 +313,8 @@ class PickServiceTest {
     @DisplayName("최근 피드백은 저장 가중치를 바꾸지 않고 추천 유효 가중치만 보정한다")
     void pick_appliesRecentFeedbackToEffectiveWeight() {
         givenCandidates(List.of(koreanMenu));
-        given(historyRepository.findMenuIdsByFeedbackSince(
-                1L, RecommendationFeedback.ACCEPTED, LocalDateTime.of(2025, 12, 16, 0, 30)))
-                .willReturn(List.of(1L, 1L, 1L));
-        given(historyRepository.findMenuIdsByFeedbackSince(
-                1L, RecommendationFeedback.REJECTED, LocalDateTime.of(2025, 12, 16, 0, 30)))
-                .willReturn(List.of());
+        givenRecommendationSignals(List.of(signal(koreanMenu.getId(),
+                LocalDateTime.of(2026, 1, 1, 0, 30), 3L)));
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -311,8 +322,9 @@ class PickServiceTest {
 
         assertThat(koreanMenu.getWeight()).isEqualTo(3);
         assertThat(result.reasons()).contains("최근 30일간 선택 피드백을 반영했어요");
-        verify(historyRepository).findMenuIdsByFeedbackSince(
-                1L, RecommendationFeedback.ACCEPTED, LocalDateTime.of(2025, 12, 16, 0, 30));
+        verify(historyRepository, times(1)).findMenuRecommendationSignalsSince(
+                1L, LocalDateTime.of(2025, 12, 16, 0, 30),
+                RecommendationFeedback.ACCEPTED, RecommendationFeedback.REJECTED);
     }
 
     @Test
@@ -320,6 +332,37 @@ class PickServiceTest {
     void effectiveWeight_boundsFeedbackAdjustment() {
         assertThat(PickService.effectiveWeight(japaneseMenu, Map.of(2L, -2))).isEqualTo(1);
         assertThat(PickService.effectiveWeight(koreanMenu, Map.of(1L, 2))).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("집계 피드백은 Long 극값을 안전하게 제한하고 0은 생략하며 ±1은 보존한다")
+    void feedbackAdjustments_clampsLongExtremesAndPreservesSmallScores() {
+        Map<Long, Integer> adjustments = PickService.feedbackAdjustments(List.of(
+                signal(1L, LocalDateTime.MIN, Long.MAX_VALUE),
+                signal(2L, LocalDateTime.MIN, Long.MIN_VALUE),
+                signal(3L, LocalDateTime.MIN, 0L),
+                signal(4L, LocalDateTime.MIN, 1L),
+                signal(5L, LocalDateTime.MIN, -1L)));
+
+        assertThat(adjustments).containsEntry(1L, 2)
+                .containsEntry(2L, -2)
+                .containsEntry(4L, 1)
+                .containsEntry(5L, -1)
+                .doesNotContainKey(3L);
+    }
+
+    @Test
+    @DisplayName("피드백 합계가 0이면 개인화 추천 이유를 표시하지 않는다")
+    void pick_omitsFeedbackReasonWhenAggregateCancelsToZero() {
+        givenCandidates(List.of(koreanMenu));
+        givenRecommendationSignals(List.of(signal(koreanMenu.getId(),
+                LocalDateTime.of(2026, 1, 1, 0, 30), 0L)));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L, null);
+
+        assertThat(result.reasons()).doesNotContain("최근 30일간 선택 피드백을 반영했어요");
     }
 
     @Test
@@ -525,6 +568,23 @@ class PickServiceTest {
                 .thenReturn(candidates);
         lenient().when(menuRepository.findAll(ArgumentMatchers.<Specification<Menu>>any()))
                 .thenReturn(candidates);
+    }
+
+    private void givenRecommendationSignals(
+            List<HistoryRepository.MenuRecommendationSignals> signals) {
+        given(historyRepository.findMenuRecommendationSignalsSince(
+                1L, LocalDateTime.of(2025, 12, 16, 0, 30),
+                RecommendationFeedback.ACCEPTED, RecommendationFeedback.REJECTED))
+                .willReturn(signals);
+    }
+
+    private static HistoryRepository.MenuRecommendationSignals signal(
+            Long menuId, LocalDateTime latestRecommendedAt, Long feedbackScore) {
+        return new HistoryRepository.MenuRecommendationSignals() {
+            @Override public Long getMenuId() { return menuId; }
+            @Override public LocalDateTime getLatestRecommendedAt() { return latestRecommendedAt; }
+            @Override public Long getFeedbackScore() { return feedbackScore; }
+        };
     }
 
     // --- 리플렉션 헬퍼 ---
