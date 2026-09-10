@@ -29,18 +29,27 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
 
-    @Query("select distinct h.menu.id from History h " +
-            "where h.user.id = :userId and h.menu is not null and h.recommendedAt >= :since")
-    List<Long> findDistinctMenuIdsRecommendedSince(
-            @Param("userId") Long userId, @Param("since") LocalDateTime since);
-
-    @Query("select h.menu.id from History h " +
-            "where h.user.id = :userId and h.menu is not null " +
-            "and h.recommendationFeedback = :feedback and h.recommendedAt >= :since")
-    List<Long> findMenuIdsByFeedbackSince(
+    /**
+     * 개인화에 필요한 최근 추천 시각과 피드백 합계를 메뉴별 한 행으로 돌려준다.
+     * 이벤트를 전부 애플리케이션으로 올리지 않고 DB에서 먼저 상쇄해 요청당 조회를 한 번으로
+     * 제한한다. 합계는 이력이 많아도 넘치지 않도록 {@code Long}으로 받으며 서비스가 ±2로 자른다.
+     */
+    @Query("select h.menu.id as menuId, max(h.recommendedAt) as latestRecommendedAt, " +
+            "sum(case when h.recommendationFeedback = :accepted then 1 " +
+            "when h.recommendationFeedback = :rejected then -1 else 0 end) as feedbackScore " +
+            "from History h where h.user.id = :userId and h.menu is not null " +
+            "and h.recommendedAt >= :since group by h.menu.id")
+    List<MenuRecommendationSignals> findMenuRecommendationSignalsSince(
             @Param("userId") Long userId,
-            @Param("feedback") RecommendationFeedback feedback,
-            @Param("since") LocalDateTime since);
+            @Param("since") LocalDateTime since,
+            @Param("accepted") RecommendationFeedback accepted,
+            @Param("rejected") RecommendationFeedback rejected);
+
+    interface MenuRecommendationSignals {
+        Long getMenuId();
+        LocalDateTime getLatestRecommendedAt();
+        Long getFeedbackScore();
+    }
 
     // ---------------------------------------------------------------
     // KPI 집계 (Specification.md 8장). 운영자만 보는 값이라 관리 포트의

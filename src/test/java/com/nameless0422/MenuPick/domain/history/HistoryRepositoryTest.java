@@ -18,6 +18,9 @@ import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -127,5 +130,56 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
 
         assertThat(histories).extracting(History::getId)
                 .containsExactly(second.getId(), first.getId());
+    }
+
+    @Test
+    @DisplayName("개인화 신호는 사용자·30일 경계를 지키고 메뉴별 최신 시각과 상쇄된 피드백을 집계한다")
+    void findMenuRecommendationSignalsSince_aggregatesWithBoundariesAndIsolation() {
+        LocalDateTime since = LocalDateTime.of(2026, 1, 1, 0, 0);
+        Menu secondMenu = menuRepository.save(Menu.builder()
+                .user(user).name("초밥").weight(1).build());
+        User other = userRepository.save(User.builder()
+                .email("other-history@example.com").nickname("다른유저").build());
+        Menu otherMenu = menuRepository.save(Menu.builder()
+                .user(other).name("남의메뉴").weight(1).build());
+
+        saveHistory(user, menu, since, RecommendationFeedback.ACCEPTED); // 경계 포함
+        saveHistory(user, menu, since.plusDays(1), RecommendationFeedback.ACCEPTED);
+        saveHistory(user, menu, since.plusDays(1).plusHours(1), RecommendationFeedback.ACCEPTED);
+        saveHistory(user, menu, since.plusDays(1).plusHours(2), RecommendationFeedback.ACCEPTED);
+        saveHistory(user, menu, since.plusDays(2), RecommendationFeedback.REJECTED);
+        saveHistory(user, menu, since.plusDays(2).plusHours(1), RecommendationFeedback.REJECTED);
+        saveHistory(user, menu, since.plusDays(2).plusHours(2), RecommendationFeedback.REJECTED);
+        saveHistory(user, menu, since.plusDays(3), null); // NONE은 합계 0 기여
+        saveHistory(user, secondMenu, since.plusDays(4), RecommendationFeedback.REJECTED);
+        saveHistory(user, secondMenu, since.plusDays(5), RecommendationFeedback.ACCEPTED);
+        saveHistory(user, secondMenu, since.minusSeconds(1), RecommendationFeedback.ACCEPTED);
+        saveHistory(other, otherMenu, since.plusDays(6), RecommendationFeedback.ACCEPTED);
+        historyRepository.save(History.builder() // null menu는 결과에서 제외
+                .user(user).recommendedAt(since.plusDays(7)).build());
+        historyRepository.flush();
+
+        Map<Long, HistoryRepository.MenuRecommendationSignals> signals = historyRepository
+                .findMenuRecommendationSignalsSince(user.getId(), since,
+                        RecommendationFeedback.ACCEPTED, RecommendationFeedback.REJECTED)
+                .stream().collect(Collectors.toMap(
+                        HistoryRepository.MenuRecommendationSignals::getMenuId, Function.identity()));
+
+        assertThat(signals).containsOnlyKeys(menu.getId(), secondMenu.getId());
+        assertThat(signals.get(menu.getId()).getLatestRecommendedAt()).isEqualTo(since.plusDays(3));
+        // ACCEPTED 4건과 REJECTED 3건을 먼저 상쇄한 뒤 서비스가 ±2 clamp를 적용해야 한다.
+        assertThat(signals.get(menu.getId()).getFeedbackScore()).isEqualTo(1L);
+        assertThat(signals.get(secondMenu.getId()).getLatestRecommendedAt()).isEqualTo(since.plusDays(5));
+        assertThat(signals.get(secondMenu.getId()).getFeedbackScore()).isZero();
+    }
+
+    private History saveHistory(User owner, Menu pickedMenu, LocalDateTime recommendedAt,
+                                RecommendationFeedback feedback) {
+        History history = History.builder()
+                .user(owner).menu(pickedMenu).recommendedAt(recommendedAt).build();
+        if (feedback != null) {
+            history.recordFeedback(feedback);
+        }
+        return historyRepository.save(history);
     }
 }
