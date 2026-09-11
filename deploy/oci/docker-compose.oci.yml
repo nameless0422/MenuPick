@@ -46,3 +46,19 @@ services:
       nofile:
         soft: 65535
         hard: 65535
+    # 접근 로그를 호스트 journald로 보낸다.
+    #
+    # 기본 json-file 드라이버는 로그를 컨테이너에 붙여 두므로 **배포할 때마다 지워진다**
+    # (compose가 컨테이너를 재생성한다). 2026-09-11 보안 점검에서 실제로 이것에 걸렸다 —
+    # 며칠치 접근 로그를 보려 했는데 그날 배포 이후 몇 시간치밖에 남아 있지 않았다.
+    # 침해 조사에서 "언제부터"를 답하지 못하는 상태다.
+    #
+    # journald로 보내면 컨테이너 수명과 분리된다. 다만 journald 자체가 영속이어야 하므로
+    # 호스트에서 /var/log/journal 을 만들어 둬야 한다(deploy/oci/README.md 참고) —
+    # 그게 없으면 /run 에 쌓여 재부팅 때 사라진다.
+    #
+    #   journalctl CONTAINER_NAME=menupick-web --since "7 days ago"
+    logging:
+      driver: journald
+      options:
+        tag: menupick-web
