@@ -109,6 +109,42 @@ fail2ban은 10분 안에 3번 실패한 IP를 1시간 차단하며, 반복되면
 적용할 때는 기존 SSH 세션을 유지한 채 **새 세션 로그인이 성공하는지 확인한 뒤** 종료한다.
 nginx는 `/.env`, `/.git` 등 모든 숨김파일 경로를 404로 반환한다.
 
+## 호스트 설정 (리포 밖, 2026-09-11 보안 점검 후속)
+
+compose·nginx 설정과 달리 호스트에 직접 건 것들이다. 인스턴스를 재생성하면 **다시 해야 한다.**
+
+### journald 영속화 — 이게 없으면 위 `logging: journald`가 무의미하다
+
+web 컨테이너 로그를 journald로 보내도, journald 자체가 휘발성이면 재부팅 때 함께 사라진다.
+점검 당시 이 서버가 그 상태였다(`/var/log/journal` 없음 → `/run/log/journal` 사용).
+
+```bash
+sudo mkdir -p /var/log/journal
+sudo systemd-tmpfiles --create --prefix /var/log/journal
+sudo sed -i 's/^#\?Storage=.*/Storage=persistent/' /etc/systemd/journald.conf
+sudo sed -i 's/^#\?SystemMaxUse=.*/SystemMaxUse=500M/' /etc/systemd/journald.conf
+sudo systemctl restart systemd-journald
+journalctl --disk-usage          # /var/log/journal 아래인지 확인
+```
+
+상한을 두는 이유는 부트 볼륨이 30GB이고 접근 로그가 계속 쌓이기 때문이다.
+
+### rpcbind 중지 — 쓰는 곳이 없다
+
+`0.0.0.0:111`에 바인딩돼 있었다. firewalld가 `ssh`·`80`·`443`만 허용하므로 밖에서 닿지는
+않았지만, 포트매퍼는 증폭 공격에 쓰이는 서비스라 안 쓰면 열어 둘 이유가 없다.
+
+**끄기 전에 확인한 것**: `/etc/fstab`에 NFS 항목 없음, 실제 NFS 마운트 없음
+(`mount | grep nfs`가 잡는 `rpc_pipefs`는 의사 파일시스템이다), `rpcinfo -p`에 포트매퍼
+자기 자신 외 등록 없음, `nfs-server`·`rpc-statd` 모두 비활성.
+
+```bash
+sudo systemctl disable --now rpcbind.socket rpcbind.service
+sudo ss -lntp | grep :111 || echo "111 닫힘"
+```
+
+NFS를 쓰게 되면 되살려야 한다.
+
 ## 백업
 
 ```bash
