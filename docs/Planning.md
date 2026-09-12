@@ -218,6 +218,25 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 
 > ℹ️ 초기 설계의 `GET /menus/pick`은 필터 조건을 본문으로 받기 위해 `POST /pick`으로 변경됨. 게스트 데모도 같은 이유로 `/pick/demo`에 둔다 (4.3 참고).
 
+#### 상황별 빠른 픽 (Pick Presets)
+
+자주 쓰는 픽 조건을 이름 붙여 저장하고 다시 실행한다. 사용자당 10개. 상세 계약은
+[PickPresetDesign.md](PickPresetDesign.md), 결정 근거는 DecisionLog D-039·D-040.
+
+| Method | Endpoint | 설명 | 인증 필요 |
+| --- | --- | --- | --- |
+| GET | /pick/presets | 내 프리셋 목록 (조건까지 배치 조회, 최대 10개) | Y |
+| GET | /pick/presets/{id} | 단건 상세. 남의 것·없는 것 모두 404 | Y |
+| POST | /pick/presets | 생성 (201). 이름 중복·10개 초과는 409 | Y |
+| PUT | /pick/presets/{id} | **전체 교체**. `version` 필수, 검토 복구 시 `acknowledgeRemovedTags` 필요 | Y |
+| DELETE | /pick/presets/{id}?version= | 낙관적 삭제 | Y |
+| POST | /pick/presets/{id}/pick | 저장 조건으로 실행. **필터 override를 받지 않는다** | Y |
+
+> ℹ️ 실행 본문에는 `version`과 (거리 조건이 있을 때만) `latitude`/`longitude`만 들어간다.
+> **좌표는 저장하지 않고** 실행할 때마다 받는다. 기본 제외 태그는 프리셋에 복사되지 않고
+> 실행 시점의 최신 값이 합쳐지며, 프리셋이 기본 제외를 **해제할 수단은 없다**.
+> 참조 태그가 지워지면 `needsReview`가 켜져 실행이 막힌다.
+
 
 #### 태그 (Tag)
 
@@ -287,6 +306,12 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | histories | filter_snapshot (JSON) | JSON은 내부에 반복 그룹 포함 — 원자값 위반 | history_filter_conditions 분리 테이블로 이동 |
 
 *[ 그림 1 ] 메뉴픽 ERD — 정규화 완료 후 최종 10개 테이블*
+
+> ℹ️ 이후 추가된 테이블: `user_default_excluded_tags`(V12), 그리고 상황별 빠른 픽의
+> `pick_presets` · `pick_preset_categories` · `pick_preset_tags`(V13). 빠른 픽 세 테이블은
+> 부모-자식 구조이며 자식은 부모 FK에 `ON DELETE CASCADE`가 걸려 있다. `pick_preset_tags`는
+> `tags`에도 FK가 있어 태그가 지워지면 행이 사라지는데, 그때 부모 프리셋이 조용히 넓어지지
+> 않도록 `TagService.deleteTag`가 삭제 **전에** `needs_review`를 켠다(D-039).
 
 
 ### 3.1 엔티티 관계 요약 (1NF 반영)

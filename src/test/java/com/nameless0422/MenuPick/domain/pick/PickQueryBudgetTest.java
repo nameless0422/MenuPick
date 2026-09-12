@@ -81,6 +81,7 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
     @Autowired private TagRepository tagRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private EntityManager entityManager;
+    @Autowired private PickPresetRepository pickPresetRepository;
 
     private PickService pickService;
     private User me;
@@ -182,6 +183,38 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
                 .isLessThanOrEqualTo(small + 2);
     }
 
+    /**
+     * 빠른 픽 실행이 쓰는 조회 수({@code docs/PickPresetDesign.md} 10절).
+     *
+     * <p>일반 픽보다 많은 것이 정상이다 — 프리셋을 잠금 조회하고, 조건 컬렉션을 읽고,
+     * 태그 소유권을 재확인하고, 최신 기본 제외를 읽은 뒤에야 기존 픽으로 들어간다.
+     * <b>중요한 것은 이 경로가 일반 픽의 예산(위 7/12)을 건드리지 않는 것이다</b> —
+     * 프리셋 기능 때문에 가장 많이 도는 경로가 느려지면 안 된다.
+     */
+    @Test
+    @DisplayName("빠른 픽 실행이 쓰는 조회 수")
+    void presetExecution() {
+        seedMenus(30);
+        Tag tag = tagRepository.save(Tag.builder().user(me).name("혼밥").build());
+        entityManager.flush();
+
+        DefaultPickPreferenceService defaults = new DefaultPickPreferenceService(tagRepository);
+        PickPresetService presetService = new PickPresetService(
+                pickPresetRepository, tagRepository, userRepository, defaults, pickService);
+        var preset = presetService.create(me.getId(),
+                new com.nameless0422.MenuPick.domain.pick.dto.PickPresetRequest.Create(
+                        "예산", java.util.Set.of("한식"), java.util.Set.of(),
+                        java.util.Set.of(tag.getId()), null));
+
+        long statements = countStatements(() -> presetService.execute(me.getId(), preset.id(),
+                new com.nameless0422.MenuPick.domain.pick.dto.PickPresetRequest.Execute(
+                        preset.version(), null, null)));
+
+        assertThat(statements)
+                .as("빠른 픽 실행 한 번의 JDBC 구문 수")
+                .isEqualTo(PRESET_EXECUTION_BUDGET);
+    }
+
     // ── 실측값 (2026-09-12). 바꾸려면 클래스 주석의 "이 숫자를 올려도 되는가"를 먼저 읽을 것.
     //
     // 필터를 건 픽 12건의 내역은 이렇다:
@@ -202,4 +235,12 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
     // 하는데 그건 마이그레이션이고 다른 테이블까지 함께 걸리는 결정이라 여기서 다루지 않는다.
     private static final long PLAIN_PICK_BUDGET = 7;
     private static final long FILTERED_PICK_BUDGET = 12;
+    /**
+     * 빠른 픽 실행. 일반 픽과 <b>별도 예산</b>이며 위 두 값을 바꾸지 않는다.
+     *
+     * <p>필터 픽(12)보다 2건 많다 — 프리셋 잠금 조회와 조건 컬렉션 로딩이다. 태그 소유권
+     * 재확인과 기본 제외 조회는 이미 세어진 조회와 합쳐지거나 빈 집합이면 생략된다.
+     * 늘었다면 합칠 수 있는지부터 본다(클래스 주석의 "이 숫자를 올려도 되는가").
+     */
+    private static final long PRESET_EXECUTION_BUDGET = 14;
 }

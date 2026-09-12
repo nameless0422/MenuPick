@@ -37,6 +37,8 @@ class TagServiceTest {
 
     @Mock private TagRepository tagRepository;
     @Mock private UserRepository userRepository;
+    /** 태그 삭제가 빠른 픽에 검토 필요를 켠다(PickPresetDesign 7절). */
+    @Mock private com.nameless0422.MenuPick.domain.pick.PickPresetRepository pickPresetRepository;
 
     @InjectMocks private TagService tagService;
 

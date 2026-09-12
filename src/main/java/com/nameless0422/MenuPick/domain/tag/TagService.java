@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.tag;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
+import com.nameless0422.MenuPick.domain.pick.PickPresetRepository;
 import com.nameless0422.MenuPick.domain.tag.dto.TagRequest;
 import com.nameless0422.MenuPick.domain.tag.dto.TagResponse;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
@@ -20,6 +21,8 @@ public class TagService {
 
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
+    /** 태그 삭제가 빠른 픽에 검토 필요를 켜야 한다 — 근거는 deleteTag 주석. */
+    private final PickPresetRepository pickPresetRepository;
 
     /**
      * 자동완성 결과 상한. 입력창 아래 목록이라 이보다 많이 보여줄 자리가 없고, 상한이 없으면
@@ -107,6 +110,15 @@ public class TagService {
         if (!tag.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.TAG_NOT_FOUND);
         }
+
+        // 이 태그를 쓰던 빠른 픽에 검토 필요를 켠다. **태그를 지우기 전에** 해야 한다 —
+        // 지운 뒤에는 어느 프리셋이 이 태그를 참조했는지 알 방법이 없다(FK cascade가 이미
+        // 자식 행을 지웠다). 표시하지 않으면 그 프리셋은 조건 하나가 조용히 빠진 채 계속
+        // 돌고, "견과류 제외"를 걸어 둔 사용자가 견과류를 추천받는다.
+        //
+        // 버전도 함께 올린다. 미리보기 화면을 띄워 둔 채 다른 탭에서 태그를 지웠다면
+        // 그 화면이 들고 있는 버전으로는 실행되지 않아야 한다(PickPresetRepository 주석 참고).
+        pickPresetRepository.markNeedsReviewByTagId(tagId);
 
         // 연결된 메뉴를 M건 로드해 컬렉션에서 하나씩 빼면 메뉴 수만큼 쿼리가 늘어난다.
         // 조인 테이블을 tag_id로 한 번에 지운다.
