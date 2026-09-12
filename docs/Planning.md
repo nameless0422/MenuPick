@@ -193,6 +193,13 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | DELETE | /auth/logout | 로그아웃 (Refresh Token 무효화) | Y |
 | DELETE | /auth/withdraw | 회원 탈퇴 | Y |
 
+#### 최근 집단 경향 (Trends)
+
+| Method | Endpoint | 설명 | 인증 필요 |
+| --- | --- | --- | --- |
+| GET | /trends | canonical 메뉴·카테고리 선택·방문 사용자 순위와 스냅샷 상태 | Y |
+| POST | /actuator/trends | 수동 재집계. 분리된 관리 포트에서만 노출 | 관리 포트 |
+
 
 #### 메뉴 (Menu)
 
@@ -306,6 +313,11 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | histories | filter_snapshot (JSON) | JSON은 내부에 반복 그룹 포함 — 원자값 위반 | history_filter_conditions 분리 테이블로 이동 |
 
 *[ 그림 1 ] 메뉴픽 ERD — 정규화 완료 후 최종 10개 테이블*
+
+> V14에 `pick_trend_snapshots` singleton과 `pick_trends`가 추가됐다. singleton을
+> `PESSIMISTIC_WRITE`로 잠그고 행·메타데이터를 한 트랜잭션에서 교체하며, 실패 시 이전
+> 스냅샷을 보존한다. `[since, until)` 구간에서 탈퇴 유예 중 사용자와 미래 기록을 제외한다.
+> 기본은 `trends.enabled=false`이며 탈퇴 반영은 최대 36시간 지연될 수 있다.
 
 > ℹ️ 이후 추가된 테이블: `user_default_excluded_tags`(V12), 그리고 상황별 빠른 픽의
 > `pick_presets` · `pick_preset_categories` · `pick_preset_tags`(V13). 빠른 픽 세 테이블은

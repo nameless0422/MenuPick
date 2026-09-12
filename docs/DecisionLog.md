@@ -629,3 +629,14 @@
 - **결정**: ①. `AuthContext`가 앱 부팅 시 `refreshAccessToken()`을 한 번 호출해 쿠키 기반으로 세션을 조용히 복원한다.
 - **트레이드오프**: 매 새로고침마다 API 호출이 하나 더 나간다(레이턴시 미미, 무시 가능한 수준). 여러 탭을 동시에 열면 탭마다 독립적으로 메모리를 갖는다 — 한 탭에서 로그아웃해도 다른 탭은 Access Token이 만료될 때까지(30분) 살아있을 수 있다. 진짜 즉시 전체 탭 로그아웃이 필요해지면 `BroadcastChannel`류로 탭 간 동기화를 추가해야 한다.
 - **관련**: `frontend/src/api/http.ts`, `frontend/src/auth/AuthContext.tsx`
+
+### D-041. 최근 집단 경향 — 닫힌 어휘·최소 5명·기본 off
+
+- **날짜/상태**: 2026-09-13 / 채택
+- **결정**: 7일 `[since, until)` 선택·방문 신호를 canonical 라벨과 5명 이상 고유
+  사용자로만 제공한다. 기본은 `trends.enabled=false`; GET은 인증, 수동 POST는 관리
+  포트 전용이다.
+- **일관성**: singleton pessimistic write lock과 단일 트랜잭션으로 직렬 교체하고 실패 시
+  이전 스냅샷을 보존한다.
+- **트레이드오프**: 문턱은 익명성 보장이 아니며 탈퇴 반영이 최대 36시간 늦을 수 있다.
+  정확히 36시간은 `READY`, 초과하면 `STALE`다.
