@@ -9,6 +9,9 @@ import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
+import com.nameless0422.MenuPick.domain.pick.PickPreset;
+import com.nameless0422.MenuPick.domain.pick.PickPresetRepository;
+import com.nameless0422.MenuPick.domain.pick.PickPresetTag;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.tag.Tag;
@@ -46,6 +49,7 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
     @Autowired private TagRepository tagRepository;
     @Autowired private RestaurantRepository restaurantRepository;
     @Autowired private HistoryRepository historyRepository;
+    @Autowired private PickPresetRepository pickPresetRepository;
     @Autowired private EntityManager em;
 
     /** @DataJpaTest 슬라이스에는 Redis가 없다 — 키 삭제 호출 여부만 검증한다. */
@@ -73,6 +77,9 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
         assertThat(tagRepository.findByUserIdAndName(targetUser.getId(), "혼밥")).isEmpty();
         assertThat(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(targetUser.getId())).isEmpty();
         assertThat(findHistories(targetUser.getId())).isEmpty();
+        assertThat(pickPresetRepository.findAllByUserIdWithConditions(targetUser.getId()))
+                .as("빠른 픽은 개인 선호 정보다 — 유예가 끝난 계정에 남아 있으면 안 된다")
+                .isEmpty();
     }
 
     @Test
@@ -96,6 +103,9 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
         assertThat(tagRepository.findByUserIdAndName(otherUser.getId(), "혼밥")).isPresent();
         assertThat(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(otherUser.getId())).hasSize(1);
         assertThat(findHistories(otherUser.getId())).hasSize(1);
+        assertThat(pickPresetRepository.findAllByUserIdWithConditions(otherUser.getId()))
+                .as("남의 빠른 픽까지 지우면 안 된다")
+                .hasSize(1);
     }
 
     /** 프로덕션 조회 경로(기간 필터 + id 역순 커서)를 그대로 써서 남은 히스토리를 확인한다. */
@@ -111,6 +121,12 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
                 .user(user).provider("KAKAO").socialId("kakao_" + email).build());
 
         Tag tag = tagRepository.save(Tag.builder().user(user).name("혼밥").build());
+
+        // 빠른 픽도 purge 대상이다. 픽스처에 넣어 두지 않으면 "지워졌는가"를 물을 수 없다.
+        PickPreset preset = PickPreset.builder().user(user).name("점심").maxDistance(500).build();
+        preset.replaceConditions("점심", 500, java.util.Set.of("한식"),
+                java.util.Set.of(PickPresetTag.exclude(tag.getId())));
+        pickPresetRepository.save(preset);
 
         Menu menu = Menu.builder().user(user).name("김치찌개").weight(1).build();
         menu.addCategory("KOREAN");

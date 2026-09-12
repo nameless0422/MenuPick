@@ -59,6 +59,12 @@ async function installFakeApi(page: Page) {
     }
     if (path === "/api/v1/tags" && method === "GET") return api(route, []);
     if (path === "/api/v1/pick/preferences" && method === "GET") return api(route, []);
+    // 빠른 픽은 픽 화면이 열릴 때 목록을 부른다. 이 여정은 프리셋을 쓰지 않으므로
+    // 빈 목록을 준다 — 대역이 모르는 경로에서 던지도록 되어 있어(아래 throw) 여기
+    // 없으면 픽 화면 자체가 뜨지 않는다.
+    if (path === "/api/v1/pick/presets" && method === "GET") {
+      return api(route, { presets: [], limit: 10 });
+    }
 
     if (path === "/api/v1/menus" && method === "POST") {
       menuCreated = true;

@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.domain.auth.RefreshTokenStore;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
+import com.nameless0422.MenuPick.domain.pick.PickPresetRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import jakarta.persistence.EntityManager;
@@ -22,6 +23,7 @@ public class UserHardDeleteService {
     private final HistoryRepository historyRepository;
     private final MenuRestaurantRepository menuRestaurantRepository;
     private final MenuRepository menuRepository;
+    private final PickPresetRepository pickPresetRepository;
     private final TagRepository tagRepository;
     private final RestaurantRepository restaurantRepository;
     private final AuthProviderRepository authProviderRepository;
@@ -40,6 +42,11 @@ public class UserHardDeleteService {
         menuRepository.deleteMenuTagsByUserId(userId);
         menuRepository.deleteMenuCategoriesByUserId(userId);
         menuRepository.deleteAllByUserId(userId);
+        // 빠른 픽은 태그보다 먼저 지운다. 순서를 뒤집어도 DB의 ON DELETE CASCADE가
+        // pick_preset_tags를 정리해 주지만, 그러면 "태그 삭제가 프리셋을 건드린다"는
+        // 우연에 기대게 된다. 여기서 명시적으로 지워 purge 목록이 곧 삭제 대상 목록이 되게 한다.
+        // (자식 pick_preset_categories·pick_preset_tags는 부모 FK cascade가 함께 지운다.)
+        pickPresetRepository.deleteAllByUserId(userId);
         tagRepository.deleteAllByUserId(userId);
         restaurantRepository.deleteAllByUserId(userId);
         authProviderRepository.deleteAllByUserId(userId);

@@ -7,6 +7,9 @@ import { fetchAllTags, searchTags } from "../api/tags";
 import { fetchDefaultExcludedTagIds } from "../api/pickPreferences";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
+import PickPresets from "./PickPresets";
+import SavePickPresetForm from "./SavePickPresetForm";
+import type { PickPresetExecutionResult } from "../api/pickPresets";
 import { chipAction, chipClass, chipToggle } from "../a11y/chipToggle";
 import { useRadioGroup } from "../a11y/radioGroup";
 import { CATEGORY_PRESETS } from "../constants";
@@ -77,6 +80,9 @@ export default function PickPage() {
       setExcludeTags(defaultsQuery.data.map(({ id, name }) => ({ id, name })));
     }
   }, [defaultsQuery.data]);
+  // 빠른 픽 실행 결과. 수동 픽과 같은 카드로 보여주되 출처가 다르므로 따로 담는다 —
+  // 하나로 합치면 "방금 무엇으로 뽑았는지"를 화면이 구분해 말할 수 없다.
+  const [presetResult, setPresetResult] = useState<PickPresetExecutionResult | null>(null);
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
   // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
@@ -137,6 +143,7 @@ export default function PickPage() {
     }),
   });
 
+  // 수동으로 돌리면 프리셋 결과는 더 이상 지금 화면의 답이 아니다.
   const spin = () => {
     // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 이 조기 반환이 실제 방어선이다.
     if (busy) return;
@@ -145,6 +152,7 @@ export default function PickPage() {
     // 버튼으로 옮기면 진행 상태가 그대로 읽히고, 끝난 자리에서 바로 다시 돌릴 수 있다.
     // 픽 버튼에서 눌렀다면 이미 그 버튼이므로 아무 일도 일어나지 않는다.
     pickButton.current?.focus();
+    setPresetResult(null);
     spinStartRef.current = Date.now();
     setSpinning(true);
     pickMutation.mutate(buildRequest());
@@ -212,6 +220,19 @@ export default function PickPage() {
           제목은 화면에 내지 않는다 — 눈으로 보는 사람에게는 각 fieldset의 legend
           (카테고리·포함 태그·제외 태그·거리)가 이미 구조를 보여주고 있어, 그 위에
           "픽 조건"을 한 줄 더 세우면 같은 말을 두 번 하는 셈이 된다. */}
+      <PickPresets
+        tagNameOf={(id) =>
+          defaultsQuery.data?.find((t) => t.id === id)?.name
+            ?? includeTags.find((t) => t.id === id)?.name
+            ?? excludeTags.find((t) => t.id === id)?.name
+            ?? `#${id}`
+        }
+        onResult={(executed) => {
+          setPresetResult(executed);
+          setSpinning(false);
+        }}
+      />
+
       <section className="pick-filters" aria-labelledby={filtersHeadingId}>
         <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
         <CategoryFilter selected={categories} onChange={setCategories} />
@@ -292,6 +313,14 @@ export default function PickPage() {
           )}
         </button>
 
+        <SavePickPresetForm
+          categories={categories}
+          includeTagIds={includeTags.map((t) => t.id)}
+          excludeTagIds={excludeTags.map((t) => t.id)}
+          defaultExcludedTagIds={(defaultsQuery.data ?? []).map((t) => t.id)}
+          maxDistance={geo.status === "ready" ? maxDistance : null}
+        />
+
         {pickMutation.isIdle && (
           <p className="card-muted-hint">
             아직 메뉴가 없다면 <Link to="/menus">내 메뉴</Link>에서 자주 먹는 메뉴부터 등록해 보세요.
@@ -305,7 +334,19 @@ export default function PickPage() {
         {/* 뽑는 동안 이 리전이 비어 있으면 Enter를 친 뒤 최소 1.2초가 완전한 무음이 된다.
             돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다. */}
         {(spinning || pickMutation.isPending) && <p className="sr-only">메뉴를 뽑는 중…</p>}
-        {result && <PickResultCard result={result} onRetry={spin} />}
+        {presetResult && (
+          <>
+            <PickResultCard result={presetResult.pick} onRetry={spin} />
+            {/* 미리보기 뒤 기본 제외가 바뀌었을 수 있다 — 서버가 실제로 쓴 조건이 권위 있다. */}
+            <p className="settings-desc">
+              빠른 픽으로 뽑았어요. 실제 적용된 제외 태그{" "}
+              {presetResult.appliedFilters.effectiveExcludeTagIds.length}개
+              {presetResult.appliedFilters.maxDistance != null &&
+                `, ${presetResult.appliedFilters.maxDistance}m 이내`}
+            </p>
+          </>
+        )}
+        {!presetResult && result && <PickResultCard result={result} onRetry={spin} />}
 
         {emptyReason && (
           <div className="card pick-empty">

@@ -102,6 +102,20 @@ public enum ErrorCode {
     /** 거리 필터를 켰는데 식당이 연결된 메뉴가 하나도 없다 — 반경을 늘려도 달라지지 않는다. */
     NO_LINKED_RESTAURANTS(HttpStatus.NOT_FOUND, "식당이 연결된 메뉴가 없습니다."),
 
+    // --- Pick: 상황별 빠른 픽 프리셋 (docs/PickPresetDesign.md) ---
+    PICK_PRESET_NOT_FOUND(HttpStatus.NOT_FOUND, "빠른 픽을 찾을 수 없습니다."),
+    PICK_PRESET_NAME_DUPLICATE(HttpStatus.CONFLICT, "같은 이름의 빠른 픽이 이미 있습니다."),
+    PICK_PRESET_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "빠른 픽은 최대 10개까지 저장할 수 있습니다."),
+    /** 참조하던 태그가 지워졌다. 조건이 조용히 넓어진 채로 돌지 않도록 실행을 막는다. */
+    PICK_PRESET_NEEDS_REVIEW(HttpStatus.CONFLICT,
+            "태그가 삭제되어 조건이 바뀌었습니다. 빠른 픽을 열어 조건을 확인하고 저장해주세요."),
+    /** 포함과 제외에 같은 태그가 들어가면 후보가 반드시 0이 된다 — 조용히 0을 주지 않는다. */
+    PICK_PRESET_TAG_CONFLICT(HttpStatus.CONFLICT,
+            "포함 태그와 제외 태그가 겹칩니다. 기본 제외 태그와 겹치지 않는지 확인해주세요."),
+    /** 기본 제외가 늘어 합집합이 상한을 넘었다. 조건을 잘라 내는 대신 멈춘다. */
+    PICK_PRESET_EXCLUDE_LIMIT(HttpStatus.CONFLICT,
+            "적용할 제외 태그가 너무 많습니다. 기본 제외 태그나 빠른 픽의 제외 조건을 줄여주세요."),
+
     // --- History ---
     HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다.");
 

@@ -1,12 +1,29 @@
 package com.nameless0422.MenuPick.domain.user;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    /**
+     * 이 사용자의 행을 잠근다. 사용자별 개수 상한을 직렬화할 때 쓴다.
+     *
+     * <p>"자식 행을 세면서 잠그기"({@code SELECT COUNT(*) ... FOR UPDATE})로는 안 된다.
+     * 그건 <b>이미 있는 행만</b> 잠그고 새 INSERT를 막지 못해, 두 요청이 동시에 "9개"를 보고
+     * 둘 다 넣는 경쟁이 그대로 남는다. 실제로 그렇게 짰다가 동시 20건에서 12건이 저장됐다.
+     *
+     * <p>반드시 존재하는 부모 행 하나(users)를 잠가야 모든 동시 요청이 한 줄로 선다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findByIdForUpdate(@Param("id") Long id);
 
     Optional<User> findByEmail(String email);
 
