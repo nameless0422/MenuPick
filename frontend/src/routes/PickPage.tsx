@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
+import { forwardRef, useDeferredValue, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { requestPick, type PickRequest, type PickResult } from "../api/pick";
@@ -8,12 +8,14 @@ import { fetchDefaultExcludedTagIds } from "../api/pickPreferences";
 import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import PickPresets from "./PickPresets";
+import PickTrends from "./PickTrends";
 import SavePickPresetForm from "./SavePickPresetForm";
 import type { PickPresetExecutionResult } from "../api/pickPresets";
 import { chipAction, chipClass, chipToggle } from "../a11y/chipToggle";
 import { useRadioGroup } from "../a11y/radioGroup";
 import { CATEGORY_PRESETS } from "../constants";
 import KakaoMap from "../maps/KakaoMap";
+import { addTrendCategory } from "./trendValidation";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -63,6 +65,7 @@ export default function PickPage() {
   const filtersHeadingId = useId();
 
   // ---- 필터 상태 ----
+  const categoryFieldset = useRef<HTMLFieldSetElement>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [includeTags, setIncludeTags] = useState<TagSummary[]>([]);
   const [excludeTags, setExcludeTags] = useState<TagSummary[]>([]);
@@ -83,6 +86,8 @@ export default function PickPage() {
   // 빠른 픽 실행 결과. 수동 픽과 같은 카드로 보여주되 출처가 다르므로 따로 담는다 —
   // 하나로 합치면 "방금 무엇으로 뽑았는지"를 화면이 구분해 말할 수 없다.
   const [presetResult, setPresetResult] = useState<PickPresetExecutionResult | null>(null);
+  const [presetBusy, setPresetBusy] = useState(false);
+  const [presetSelectionResetKey, setPresetSelectionResetKey] = useState(0);
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
   // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
@@ -129,6 +134,7 @@ export default function PickPage() {
   // 돌리는 중인지. disabled 대신 이 값으로 aria-busy/aria-disabled를 주고 핸들러에서
   // 조기 반환한다 — disabled는 초점을 받지 못해 누른 그 버튼에서 <body>로 떨어뜨린다.
   const busy = spinning || pickMutation.isPending;
+  const interactionBusy = busy || presetBusy;
   const pickButton = useRef<HTMLButtonElement>(null);
 
   const buildRequest = (): PickRequest => ({
@@ -146,7 +152,7 @@ export default function PickPage() {
   // 수동으로 돌리면 프리셋 결과는 더 이상 지금 화면의 답이 아니다.
   const spin = () => {
     // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 이 조기 반환이 실제 방어선이다.
-    if (busy) return;
+    if (interactionBusy) return;
     // "다시 돌리기"는 결과 카드 안에 있는데, 돌리기 시작하면 결과가 감춰지며 그 카드가
     // 통째로 사라진다 — 누른 버튼이 없어져 초점이 <body>로 떨어진다. 지금 돌아가는 픽
     // 버튼으로 옮기면 진행 상태가 그대로 읽히고, 끝난 자리에서 바로 다시 돌릴 수 있다.
@@ -221,6 +227,8 @@ export default function PickPage() {
           (카테고리·포함 태그·제외 태그·거리)가 이미 구조를 보여주고 있어, 그 위에
           "픽 조건"을 한 줄 더 세우면 같은 말을 두 번 하는 셈이 된다. */}
       <PickPresets
+        resetSelectionKey={presetSelectionResetKey}
+        onBusyChange={setPresetBusy}
         tagNameOf={(id) =>
           defaultsQuery.data?.find((t) => t.id === id)?.name
             ?? includeTags.find((t) => t.id === id)?.name
@@ -235,7 +243,7 @@ export default function PickPage() {
 
       <section className="pick-filters" aria-labelledby={filtersHeadingId}>
         <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
-        <CategoryFilter selected={categories} onChange={setCategories} />
+        <CategoryFilter ref={categoryFieldset} selected={categories} onChange={setCategories} />
         <TagFilter
           legend="포함 태그"
           placeholder="이 태그가 모두 있는 메뉴만 (예: 혼밥)"
@@ -301,7 +309,7 @@ export default function PickPage() {
           className="pick-button"
           onClick={spin}
           aria-busy={busy}
-          aria-disabled={busy}
+          aria-disabled={interactionBusy}
         >
           {busy ? (
             <>
@@ -356,6 +364,24 @@ export default function PickPage() {
         )}
       </div>
       {error && !emptyReason && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
+
+      {/* 맨 아래에 둔다. 곁다리 정보라 뽑기 버튼과 결과를 밀어내면 안 되고, 표본이 모이기
+          전까지는 "아직 없어요" 한 줄만 있는 패널이라 더욱 그렇다. 누르면 위 픽 조건에
+          카테고리가 들어가므로 다음 행동은 화면 위쪽에서 이어진다. */}
+      <PickTrends
+        busy={interactionBusy}
+        onPickCategory={(category) => {
+          if (interactionBusy) return;
+          setCategories((current) =>
+            // 순위 칩은 더하기만 한다 — 같은 칩을 두 번 눌러 방금 켠 조건이 꺼지면,
+            // 토글이라고 말한 적 없는 버튼이 토글처럼 군 셈이 된다.
+            addTrendCategory(current, category),
+          );
+          setPresetResult(null);
+          setPresetSelectionResetKey((current) => current + 1);
+          categoryFieldset.current?.focus();
+        }}
+      />
     </div>
   );
 }
@@ -459,13 +485,13 @@ function PickResultCard({
   );
 }
 
-function CategoryFilter({
-  selected,
-  onChange,
-}: {
+const CategoryFilter = forwardRef<HTMLFieldSetElement, {
   selected: string[];
   onChange: (categories: string[]) => void;
-}) {
+}>(function CategoryFilter({
+  selected,
+  onChange,
+}, ref) {
   const [custom, setCustom] = useState("");
   // 직접 입력한 카테고리는 selected에만 존재해서, 칩을 눌러 해제하는 순간 목록에서 영구히
   // 사라졌다 — 다시 쓰려면 처음부터 타이핑해야 하고, 방금 누른 버튼이 없어지니 초점도
@@ -494,7 +520,7 @@ function CategoryFilter({
   };
 
   return (
-    <fieldset>
+    <fieldset ref={ref} tabIndex={-1}>
       <legend>카테고리</legend>
       <div className="chip-row">
         {[...new Set([...CATEGORY_PRESETS, ...customs, ...selected])].map((category) => (
@@ -529,7 +555,7 @@ function CategoryFilter({
       </div>
     </fieldset>
   );
-}
+});
 
 // MenusPage의 TagPicker와 같은 UX — 단, 픽 화면에서는 태그를 새로 만들 필요가 없어 검색/선택만 제공.
 // disabledTags: 반대편(포함↔제외) 목록에 이미 들어간 태그는 제안에서 숨겨 모순된 필터를 막는다.

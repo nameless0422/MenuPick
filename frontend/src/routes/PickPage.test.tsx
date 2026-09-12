@@ -6,12 +6,15 @@ import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
 import { recordPickFeedback } from "../api/history";
 import { searchTags } from "../api/tags";
+import { fetchTrends } from "../api/trends";
+import { executePickPreset, fetchPickPresets } from "../api/pickPresets";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 
 vi.mock("../api/pick", () => ({ requestPick: vi.fn() }));
 vi.mock("../api/history", () => ({ recordPickFeedback: vi.fn() }));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]), fetchAllTags: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/pickPreferences", () => ({ fetchDefaultExcludedTagIds: vi.fn().mockResolvedValue([]) }));
+vi.mock("../api/trends", () => ({ fetchTrends: vi.fn() }));
 // 빠른 픽 절도 마운트되자마자 목록을 부른다. 갈아 끼우지 않으면 이 화면의 테스트마다
 // 실패한 요청의 에러 alert가 하나씩 더 그려져 role="alert" 조회가 어느 것을 가리키는지
 // 알 수 없게 된다(LinkedRestaurants 때와 같은 함정).
@@ -26,6 +29,9 @@ vi.mock("../api/pickPresets", async (importOriginal) => ({
 const requestPickMock = vi.mocked(requestPick);
 const recordPickFeedbackMock = vi.mocked(recordPickFeedback);
 const searchTagsMock = vi.mocked(searchTags);
+const fetchTrendsMock = vi.mocked(fetchTrends);
+const fetchPickPresetsMock = vi.mocked(fetchPickPresets);
+const executePickPresetMock = vi.mocked(executePickPreset);
 const HONBAP = { id: 7, name: "혼밥", createdAt: "2026-01-01T00:00:00" };
 
 /**
@@ -63,6 +69,19 @@ beforeEach(() => {
   recordPickFeedbackMock.mockResolvedValue(undefined);
   // 태그 제안을 쓰는 테스트가 뒤 테스트로 새지 않게 매번 빈 목록으로 되돌린다.
   searchTagsMock.mockResolvedValue([]);
+  fetchTrendsMock.mockReset();
+  fetchTrendsMock.mockResolvedValue({
+    status: "DISABLED",
+    categories: [],
+    menus: [],
+    windowDays: 7,
+    minUsers: 5,
+    maxLabels: 10,
+    computedAt: null,
+  });
+  fetchPickPresetsMock.mockReset();
+  fetchPickPresetsMock.mockResolvedValue({ presets: [], limit: 10 });
+  executePickPresetMock.mockReset();
   // 이 파일이 보는 것은 픽 요청에 무엇이 실려 나가는지이므로 응답은 최소 형태로 고정한다.
   requestPickMock.mockResolvedValue({
     historyId: 1,
@@ -94,6 +113,92 @@ beforeEach(() => {
 
 const distanceToggle = () => screen.getByRole("checkbox", { name: /내 위치 기준으로/ });
 const spinButton = () => screen.getByRole("button", { name: /오늘의 메뉴 뽑기/ });
+
+it("트렌드 카테고리를 수동 조건에 더하고 필터로 초점을 옮겨 픽 요청에 적용한다", async () => {
+  fetchTrendsMock.mockResolvedValue({
+    status: "READY",
+    categories: [{ label: "한식", userCount: 12, rankOrder: 1 }],
+    menus: [],
+    windowDays: 7,
+    minUsers: 5,
+    maxLabels: 10,
+    computedAt: new Date(Date.now() + 9 * 60 * 60 * 1000 - 60_000).toISOString().slice(0, 19),
+  });
+  const user = userEvent.setup();
+  renderWithProviders(<PickPage />);
+
+  await user.click(await screen.findByRole("button", { name: /한식.*12명/ }));
+  expect(screen.getByRole("group", { name: "카테고리" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "한식", pressed: true })).toBeInTheDocument();
+
+  await user.click(spinButton());
+  await waitFor(() => expect(requestPickMock).toHaveBeenCalledWith(
+    expect.objectContaining({ categories: ["한식"] }),
+  ));
+});
+
+it("트렌드 선택은 빠른 픽 결과와 선택 모드를 닫고 수동 조건으로 돌아간다", async () => {
+  fetchPickPresetsMock.mockResolvedValue({
+    limit: 10,
+    presets: [{
+      id: 1,
+      name: "회사 점심",
+      categories: ["중식"],
+      includeTagIds: [],
+      additionalExcludeTagIds: [],
+      maxDistance: null,
+      needsReview: false,
+      version: 1,
+      createdAt: "2026-09-13T10:00:00",
+      updatedAt: "2026-09-13T10:00:00",
+    }],
+  });
+  executePickPresetMock.mockResolvedValue({
+    pick: {
+      historyId: 2,
+      menu: {
+        id: 2,
+        name: "짜장면",
+        memo: null,
+        categories: ["중식"],
+        tags: [],
+        weight: 1,
+        isExcluded: false,
+        createdAt: "2026-09-13T10:00:00",
+        updatedAt: "2026-09-13T10:00:00",
+        version: 0,
+      },
+      restaurants: [],
+      reasons: [],
+    },
+    appliedFilters: {
+      categories: ["중식"],
+      includeTagIds: [],
+      effectiveExcludeTagIds: [],
+      maxDistance: null,
+    },
+  });
+  fetchTrendsMock.mockResolvedValue({
+    status: "READY",
+    categories: [{ label: "한식", userCount: 12, rankOrder: 1 }],
+    menus: [],
+    windowDays: 7,
+    minUsers: 5,
+    maxLabels: 10,
+    computedAt: new Date(Date.now() + 9 * 60 * 60 * 1000 - 60_000).toISOString().slice(0, 19),
+  });
+  const user = userEvent.setup();
+  renderWithProviders(<PickPage />);
+
+  await user.click(await screen.findByRole("button", { name: "회사 점심" }));
+  await user.click(screen.getByRole("button", { name: "이 조건으로 뽑기" }));
+  expect(await screen.findByText(/빠른 픽으로 뽑았어요/)).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /한식.*12명/ }));
+  expect(screen.queryByText(/빠른 픽으로 뽑았어요/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "회사 점심 조건 미리보기" })).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "카테고리" })).toHaveFocus();
+});
 
 it("픽 결과에 서버가 계산한 추천 이유를 표시한다", async () => {
   const user = userEvent.setup();

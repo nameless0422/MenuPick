@@ -88,7 +88,9 @@ class MigrationImmutabilityTest {
             Map.entry("V12__add_default_excluded_tags.sql",
                     "b38d6417f70dd157c736446e1870c56265db9159fd7f9c7c22caf12601d8df62"),
             Map.entry("V13__pick_presets.sql",
-                    "15a1089e7a5724baae8320274a0489a4c780c0fba2d1b17aba743310e0fd4ff6"));
+                    "15a1089e7a5724baae8320274a0489a4c780c0fba2d1b17aba743310e0fd4ff6"),
+            Map.entry("V14__pick_trends.sql",
+                    "4e8a6b14670f5ddd5482fbd2b18ca11718e0fc1bffe63ed0dcc0ab22a445456e"));
 
     @Test
     @DisplayName("이미 머지된 마이그레이션 파일은 내용이 바뀌지 않았다")
