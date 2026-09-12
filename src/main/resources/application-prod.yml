@@ -130,7 +130,10 @@ management:
         #   jvm.memory.used{area=heap}    — mem_limit 1536m의 75%가 힙 상한
         #   kpi                           — 추천 품질 KPI 3종(Specification.md 8장). 서비스 전체
         #                                    집계라 사용자별 API가 아니라 이 포트에 둔다(KpiEndpoint)
-        include: health, metrics, kpi
+        #   trends                        — 집단 통계 수동 재집계(POST). 스케줄러는 04:10에만 도는데,
+        #                                    배포 직후 빈 화면이 정상인지 고장인지 다음 새벽까지
+        #                                    확인할 길이 없어 이 손잡이를 둔다(PickTrendEndpoint)
+        include: health, metrics, kpi, trends
 
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:true}
@@ -184,3 +187,13 @@ kakao:
 logging:
   level:
     com.nameless0422.MenuPick: INFO
+
+# 집단 통계. 사용자가 늘면 최소 인원을 올려야 하는데, 상수라면 그때마다 이미지를 다시 빌드해
+# 재배포해야 한다 — DB_MAX_POOL_SIZE와 같은 이유로 환경변수로 뺀다(.env만 고치고 재시작).
+# min-users를 내리는 것은 프라이버시 결정이다. 근거 없이 낮추지 말 것(docs/PrivacyReview.md).
+trends:
+  # 교차 사용자 집계는 제품·개인정보 검토 뒤 명시적으로 켠다. 기본은 배포돼도 꺼진 상태다.
+  enabled: ${TRENDS_ENABLED:false}
+  window-days: ${TRENDS_WINDOW_DAYS:7}
+  min-users: ${TRENDS_MIN_USERS:5}
+  max-labels: ${TRENDS_MAX_LABELS:10}

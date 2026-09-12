@@ -43,6 +43,7 @@ async function installFakeApi(page: Page) {
   let linked = false;
   let picked = false;
   let visited = false;
+  let pickedCategories: string[] = [];
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -59,6 +60,18 @@ async function installFakeApi(page: Page) {
     }
     if (path === "/api/v1/tags" && method === "GET") return api(route, []);
     if (path === "/api/v1/pick/preferences" && method === "GET") return api(route, []);
+    if (path === "/api/v1/trends" && method === "GET") {
+      const computedAt = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 19);
+      return api(route, {
+        status: "READY",
+        categories: [{ label: "한식", userCount: 12, rankOrder: 1 }],
+        menus: [{ label: "김치찌개", userCount: 9, rankOrder: 1 }],
+        windowDays: 7,
+        minUsers: 5,
+        maxLabels: 10,
+        computedAt,
+      });
+    }
     // 빠른 픽은 픽 화면이 열릴 때 목록을 부른다. 이 여정은 프리셋을 쓰지 않으므로
     // 빈 목록을 준다 — 대역이 모르는 경로에서 던지도록 되어 있어(아래 throw) 여기
     // 없으면 픽 화면 자체가 뜨지 않는다.
@@ -130,6 +143,7 @@ async function installFakeApi(page: Page) {
         return route.fulfill({ status: 409, contentType: "application/json", body: "{}" });
       }
       picked = true;
+      pickedCategories = (request.postDataJSON() as { categories?: string[] }).categories ?? [];
       return api(route, {
         historyId: 1,
         menu,
@@ -167,7 +181,7 @@ async function installFakeApi(page: Page) {
     throw new Error(`처리하지 않은 E2E API 요청: ${method} ${path}`);
   });
 
-  return { isVisited: () => visited };
+  return { isVisited: () => visited, pickedCategories: () => pickedCategories };
 }
 
 test("가입부터 방문 처리까지 핵심 사용자 여정을 완료한다", async ({ page }) => {
@@ -201,7 +215,10 @@ test("가입부터 방문 처리까지 핵심 사용자 여정을 완료한다",
   await expect(page.getByRole("button", { name: `${restaurant.name} 메뉴 연결` })).toBeVisible();
 
   await page.getByRole("link", { name: "오늘 뭐 먹지" }).click();
+  await page.getByRole("button", { name: /한식.*12명/ }).click();
+  await expect(page.getByRole("button", { name: "한식", pressed: true })).toBeVisible();
   await page.getByRole("button", { name: "오늘의 메뉴 뽑기" }).click();
+  await expect.poll(state.pickedCategories).toEqual(["한식"]);
   await expect(page.getByText(menu.name, { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "히스토리", exact: true }).click();

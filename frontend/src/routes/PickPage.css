@@ -95,6 +95,95 @@
   font-size: var(--fs-sm);
 }
 
+/* 공개 트렌드는 핵심 픽 흐름 뒤에 붙는 참고 절이다. */
+.pick-trends {
+  align-items: stretch;
+  gap: 14px;
+  margin-top: 24px;
+  border: 2px solid var(--text-h);
+  box-shadow: 4px 4px 0 var(--accent);
+}
+
+.pick-trends h2,
+.pick-trends h3,
+.pick-trends p {
+  margin: 0;
+}
+
+.pick-trends h3 {
+  margin-bottom: 8px;
+  font-size: var(--fs-sm);
+}
+
+.pick-trends-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pick-trends-heading p,
+.pick-trends-heading time,
+.pick-trends-privacy,
+.pick-trends-list small {
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+
+.pick-trends-heading time {
+  flex: none;
+}
+
+.pick-trends-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.pick-trends-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pick-trends-list button,
+.pick-trends-menu-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.pick-trends-list button small,
+.pick-trends-menu-list small {
+  color: inherit;
+}
+
+.pick-trends-muted {
+  border-color: var(--field-border);
+  box-shadow: none;
+}
+
+.pick-filters fieldset:focus {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .pick-trends-heading,
+  .pick-trends-groups {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 /* ---- 오늘의 픽 = 식권 ----
    결과를 카드로 두면 위의 메뉴 목록·아래의 히스토리와 같은 모양이 되어, 방금 일어난
    일이 목록의 한 줄처럼 보인다. 이 화면에서 유일하게 "받은 것"이므로 받은 물건처럼

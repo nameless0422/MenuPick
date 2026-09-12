@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   deletePickPreset,
@@ -27,18 +27,30 @@ import { apiErrorMessage as errorMessage } from "../api/http";
 export default function PickPresets({
   tagNameOf,
   onResult,
+  onBusyChange,
+  resetSelectionKey = 0,
 }: {
   /** 태그 id를 이름으로 바꾼다. 없으면 id를 그대로 보여준다. */
   tagNameOf: (id: number) => string;
   /** 실행이 성공하면 결과를 위로 올린다 — 결과 카드는 PickPage가 그린다. */
   onResult: (result: PickPresetExecutionResult) => void;
+  /** 다른 픽 진입점도 동시에 조작되지 않도록 실행 상태를 부모에 알린다. */
+  onBusyChange?: (busy: boolean) => void;
+  /** 수동 조건으로 돌아갈 때 선택 중인 프리셋 미리보기를 닫는 신호다. */
+  resetSelectionKey?: number;
 }) {
   const queryClient = useQueryClient();
   const headingId = useId();
   const presetsQuery = useQuery({ queryKey: ["pick-presets"], queryFn: fetchPickPresets });
   const presets = presetsQuery.data?.presets ?? [];
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selection, setSelection] = useState<{
+    resetKey: number;
+    id: number | null;
+  }>({ resetKey: resetSelectionKey, id: null });
+  // resetSelectionKey가 바뀐 첫 렌더부터 미리보기를 닫는다. effect에서 뒤늦게 state를
+  // 되돌리면 한 프레임 동안 예전 프리셋 모드가 남고 렌더도 한 번 더 필요하다.
+  const selectedId = selection.resetKey === resetSelectionKey ? selection.id : null;
   // 목록이 줄어 고른 것이 사라져도(삭제·태그 정리) 여기서 null이 된다 — 렌더 중에 파생되므로
   // effect로 selectedId를 되돌릴 필요가 없다. effect를 쓰면 렌더가 한 번 더 돌 뿐이다.
   const selected = presets.find((p) => p.id === selectedId) ?? null;
@@ -52,7 +64,7 @@ export default function PickPresets({
     mutationFn: ({ id, version }: { id: number; version: number; name: string }) =>
       deletePickPreset(id, version),
     onSuccess: () => {
-      setSelectedId(null);
+      setSelection({ resetKey: resetSelectionKey, id: null });
       listRef.current?.focus();
       invalidate();
     },
@@ -82,6 +94,9 @@ export default function PickPresets({
   });
 
   const busy = executeMutation.isPending || deleteMutation.isPending;
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   return (
     <section className="card pick-presets" aria-labelledby={headingId}>
@@ -108,7 +123,13 @@ export default function PickPresets({
                 className="chip chip-tag"
                 aria-pressed={preset.id === selectedId}
                 onClick={() =>
-                  setSelectedId((current) => (current === preset.id ? null : preset.id))
+                  setSelection((current) => {
+                    const currentId = current.resetKey === resetSelectionKey ? current.id : null;
+                    return {
+                      resetKey: resetSelectionKey,
+                      id: currentId === preset.id ? null : preset.id,
+                    };
+                  })
                 }
               >
                 {preset.name}
