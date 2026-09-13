@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.domain.pick;
 
 import com.nameless0422.MenuPick.common.config.JpaConfig;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
+import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
@@ -30,10 +31,13 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * 픽 한 번이 DB에 몇 번 다녀오는지를 고정한다.
@@ -84,6 +88,7 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
     @Autowired private PickPresetRepository pickPresetRepository;
 
     private PickService pickService;
+    private PickAlternativesService pickAlternativesService;
     private User me;
     private Statistics statistics;
 
@@ -92,6 +97,11 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
         pickService = new PickService(menuRepository, historyRepository, userRepository,
                 tagRepository, new DefaultPickPreferenceService(tagRepository),
                 menuRestaurantRepository, FIXED_CLOCK);
+        PickRequestNormalizer normalizer = new PickRequestNormalizer(
+                new DefaultPickPreferenceService(tagRepository));
+        PickCandidateEvaluator evaluator = new PickCandidateEvaluator(
+                menuRepository, historyRepository, FIXED_CLOCK);
+        pickAlternativesService = new PickAlternativesService(normalizer, evaluator);
         me = userRepository.save(User.builder().email("budget@example.com").nickname("예산").build());
 
         statistics = entityManager.getEntityManagerFactory()
@@ -213,6 +223,219 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
         assertThat(statements)
                 .as("빠른 픽 실행 한 번의 JDBC 구문 수")
                 .isEqualTo(PRESET_EXECUTION_BUDGET);
+    }
+
+    @Test
+    @DisplayName("픽 대안은 거리 단계 수와 무관하게 고정 2(+기본 제외 1) 조회다")
+    void alternativesHaveFixedQueryBudget() {
+        Menu linked = menu("먼메뉴", "한식");
+        Restaurant restaurant = restaurantRepository.save(Restaurant.builder()
+                .user(me).name("먼식당")
+                .latitude(new BigDecimal("37.5755350")).longitude(new BigDecimal("126.9779692"))
+                .build());
+        entityManager.persist(MenuRestaurant.builder().menu(linked).restaurant(restaurant).build());
+
+        PickRequest explicitEmptyExcludes = new PickRequest(Set.of("한식"), null, Set.of(),
+                new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), 100);
+        long withoutDefaultLookup = countStatements(() ->
+                pickAlternativesService.find(me.getId(), explicitEmptyExcludes));
+
+        PickRequest inheritedExcludes = new PickRequest(Set.of("한식"), null, null,
+                new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), 100);
+        long withDefaultLookup = countStatements(() ->
+                pickAlternativesService.find(me.getId(), inheritedExcludes));
+
+        assertThat(withoutDefaultLookup).isEqualTo(3);
+        assertThat(withDefaultLookup).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("픽 대안 universe 조회는 메뉴 수가 늘어도 N+1이 없다")
+    void alternativesDoNotScaleWithMenuCount() {
+        seedMenus(30);
+        PickRequest request = new PickRequest(Set.of("없는분류"), null, Set.of(),
+                null, null, null);
+        long small = countStatements(() -> pickAlternativesService.find(me.getId(), request));
+        seedMenus(60);
+        long large = countStatements(() -> pickAlternativesService.find(me.getId(), request));
+
+        assertThat(small).isEqualTo(3);
+        assertThat(large).isEqualTo(small);
+    }
+
+    @Test
+    @DisplayName("대안 카테고리 판정은 기존 픽과 같은 MySQL ai_ci collation을 쓴다")
+    void alternativesCategoryCollationMatchesPickCandidates() {
+        menu("커피", "Cafe");
+        PickRequest request = new PickRequest(Set.of("cafe"), null, Set.of(), null, null, null);
+
+        var alternatives = pickAlternativesService.find(me.getId(), request);
+
+        assertThat(alternatives.alternatives()).isEmpty();
+        assertThatCode(() -> pickService.pick(me.getId(), request)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("빈 카테고리는 native IN 문법 오류나 센티널 충돌 없이 필터를 적용하지 않는다")
+    void alternativesEmptyCategoriesWorkOnMysql() {
+        menu("메뉴", "한식");
+        PickRequest request = new PickRequest(Set.of(), null, Set.of(), null, null, null);
+
+        var alternatives = pickAlternativesService.find(me.getId(), request);
+
+        assertThat(alternatives.alternatives()).isEmpty();
+        assertThatCode(() -> pickService.pick(me.getId(), request)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("다중 카테고리·태그·식당 fanout도 메뉴를 한 번만 세고 히스토리를 쓰지 않는다")
+    void alternativesFanoutIsLinearAndDistinctAndReadOnly() {
+        Menu linked = menu("팬아웃", "한식");
+        linked.addCategory("중식");
+        linked.addCategory("일식");
+        Tag first = tagRepository.save(Tag.builder().user(me).name("태그1").build());
+        Tag second = tagRepository.save(Tag.builder().user(me).name("태그2").build());
+        linked.addTag(first);
+        linked.addTag(second);
+        for (int i = 0; i < 3; i++) {
+            Restaurant restaurant = restaurantRepository.save(Restaurant.builder().user(me)
+                    .name("식당" + i).latitude(new BigDecimal("37.5665350"))
+                    .longitude(new BigDecimal("126.9779692")).build());
+            entityManager.persist(MenuRestaurant.builder().menu(linked).restaurant(restaurant).build());
+        }
+        long historiesBefore = historyRepository.count();
+        PickRequest request = new PickRequest(Set.of("없는분류"), Set.of(first.getId()), Set.of(),
+                null, null, null);
+
+        var result = pickAlternativesService.find(me.getId(), request);
+
+        assertThat(result.alternatives()).hasSize(1);
+        assertThat(result.alternatives().get(0).type())
+                .isEqualTo(com.nameless0422.MenuPick.domain.pick.dto.PickAlternativesResponse.Type.CLEAR_CATEGORIES);
+        assertThat(result.alternatives().get(0).candidateCount()).isEqualTo(1);
+        assertThat(historyRepository.count()).isEqualTo(historiesBefore);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 포함 태그는 유지되고 존재하지 않는 제외 태그는 기존 의미대로 무시된다")
+    void alternativesPreserveForeignIdSemantics() {
+        menu("메뉴", "한식");
+        PickRequest impossibleInclude = new PickRequest(Set.of("없는분류"), Set.of(Long.MAX_VALUE),
+                Set.of(), null, null, null);
+        PickRequest ignoredExclude = new PickRequest(Set.of("없는분류"), null,
+                Set.of(Long.MAX_VALUE), null, null, null);
+
+        assertThat(pickAlternativesService.find(me.getId(), impossibleInclude).alternatives()).isEmpty();
+        assertThat(pickAlternativesService.find(me.getId(), ignoredExclude).alternatives())
+                .singleElement().extracting("candidateCount").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("단독 대안은 거리 다음 카테고리 순서이고 둘 중 하나가 있으면 조합을 숨긴다")
+    void alternativesHaveDeterministicOrderAndGateCombination() {
+        Menu farMatching = menu("먼한식", "한식");
+        Menu nearOther = menu("가까운중식", "중식");
+        Restaurant far = restaurantRepository.save(Restaurant.builder().user(me).name("먼곳")
+                .latitude(new BigDecimal("37.5755350")).longitude(new BigDecimal("126.9779692")).build());
+        Restaurant near = restaurantRepository.save(Restaurant.builder().user(me).name("가까운곳")
+                .latitude(new BigDecimal("37.5665350")).longitude(new BigDecimal("126.9779692")).build());
+        entityManager.persist(MenuRestaurant.builder().menu(farMatching).restaurant(far).build());
+        entityManager.persist(MenuRestaurant.builder().menu(nearOther).restaurant(near).build());
+
+        var result = pickAlternativesService.find(me.getId(), new PickRequest(Set.of("한식"), null,
+                Set.of(), new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), 100));
+
+        assertThat(result.alternatives()).extracting("type").containsExactly(
+                com.nameless0422.MenuPick.domain.pick.dto.PickAlternativesResponse.Type.EXPAND_DISTANCE,
+                com.nameless0422.MenuPick.domain.pick.dto.PickAlternativesResponse.Type.CLEAR_CATEGORIES);
+        assertThat(result.alternatives().get(0).changes().maxDistance()).isEqualTo(2_000);
+    }
+
+    @Test
+    @DisplayName("거리와 카테고리 단독이 모두 0일 때만 결합 대안을 준다")
+    void alternativesOfferCombinationOnlyWhenSinglesFail() {
+        Menu farOther = menu("먼중식", "중식");
+        Restaurant far = restaurantRepository.save(Restaurant.builder().user(me).name("먼곳")
+                .latitude(new BigDecimal("37.5755350")).longitude(new BigDecimal("126.9779692")).build());
+        entityManager.persist(MenuRestaurant.builder().menu(farOther).restaurant(far).build());
+
+        var result = pickAlternativesService.find(me.getId(), new PickRequest(Set.of("한식"), null,
+                Set.of(), new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), 100));
+
+        assertThat(result.alternatives()).singleElement().extracting("type").isEqualTo(
+                com.nameless0422.MenuPick.domain.pick.dto.PickAlternativesResponse.Type.CLEAR_CATEGORIES_AND_EXPAND_DISTANCE);
+        assertThat(result.alternatives().get(0).changes().maxDistance()).isEqualTo(2_000);
+    }
+
+    @Test
+    @DisplayName("위치 조건이 없으면 거리 대안을 만들지 않고 카테고리 해제만 제시한다")
+    void alternativesGateDistanceWithoutCompleteLocation() {
+        menu("메뉴", "중식");
+
+        var result = pickAlternativesService.find(me.getId(), new PickRequest(Set.of("한식"), null,
+                Set.of(), new BigDecimal("37.5665350"), null, 100));
+
+        assertThat(result.alternatives()).singleElement().extracting("type").isEqualTo(
+                com.nameless0422.MenuPick.domain.pick.dto.PickAlternativesResponse.Type.CLEAR_CATEGORIES);
+    }
+
+    @Test
+    @DisplayName("픽 가능한 메뉴 자체가 없거나 거리 픽에 연결 식당이 전혀 없으면 대안이 없다")
+    void alternativesHideDataRepairCases() {
+        PickRequest distanceRequest = new PickRequest(Set.of("한식"), null, Set.of(),
+                new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), 100);
+        assertThat(pickAlternativesService.find(me.getId(), distanceRequest).alternatives()).isEmpty();
+
+        menu("연결없음", "한식");
+        assertThat(pickAlternativesService.find(me.getId(), distanceRequest).alternatives()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("5000m보다 먼 후보에는 거리 대안을 제시하지 않는다")
+    void alternativesNeverExpandBeyondFiveKilometers() {
+        Menu linked = menu("아주먼메뉴", "한식");
+        Restaurant far = restaurantRepository.save(Restaurant.builder().user(me).name("아주먼곳")
+                .latitude(new BigDecimal("37.6205350"))
+                .longitude(new BigDecimal("126.9779692")).build());
+        entityManager.persist(MenuRestaurant.builder().menu(linked).restaurant(far).build());
+
+        var result = pickAlternativesService.find(me.getId(), new PickRequest(Set.of("한식"), null,
+                Set.of(), new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), 100));
+
+        assertThat(result.alternatives()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("exclude null은 기본 제외를 상속하고 명시적 빈 집합은 상속하지 않는다")
+    void alternativesDistinguishNullAndEmptyExcludes() {
+        Menu menu = menu("기본제외", "한식");
+        Tag tag = tagRepository.save(Tag.builder().user(me).name("기본제외태그").build());
+        menu.addTag(tag);
+        tagRepository.insertDefaultExcludedTag(me.getId(), tag.getId());
+        PickRequest inherited = new PickRequest(Set.of("없는분류"), null, null, null, null, null);
+        PickRequest explicitEmpty = new PickRequest(Set.of("없는분류"), null, Set.of(), null, null, null);
+
+        assertThat(pickAlternativesService.find(me.getId(), inherited).alternatives()).isEmpty();
+        assertThat(pickAlternativesService.find(me.getId(), explicitEmpty).alternatives()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("candidateCount는 fresh distinct를 세고 전부 최근이면 원본 distinct로 폴백한다")
+    void alternativesCountFreshThenFallback() {
+        Menu first = menu("첫째", "한식");
+        Menu second = menu("둘째", "한식");
+        historyRepository.save(History.builder().user(me).menu(first)
+                .recommendedAt(LocalDateTime.of(2026, 1, 14, 12, 0)).build());
+        PickRequest request = new PickRequest(Set.of("없는분류"), null, Set.of(), null, null, null);
+
+        assertThat(pickAlternativesService.find(me.getId(), request).alternatives().get(0).candidateCount())
+                .isEqualTo(1);
+        historyRepository.save(History.builder().user(me).menu(second)
+                .recommendedAt(LocalDateTime.of(2026, 1, 14, 13, 0)).build());
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(pickAlternativesService.find(me.getId(), request).alternatives().get(0).candidateCount())
+                .isEqualTo(2);
     }
 
     // ── 실측값 (2026-09-12). 바꾸려면 클래스 주석의 "이 숫자를 올려도 되는가"를 먼저 읽을 것.

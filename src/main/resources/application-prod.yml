@@ -145,6 +145,7 @@ rate-limit:
   # 인증 경로(IP 기준) / 외부 API 프록시 경로(사용자 기준) 분당 허용 횟수
   auth-limit-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
   proxy-limit-per-minute: ${RATE_LIMIT_PROXY_PER_MINUTE:30}
+  alternatives-limit-per-minute: ${RATE_LIMIT_ALTERNATIVES_PER_MINUTE:10}
 
 cors:
   allowed-origins: ${FRONTEND_ORIGIN}

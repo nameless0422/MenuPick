@@ -220,10 +220,18 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | POST | /pick | 필터(카테고리/태그/거리) 기반 가중치 랜덤 추천. 히스토리 자동 저장 후 historyId를 응답에 포함 | Y |
+| POST | /pick/alternatives | 수동 픽의 `NO_PICK_CANDIDATES`에 한해 안전한 최소 조건 조정안 조회. **구현 완료·기본 비활성·미배포** | Y |
 
 | GET | /pick/demo | 게스트 데모 픽. 고정 샘플에서 랜덤 반환, 저장 없음 (4.3) | N |
 
 > ℹ️ 초기 설계의 `GET /menus/pick`은 필터 조건을 본문으로 받기 위해 `POST /pick`으로 변경됨. 게스트 데모도 같은 이유로 `/pick/demo`에 둔다 (4.3 참고).
+
+> `/pick/alternatives`는 구현됐지만 아직 배포·롤아웃하지 않았다. 태그 포함·제외와 기본 제외는 유지하고,
+> 거리 확대(`maxDistance`) 및 카테고리 문자열 목록 전체 해제(`categories: []`)만 최대 2개
+> 제안한다. 기본 플래그 off에서는 endpoint를 등록하지 않아 404이며, 전용 IP 버킷은
+> 10회/분(`Retry-After: 60`, Redis 장애 시 fail-open)이다. 백엔드와 프론트 플래그가 모두
+> `true`여야 하며 프론트 플래그 변경에는 이미지 재빌드가 필요하다. 상세 계약과 쿼리 예산은
+> [PickAlternativesDesign.md](PickAlternativesDesign.md)를 따른다.
 
 #### 상황별 빠른 픽 (Pick Presets)
 
@@ -324,6 +332,9 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 > 부모-자식 구조이며 자식은 부모 FK에 `ON DELETE CASCADE`가 걸려 있다. `pick_preset_tags`는
 > `tags`에도 FK가 있어 태그가 지워지면 행이 사라지는데, 그때 부모 프리셋이 조용히 넓어지지
 > 않도록 `TagService.deleteTag`가 삭제 **전에** `needs_review`를 켠다(D-039).
+
+> 구현된 픽 조건 조정 대안은 기존 메뉴·분류·태그·식당 관계를 읽기만 한다. 대안이나
+> 진단 결과를 저장하지 않으므로 ERD 변경과 Flyway 마이그레이션은 없다.
 
 
 ### 3.1 엔티티 관계 요약 (1NF 반영)
@@ -1466,9 +1477,10 @@ Spring Actuator: **운영은 관리 포트를 분리한다**(`management.server.
 | Phase 4 | MDC traceId (7.3) | 관측성 | ✅ 완료 |
 | Phase 4 | API 호출 로그 (7.3) | 관측성 | ✅ 완료 — `AccessLogFilter` |
 | Phase 4 | APM 연동 (Sentry/Datadog 등) | 관측성 | ⬜ 예정 |
+| Phase 7 | 픽 후보 없음 안전한 조건 조정 대안 | 조건 때문에 막힌 수동 픽 완료율 개선 | ✅ 구현 완료·기본 비활성·미배포 ([상세](PickAlternativesDesign.md)) |
 
 본 문서는 개발 진행에 따라 지속 업데이트한다.
 
 미해결 과제와 정책 결정 대기 항목은 [ImprovementBacklog.md](./ImprovementBacklog.md)에서 관리한다.
 
-최종 수정: 2026-08-11
+최종 수정: 2026-09-14

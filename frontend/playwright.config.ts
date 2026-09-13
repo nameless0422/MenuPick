@@ -8,12 +8,13 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: "http://127.0.0.1:4350",
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173",
-    url: "http://127.0.0.1:4173",
+    command: "npm run dev -- --host 127.0.0.1 --port 4350",
+    env: { VITE_PICK_ALTERNATIVES_ENABLED: "true" },
+    url: "http://127.0.0.1:4350",
     reuseExistingServer: !process.env.CI,
   },
 });

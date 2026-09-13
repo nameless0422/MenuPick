@@ -16,7 +16,7 @@ import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.tag.Tag;
 import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,13 +28,11 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class PickService {
 
-    private static final double EARTH_RADIUS_METERS = 6_371_000.0;
-    private static final int RECENT_RECOMMENDATION_DAYS = 3;
-    private static final int FEEDBACK_WINDOW_DAYS = 30;
+    private static final int RECENT_RECOMMENDATION_DAYS = PickCandidateEvaluator.RECENT_RECOMMENDATION_DAYS;
+    private static final int FEEDBACK_WINDOW_DAYS = PickCandidateEvaluator.FEEDBACK_WINDOW_DAYS;
     private static final int MAX_FEEDBACK_ADJUSTMENT = 2;
 
     private final MenuRepository menuRepository;
@@ -46,65 +44,51 @@ public class PickService {
     private final MenuRestaurantRepository menuRestaurantRepository;
     /** 추천 시각을 KST 기준으로 기록한다 — 히스토리 days 필터와 기준 시간대를 맞춘다. */
     private final Clock clock;
+    private final PickRequestNormalizer requestNormalizer;
+    private final PickCandidateEvaluator candidateEvaluator;
+
+    @Autowired
+    public PickService(MenuRepository menuRepository, HistoryRepository historyRepository,
+            UserRepository userRepository, TagRepository tagRepository,
+            DefaultPickPreferenceService defaultPickPreferenceService,
+            MenuRestaurantRepository menuRestaurantRepository, Clock clock,
+            PickRequestNormalizer requestNormalizer, PickCandidateEvaluator candidateEvaluator) {
+        this.menuRepository = menuRepository;
+        this.historyRepository = historyRepository;
+        this.userRepository = userRepository;
+        this.tagRepository = tagRepository;
+        this.defaultPickPreferenceService = defaultPickPreferenceService;
+        this.menuRestaurantRepository = menuRestaurantRepository;
+        this.clock = clock;
+        this.requestNormalizer = requestNormalizer;
+        this.candidateEvaluator = candidateEvaluator;
+    }
+
+    /** 기존 단위/통합 테스트와 패키지 내부 조립 코드용 호환 생성자. */
+    PickService(MenuRepository menuRepository, HistoryRepository historyRepository,
+            UserRepository userRepository, TagRepository tagRepository,
+            DefaultPickPreferenceService defaultPickPreferenceService,
+            MenuRestaurantRepository menuRestaurantRepository, Clock clock) {
+        this(menuRepository, historyRepository, userRepository, tagRepository,
+                defaultPickPreferenceService, menuRestaurantRepository, clock,
+                new PickRequestNormalizer(defaultPickPreferenceService),
+                new PickCandidateEvaluator(menuRepository, historyRepository, clock));
+    }
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
-        if (request == null || request.excludeTagIds() == null) {
-            Set<Long> defaults = defaultPickPreferenceService.getDefaultExcludedTagIds(userId);
-            if (!defaults.isEmpty()) {
-                request = new PickRequest(
-                        request == null ? null : request.categories(),
-                        request == null ? null : request.tagIds(), defaults,
-                        request == null ? null : request.latitude(),
-                        request == null ? null : request.longitude(),
-                        request == null ? null : request.maxDistance());
-            }
-        }
-        // 저장 경로(MenuService.normalizeCategories)가 저장 직전에 trim하므로, 요청 쪽도 같은
-        // 모양으로 맞춰야 비교가 성립한다. 맞추지 않으면 [" 한식"]이 @NotBlank를 통과하고도
-        // 저장된 "한식"과 매칭되지 않아 NO_PICK_CANDIDATES가 나고, 사용자는 분명히 있는
-        // 메뉴를 두고 "조건에 맞는 메뉴가 없다"는 답을 받는다. 히스토리에도 " 한식"이 남는다.
-        Set<String> categories = normalizeCategories(request == null ? null : request.categories());
-
-        List<Menu> candidates;
-        if (request == null) {
-            candidates = menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId);
-        } else {
-            // 카테고리·태그·거리(바운딩 박스)를 전부 SQL로 내린다 — 근거는 PickCandidates.
-            candidates = menuRepository.findAll(PickCandidates.of(
-                    userId, categories, request.tagIds(), request.excludeTagIds(),
-                    request.latitude(), request.longitude(), request.maxDistance()));
-            // 박스는 반경을 감싸는 사각형일 뿐이라 모서리에 반경 밖 식당이 남는다.
-            // 정밀 판정은 여기서 한 번 더 한다 — 결과 목록을 거르는 기준과 같은 함수다.
-            candidates = filterByDistance(candidates,
-                    request.latitude(), request.longitude(), request.maxDistance());
-        }
+        PickRequestNormalizer.NormalizedPickRequest normalized = requestNormalizer.normalize(userId, request);
+        request = normalized.request();
+        Set<String> categories = normalized.categories();
+        PickCandidateEvaluator.Evaluation evaluation = candidateEvaluator.evaluate(userId, normalized);
+        List<Menu> candidates = evaluation.candidates();
 
         if (candidates.isEmpty()) {
             throw new BusinessException(diagnoseEmpty(userId, request));
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
-        LocalDateTime recentSince = now.minusDays(RECENT_RECOMMENDATION_DAYS);
-        List<HistoryRepository.MenuRecommendationSignals> recommendationSignals =
-                historyRepository.findMenuRecommendationSignalsSince(
-                        userId, now.minusDays(FEEDBACK_WINDOW_DAYS),
-                        RecommendationFeedback.ACCEPTED, RecommendationFeedback.REJECTED);
-        Set<Long> recentMenuIds = recommendationSignals.stream()
-                .filter(signal -> !signal.getLatestRecommendedAt().isBefore(recentSince))
-                .map(HistoryRepository.MenuRecommendationSignals::getMenuId)
-                .collect(Collectors.toSet());
-        List<Menu> freshCandidates = candidates.stream()
-                .filter(menu -> !recentMenuIds.contains(menu.getId()))
-                .toList();
-        // 모든 후보가 최근에 나왔으면 원래 후보로 폴백한다. 중복 방지는 추천 품질 규칙이지
-        // 사용자를 NO_PICK_CANDIDATES로 막는 새 필터가 아니다.
-        boolean avoidedRecentRecommendation = !freshCandidates.isEmpty();
-        if (avoidedRecentRecommendation) {
-            candidates = freshCandidates;
-        }
-
-        Map<Long, Integer> feedbackAdjustments = feedbackAdjustments(recommendationSignals);
+        boolean avoidedRecentRecommendation = evaluation.avoidedRecentRecommendation();
+        Map<Long, Integer> feedbackAdjustments = feedbackAdjustments(evaluation.signals());
         Menu picked = weightedRandom(candidates, feedbackAdjustments);
 
         BigDecimal lat = request != null ? request.latitude() : null;
@@ -182,16 +166,6 @@ public class PickService {
                 && request.maxDistance() != null;
     }
 
-    /** 앞뒤 공백만 다른 값이 다른 카테고리로 취급되지 않도록 저장 경로와 같은 모양으로 맞춘다. */
-    private static Set<String> normalizeCategories(Set<String> raw) {
-        if (raw == null) return Set.of();
-        return raw.stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(c -> !c.isEmpty())
-                .collect(Collectors.toSet());
-    }
-
     /**
      * 반경 안에 살아 있는 식당이 하나라도 있는 메뉴만 남긴다.
      *
@@ -220,10 +194,7 @@ public class PickService {
     private static boolean withinDistance(
             Restaurant restaurant, BigDecimal lat, BigDecimal lng, Integer maxDistance) {
         if (lat == null || lng == null || maxDistance == null) return true;
-        double distance = calculateHaversineDistance(
-                lat.doubleValue(), lng.doubleValue(),
-                restaurant.getLatitude().doubleValue(), restaurant.getLongitude().doubleValue());
-        return distance <= maxDistance;
+        return PickDistance.within(restaurant, lat, lng, maxDistance);
     }
 
     static Map<Long, Integer> feedbackAdjustments(
@@ -295,13 +266,7 @@ public class PickService {
     }
 
     static double calculateHaversineDistance(double lat1, double lng1, double lat2, double lng2) {
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLng = Math.toRadians(lng2 - lng1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return EARTH_RADIUS_METERS * c;
+        return PickDistance.meters(lat1, lng1, lat2, lng2);
     }
 
     /**

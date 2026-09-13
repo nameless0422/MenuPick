@@ -133,3 +133,7 @@ trends:
   min-users: 5
   # 한 축에서 보여줄 최대 항목 수. 카테고리는 8개뿐이라 사실상 메뉴 이름 축을 위한 값이다.
   max-labels: 10
+
+# 후보 없음 조건 조정 제안. 내부 검증이 끝나기 전까지 endpoint 자체를 등록하지 않는다.
+pick-alternatives:
+  enabled: ${PICK_ALTERNATIVES_ENABLED:false}

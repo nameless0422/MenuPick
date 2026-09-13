@@ -61,6 +61,53 @@ class RateLimitFilterTest {
     }
 
     @Test
+    @DisplayName("픽 대안은 독립 IP 버킷 10회를 허용하고 11번째는 429")
+    @SuppressWarnings("unchecked")
+    void pickAlternatives_eleventhRequest_isRateLimited() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/pick/alternatives");
+        request.setRemoteAddr("127.0.0.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(redisTemplate.execute(any(RedisScript.class),
+                eq(List.of("rl:pick-alternatives:127.0.0.1")), eq("60"))).willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getHeader("Retry-After")).isEqualTo("60");
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pickAlternatives_redisFailure_failsOpen() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/pick/alternatives");
+        request.setRemoteAddr("127.0.0.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(redisTemplate.execute(any(RedisScript.class), anyList(), eq("60")))
+                .willThrow(new RuntimeException("down"));
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void percentEncodedPickAlternativesPath_isStillRateLimited() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/v1/pick/%61lternatives");
+        request.setRemoteAddr("127.0.0.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(redisTemplate.execute(any(RedisScript.class),
+                eq(List.of("rl:pick-alternatives:127.0.0.1")), eq("60"))).willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
     @DisplayName("로그인 API 첫 요청 - 카운트 1로 통과")
     @SuppressWarnings("unchecked")
     void loginRequest_firstRequest_passThrough() throws ServletException, IOException {

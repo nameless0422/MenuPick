@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
+import { requestPickAlternatives } from "../api/pickAlternatives";
 import { recordPickFeedback } from "../api/history";
 import { searchTags } from "../api/tags";
 import { fetchTrends } from "../api/trends";
@@ -11,6 +12,11 @@ import { executePickPreset, fetchPickPresets } from "../api/pickPresets";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 
 vi.mock("../api/pick", () => ({ requestPick: vi.fn() }));
+vi.mock("../api/pickAlternatives", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/pickAlternatives")>()),
+  pickAlternativesEnabled: () => true,
+  requestPickAlternatives: vi.fn(),
+}));
 vi.mock("../api/history", () => ({ recordPickFeedback: vi.fn() }));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]), fetchAllTags: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/pickPreferences", () => ({ fetchDefaultExcludedTagIds: vi.fn().mockResolvedValue([]) }));
@@ -27,6 +33,7 @@ vi.mock("../api/pickPresets", async (importOriginal) => ({
 }));
 
 const requestPickMock = vi.mocked(requestPick);
+const requestPickAlternativesMock = vi.mocked(requestPickAlternatives);
 const recordPickFeedbackMock = vi.mocked(recordPickFeedback);
 const searchTagsMock = vi.mocked(searchTags);
 const fetchTrendsMock = vi.mocked(fetchTrends);
@@ -65,6 +72,8 @@ beforeEach(() => {
   resetKakaoSdkForTest();
   delete window.kakao;
   requestPickMock.mockReset();
+  requestPickAlternativesMock.mockReset();
+  requestPickAlternativesMock.mockResolvedValue({ alternatives: [] });
   recordPickFeedbackMock.mockReset();
   recordPickFeedbackMock.mockResolvedValue(undefined);
   // 태그 제안을 쓰는 테스트가 뒤 테스트로 새지 않게 매번 빈 목록으로 되돌린다.
@@ -193,6 +202,7 @@ it("트렌드 선택은 빠른 픽 결과와 선택 모드를 닫고 수동 조�
   await user.click(await screen.findByRole("button", { name: "회사 점심" }));
   await user.click(screen.getByRole("button", { name: "이 조건으로 뽑기" }));
   expect(await screen.findByText(/빠른 픽으로 뽑았어요/)).toBeInTheDocument();
+  expect(requestPickAlternativesMock).not.toHaveBeenCalled();
 
   await user.click(screen.getByRole("button", { name: /한식.*12명/ }));
   expect(screen.queryByText(/빠른 픽으로 뽑았어요/)).not.toBeInTheDocument();
@@ -663,7 +673,7 @@ describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
     await readyWithDistance();
 
     const radios = screen.getAllByRole("radio");
-    expect(radios).toHaveLength(4);
+    expect(radios).toHaveLength(5);
     expect(screen.getByRole("radio", { name: "500m 이내" })).toBeChecked();
     expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
   });
@@ -704,7 +714,7 @@ describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
     screen.getByRole("radio", { name: "500m 이내" }).focus();
     await user.keyboard("{ArrowLeft}{ArrowLeft}");
 
-    expect(screen.getByRole("radio", { name: "2km 이내" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "5km 이내" })).toBeChecked();
   });
 
   it("Home·End로 양 끝으로 간다", async () => {
@@ -712,7 +722,7 @@ describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
 
     screen.getByRole("radio", { name: "500m 이내" }).focus();
     await user.keyboard("{End}");
-    expect(screen.getByRole("radio", { name: "2km 이내" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "5km 이내" })).toBeChecked();
 
     await user.keyboard("{Home}");
     expect(screen.getByRole("radio", { name: "300m 이내" })).toBeChecked();
@@ -832,6 +842,90 @@ describe("PickPage 후보가 없을 때의 안내", () => {
     // 여기서는 연결이 있으므로 반경을 넓히면 실제로 결과가 나온다.
     expect(screen.getByText(/반경을 넓혀 보세요/)).toBeInTheDocument();
   });
+
+  it("제시된 카테고리 해제만 적용하고 기존 픽 API로 다시 검증한다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValueOnce(apiError("NO_PICK_CANDIDATES"));
+    requestPickAlternativesMock.mockResolvedValue({
+      alternatives: [{ type: "CLEAR_CATEGORIES", candidateCount: 4, changes: { categories: [] } }],
+    });
+    renderWithProviders(<PickPage />);
+
+    await user.click(screen.getByRole("button", { name: "한식" }));
+    await user.click(spinButton());
+    const alternative = await screen.findByRole("button", {
+      name: /카테고리 조건을 모두 풀고 다시 뽑기 · 후보 4개/,
+    }, { timeout: 3000 });
+    expect(alternative.closest(".pick-alternatives")).toHaveFocus();
+
+    await user.click(alternative);
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalledTimes(2));
+    expect(requestPickMock.mock.calls[1][0]).not.toHaveProperty("categories");
+    expect(screen.getByRole("button", { name: "한식" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("필터가 바뀌면 진행 중인 대안 요청을 취소하고 늦은 응답을 버린다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValueOnce(apiError("NO_PICK_CANDIDATES"));
+    let resolveAlternatives!: (value: Awaited<ReturnType<typeof requestPickAlternatives>>) => void;
+    requestPickAlternativesMock.mockImplementation((_request, signal) => new Promise((resolve) => {
+      resolveAlternatives = resolve;
+      expect(signal?.aborted).toBe(false);
+    }));
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+    await screen.findByText("가능한 조건을 찾는 중…", {}, { timeout: 3000 });
+    const signal = requestPickAlternativesMock.mock.calls[0][1]!;
+    await user.click(screen.getByRole("button", { name: "한식" }));
+    expect(signal.aborted).toBe(true);
+    resolveAlternatives({
+      alternatives: [{ type: "CLEAR_CATEGORIES", candidateCount: 4, changes: { categories: [] } }],
+    });
+    await Promise.resolve();
+    expect(screen.queryByText(/후보 4개/)).toBeNull();
+  });
+
+  it("A 픽 진행 중 B로 편집하면 A 실패를 B 조건의 대안으로 진단하지 않는다", async () => {
+    const user = userEvent.setup();
+    let rejectFirst!: (reason: unknown) => void;
+    requestPickMock.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectFirst = reject;
+    }));
+    renderWithProviders(<PickPage />);
+
+    // A는 필터 없음으로 시작하고, 응답을 기다리는 동안 화면은 B(한식)로 바뀐다.
+    await user.click(spinButton());
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "한식" }));
+    rejectFirst(apiError("NO_PICK_CANDIDATES"));
+    await screen.findByText(/조건에 맞는 메뉴가 없어요/, {}, { timeout: 3000 });
+    expect(requestPickAlternativesMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("가능한 조건을 찾는 중…")).toBeNull();
+
+    // B를 사용자가 다시 뽑아 실패시킨 경우에만, 실패 당시 B 본문으로 진단한다.
+    requestPickMock.mockRejectedValueOnce(apiError("NO_PICK_CANDIDATES"));
+    await user.click(spinButton());
+    await waitFor(() => expect(requestPickAlternativesMock).toHaveBeenCalledTimes(1), {
+      timeout: 3000,
+    });
+    expect(requestPickAlternativesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: ["한식"] }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it.each(["NO_LINKED_RESTAURANTS", "NO_PICKABLE_MENUS"])(
+    "%s에서는 대안 API를 호출하지 않는다",
+    async (errorCode) => {
+      const user = userEvent.setup();
+      requestPickMock.mockRejectedValue(apiError(errorCode));
+      renderWithProviders(<PickPage />);
+      await user.click(spinButton());
+      await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
+      expect(requestPickAlternativesMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("모르는 에러는 안내 카드가 아니라 일반 에러로 띄운다", async () => {
     const user = userEvent.setup();
