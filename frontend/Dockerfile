@@ -26,8 +26,10 @@ COPY . .
 # 기본값이 빈 문자열이라 키를 안 넘겨도 빌드는 통과하고, 지도 자리에 안내만 뜬다.
 ARG VITE_API_BASE_URL=""
 ARG VITE_KAKAO_JS_KEY=""
+ARG VITE_PICK_ALTERNATIVES_ENABLED="false"
 RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production
 RUN echo "VITE_KAKAO_JS_KEY=${VITE_KAKAO_JS_KEY}" >> .env.production
+RUN echo "VITE_PICK_ALTERNATIVES_ENABLED=${VITE_PICK_ALTERNATIVES_ENABLED}" >> .env.production
 
 RUN npm run build
 

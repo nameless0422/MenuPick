@@ -42,6 +42,7 @@ app:
 
 rate-limit:
   trust-proxy: ${RATE_LIMIT_TRUST_PROXY:false}
+  alternatives-limit-per-minute: ${RATE_LIMIT_ALTERNATIVES_PER_MINUTE:10}
 
 cors:
   # Vite 기본 개발 서버 포트

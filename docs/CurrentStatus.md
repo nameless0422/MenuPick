@@ -1,6 +1,6 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-13 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-14 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
@@ -161,6 +161,19 @@
 - `main` 커밋 `c4e0bd7`로 **운영 배포를 완료했다**(2026-09-13).
 
 ## 다음 제품 과제
+
+**다음 제품 작업의 로컬 구현 완료·PR 대기:** 수동 픽이 `NO_PICK_CANDIDATES`로 끝날 때
+안전한 조건 조정안을 제시하는 API·프론트·대상 테스트를 작업 브랜치에 구현했다. 아직 `main`에
+병합하거나 배포·롤아웃하지 않았다. DB 마이그레이션은 없다. 백엔드
+`PICK_ALTERNATIVES_ENABLED`와 프론트 빌드 변수 `VITE_PICK_ALTERNATIVES_ENABLED`는 모두 기본
+`false`이며, 실제 노출에는 두 값을 함께 켜고 프론트 이미지를 재빌드해야 한다. 상세 계약은
+[PickAlternativesDesign.md](PickAlternativesDesign.md)를 따른다. 롤아웃 성공 지표 베이스라인은
+아직 없다.
+
+구현 검증은 완료했다. 백엔드 full check는 764 tests / 0 failures, JaCoCo instruction 93% /
+branch 81%였고, 프론트는 lint·build, Vitest 29 files / 363 tests, Playwright 3/3을 통과했다.
+stale failed-request race 회귀 수정 후 최종 Astra 리뷰 blocker도 0건이다. 이는 작업 브랜치의
+검증 결과이며 PR 병합·배포·운영 활성화를 의미하지 않는다.
 
 1. ~~정의만 있는 방문율·재픽률·7일 리텐션 KPI의 실제 집계 수단을 만든다.~~
    **2026-09-09 완료** — `GET /actuator/kpi`([Specification.md 8장](Specification.md#8-추천-품질-kpi)).

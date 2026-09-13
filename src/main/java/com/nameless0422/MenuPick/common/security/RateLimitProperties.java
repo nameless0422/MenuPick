@@ -2,6 +2,7 @@ package com.nameless0422.MenuPick.common.security;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 /**
  * 레이트 리밋 설정.
@@ -31,5 +32,16 @@ public record RateLimitProperties(
         @DefaultValue("10") int authLimitPerMinute,
         @DefaultValue("30") int proxyLimitPerMinute,
         @DefaultValue("10") int demoLimitPerMinute,
+        @DefaultValue("10") int alternativesLimitPerMinute,
         @DefaultValue("60") int windowSeconds
-) {}
+) {
+    @ConstructorBinding
+    public RateLimitProperties {
+    }
+
+    public RateLimitProperties(boolean trustProxy, int trustedProxyHops, int authLimitPerMinute,
+            int proxyLimitPerMinute, int demoLimitPerMinute, int windowSeconds) {
+        this(trustProxy, trustedProxyHops, authLimitPerMinute, proxyLimitPerMinute,
+                demoLimitPerMinute, 10, windowSeconds);
+    }
+}

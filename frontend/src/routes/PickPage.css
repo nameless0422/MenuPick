@@ -351,3 +351,26 @@
   border-color: var(--field-border);
   box-shadow: none;
 }
+
+.pick-alternatives {
+  align-items: stretch;
+  margin: 0 0 24px;
+  border: 2px solid var(--text-h);
+  box-shadow: 4px 4px 0 var(--accent);
+}
+
+.pick-alternatives:focus {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.pick-alternatives h2,
+.pick-alternatives p {
+  margin: 0;
+}
+
+.pick-alternative-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
