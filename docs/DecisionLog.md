@@ -643,7 +643,7 @@
 
 ### D-042. 후보 없음 대안 — 안전 필터 고정 + 최소 완화만 제안
 
-- **날짜/상태**: 2026-09-14 / 구현 완료·기본 비활성·미배포
+- **날짜/상태**: 2026-09-14 / 운영 배포·활성화 완료
 - **배경**: 수동 픽이 `NO_PICK_CANDIDATES`로 끝나면 사용자가 어떤 조건을 풀어야 하는지
   알기 어렵다. 반면 서버가 포함·제외 태그를 임의로 풀면 알레르기·기피 의도를 훼손할 수 있고,
   대안별로 기존 픽 SQL을 반복하면 DB 왕복이 늘어난다.
@@ -668,7 +668,7 @@
   미호출·미노출한다. 활성화 시 기존 `RateLimitFilter` 구조의 전용 IP 버킷 10회/분을 적용한다.
   초과는 429 + `Retry-After: 60`, Redis 오류/null은 기존대로 fail-open이다. 백엔드
   `PICK_ALTERNATIVES_ENABLED`와 GitHub Actions의 프론트 빌드 변수
-  `VITE_PICK_ALTERNATIVES_ENABLED`를 함께 켜고 프론트를 재빌드해야 한다. 아직 롤아웃하지 않아
-  성공 지표 베이스라인은 없다.
+  `VITE_PICK_ALTERNATIVES_ENABLED`를 함께 켜고 프론트를 재빌드해야 한다. 운영은 main SHA
+  `165b154b6c653584a42b2ab260f320c2efb785e9`에서 두 값을 `true`로 맞췄고, 성공 지표 베이스라인은 아직 없다.
 - **관련**: [PickAlternativesDesign.md](PickAlternativesDesign.md),
   [Requirements.md US-4A](Requirements.md#us-4a-후보가-없을-때-안전한-조정안을-선택한다)
