@@ -2,6 +2,12 @@ import { forwardRef, useDeferredValue, useEffect, useId, useRef, useState } from
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { requestPick, type PickRequest, type PickResult } from "../api/pick";
+import {
+  isPickAlternativesUnavailable,
+  pickAlternativesEnabled,
+  requestPickAlternatives,
+  type PickAlternative,
+} from "../api/pickAlternatives";
 import { recordPickFeedback, type RecommendationFeedback } from "../api/history";
 import { fetchAllTags, searchTags } from "../api/tags";
 import { fetchDefaultExcludedTagIds } from "../api/pickPreferences";
@@ -9,6 +15,7 @@ import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import PickPresets from "./PickPresets";
 import PickTrends from "./PickTrends";
+import PickAlternatives from "./PickAlternatives";
 import SavePickPresetForm from "./SavePickPresetForm";
 import type { PickPresetExecutionResult } from "../api/pickPresets";
 import { chipAction, chipClass, chipToggle } from "../a11y/chipToggle";
@@ -20,13 +27,29 @@ import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
 const SPIN_MS = 1200; // 슬롯머신 연출 최소 시간 — 응답이 더 빨라도 이만큼은 돌린다
-const DISTANCE_OPTIONS = [300, 500, 1000, 2000];
+const DISTANCE_OPTIONS = [300, 500, 1000, 2000, 5000];
 
 type GeoState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ready"; latitude: number; longitude: number }
   | { status: "error" };
+
+/** Set 의미인 필드는 선택 순서가 달라도 같은 조건으로 비교한다. */
+function pickRequestFingerprint(request: PickRequest) {
+  return JSON.stringify({
+    ...(request.categories && {
+      categories: [...new Set(request.categories.map((value) => value.trim()))].sort(),
+    }),
+    ...(request.tagIds && { tagIds: [...new Set(request.tagIds)].sort((a, b) => a - b) }),
+    ...(request.excludeTagIds && {
+      excludeTagIds: [...new Set(request.excludeTagIds)].sort((a, b) => a - b),
+    }),
+    ...(request.latitude !== undefined && { latitude: request.latitude }),
+    ...(request.longitude !== undefined && { longitude: request.longitude }),
+    ...(request.maxDistance !== undefined && { maxDistance: request.maxDistance }),
+  });
+}
 
 /**
  * 후보가 비었을 때 무엇을 하라고 할 것인가.
@@ -124,6 +147,7 @@ export default function PickPage() {
   const pickMutation = useMutation({
     mutationFn: (request: PickRequest) => requestPick(request),
     onSettled: () => {
+      setAlternativesApplying(false);
       // 응답이 최소 연출 시간보다 빨리 오면 남은 시간만큼 더 돌리고 나서 공개
       const remaining = Math.max(0, SPIN_MS - (Date.now() - spinStartRef.current));
       window.clearTimeout(spinTimerRef.current);
@@ -137,6 +161,13 @@ export default function PickPage() {
   const interactionBusy = busy || presetBusy;
   const pickButton = useRef<HTMLButtonElement>(null);
 
+  const [alternatives, setAlternatives] = useState<PickAlternative[]>([]);
+  const [alternativesLoading, setAlternativesLoading] = useState(false);
+  const [alternativesApplying, setAlternativesApplying] = useState(false);
+  const alternativesAbort = useRef<AbortController | null>(null);
+  const alternativesFingerprint = useRef<string | null>(null);
+  const alternativesPanel = useRef<HTMLDivElement>(null);
+
   const buildRequest = (): PickRequest => ({
     ...(categories.length > 0 && { categories }),
     ...(includeTags.length > 0 && { tagIds: includeTags.map((t) => t.id) }),
@@ -149,6 +180,43 @@ export default function PickPage() {
     }),
   });
 
+  const requestFingerprint = pickRequestFingerprint(buildRequest());
+  useEffect(() => {
+    alternativesAbort.current?.abort();
+    alternativesAbort.current = null;
+    alternativesFingerprint.current = null;
+    setAlternatives([]);
+    setAlternativesLoading(false);
+  }, [requestFingerprint]);
+  useEffect(() => () => alternativesAbort.current?.abort(), []);
+
+  const loadAlternatives = (request: PickRequest) => {
+    if (!pickAlternativesEnabled()) return;
+    alternativesAbort.current?.abort();
+    const controller = new AbortController();
+    const fingerprint = pickRequestFingerprint(request);
+    alternativesAbort.current = controller;
+    alternativesFingerprint.current = fingerprint;
+    setAlternatives([]);
+    setAlternativesLoading(true);
+    requestPickAlternatives(request, controller.signal)
+      .then(({ alternatives: offered }) => {
+        if (controller.signal.aborted || alternativesFingerprint.current !== fingerprint) return;
+        setAlternatives(offered);
+        if (offered.length > 0) window.setTimeout(() => alternativesPanel.current?.focus(), 0);
+      })
+      .catch((requestError) => {
+        if (controller.signal.aborted || alternativesFingerprint.current !== fingerprint) return;
+        // 기능 플래그가 꺼진 서버의 404와 진단 실패는 기존 픽 오류를 가리지 않는다.
+        if (!isPickAlternativesUnavailable(requestError)) setAlternatives([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && alternativesFingerprint.current === fingerprint) {
+          setAlternativesLoading(false);
+        }
+      });
+  };
+
   // 수동으로 돌리면 프리셋 결과는 더 이상 지금 화면의 답이 아니다.
   const spin = () => {
     // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 이 조기 반환이 실제 방어선이다.
@@ -159,6 +227,7 @@ export default function PickPage() {
     // 픽 버튼에서 눌렀다면 이미 그 버튼이므로 아무 일도 일어나지 않는다.
     pickButton.current?.focus();
     setPresetResult(null);
+    setAlternativesApplying(false);
     spinStartRef.current = Date.now();
     setSpinning(true);
     pickMutation.mutate(buildRequest());
@@ -214,6 +283,46 @@ export default function PickPage() {
   // 후보가 비는 이유는 셋이고 할 일이 각각 다르다 — 서버가 코드로 갈라 준다(PickService.diagnoseEmpty).
   const emptyReason = error == null ? undefined : EMPTY_REASONS[apiErrorCode(error) ?? ""];
 
+  const failedRequest = pickMutation.variables;
+  useEffect(() => {
+    if (!revealed || !error || apiErrorCode(error) !== "NO_PICK_CANDIDATES") return;
+    // 픽이 진행되는 동안 필터를 편집할 수 있다. A 조건으로 보낸 픽이 실패한 뒤 화면이 이미
+    // B 조건이면, B를 진단해 A의 실패에 붙이는 것은 서로 다른 요청을 섞는 일이다.
+    if (!failedRequest || pickRequestFingerprint(failedRequest) !== requestFingerprint) {
+      alternativesAbort.current?.abort();
+      alternativesFingerprint.current = null;
+      setAlternatives([]);
+      setAlternativesLoading(false);
+      return;
+    }
+    loadAlternatives(failedRequest);
+    // loadAlternatives는 이 effect가 붙잡은 실패 요청에만 한 번 실행되어야 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealed, error, failedRequest, requestFingerprint]);
+
+  const applyAlternative = (alternative: PickAlternative) => {
+    if (interactionBusy || alternativesApplying) return;
+    alternativesAbort.current?.abort();
+    setAlternatives([]);
+    setAlternativesLoading(false);
+    setAlternativesApplying(true);
+    setPresetResult(null);
+    setPresetSelectionResetKey((current) => current + 1);
+    const nextRequest = buildRequest();
+    if (alternative.changes.categories) {
+      setCategories([]);
+      delete nextRequest.categories;
+    }
+    if (alternative.changes.maxDistance != null) {
+      setMaxDistance(alternative.changes.maxDistance);
+      nextRequest.maxDistance = alternative.changes.maxDistance;
+    }
+    pickButton.current?.focus();
+    spinStartRef.current = Date.now();
+    setSpinning(true);
+    pickMutation.mutate(nextRequest);
+  };
+
   return (
     <div className="page">
       <header className="page-header">
@@ -236,6 +345,8 @@ export default function PickPage() {
             ?? `#${id}`
         }
         onResult={(executed) => {
+          alternativesAbort.current?.abort();
+          setAlternatives([]);
           setPresetResult(executed);
           setSpinning(false);
         }}
@@ -363,6 +474,15 @@ export default function PickPage() {
           </div>
         )}
       </div>
+      {apiErrorCode(error) === "NO_PICK_CANDIDATES" && (
+        <PickAlternatives
+          ref={alternativesPanel}
+          alternatives={alternatives}
+          loading={alternativesLoading}
+          applying={alternativesApplying}
+          onApply={applyAlternative}
+        />
+      )}
       {error && !emptyReason && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
 
       {/* 맨 아래에 둔다. 곁다리 정보라 뽑기 버튼과 결과를 밀어내면 안 되고, 표본이 모이기

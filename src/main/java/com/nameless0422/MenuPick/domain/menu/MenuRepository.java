@@ -9,8 +9,55 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificationExecutor<Menu> {
+
+    /** 메뉴/카테고리/태그를 곱집합 없이 선형 행으로 읽는 대안 진단 projection. */
+    @Query(value = """
+            SELECT m.id AS menuId, 'MENU' AS kind, NULL AS textValue, NULL AS longValue,
+                   FALSE AS categoryMatched
+              FROM menus m
+             WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+            UNION ALL
+            SELECT mc.menu_id, 'CATEGORY', mc.category, NULL,
+                   CASE WHEN :filterCategories = FALSE THEN FALSE
+                        ELSE mc.category IN (:categories) END
+              FROM menu_categories mc JOIN menus m ON m.id = mc.menu_id
+             WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+            UNION ALL
+            SELECT mt.menu_id, 'TAG', NULL, mt.tag_id, FALSE
+              FROM menu_tags mt JOIN menus m ON m.id = mt.menu_id
+             WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+            """, nativeQuery = true)
+    List<PickAlternativeFact> findPickAlternativeFacts(
+            @Param("userId") Long userId,
+            @Param("filterCategories") boolean filterCategories,
+            @Param("categories") Set<String> categories);
+
+    @Query(value = """
+            SELECT mr.menu_id AS menuId, r.latitude AS latitude, r.longitude AS longitude
+              FROM menu_restaurants mr
+              JOIN menus m ON m.id = mr.menu_id
+              JOIN restaurants r ON r.id = mr.restaurant_id
+             WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND r.deleted_at IS NULL
+            """, nativeQuery = true)
+    List<PickAlternativeRestaurant> findPickAlternativeRestaurants(@Param("userId") Long userId);
+
+    interface PickAlternativeFact {
+        Long getMenuId();
+        String getKind();
+        String getTextValue();
+        Long getLongValue();
+        Long getCategoryMatched();
+    }
+
+    interface PickAlternativeRestaurant {
+        Long getMenuId();
+        java.math.BigDecimal getLatitude();
+        java.math.BigDecimal getLongitude();
+    }
 
     List<Menu> findAllByUserIdAndDeletedAtIsNull(Long userId);
 

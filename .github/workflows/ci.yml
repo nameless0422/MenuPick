@@ -196,9 +196,12 @@ jobs:
           platforms: ${{ env.PUBLISH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+          # 저장소 Actions Variable이 없으면 기능을 번들에 넣지 않는다. 서버 플래그만
+          # 켜도 UI가 노출되지 않으므로 출시할 때 두 플래그를 같은 배포에서 맞춘다.
           build-args: |
             VITE_API_BASE_URL=
             VITE_KAKAO_JS_KEY=${{ secrets.VITE_KAKAO_JS_KEY }}
+            VITE_PICK_ALTERNATIVES_ENABLED=${{ vars.VITE_PICK_ALTERNATIVES_ENABLED || 'false' }}
           tags: |
             ${{ steps.image.outputs.name }}-web:${{ github.sha }}
             ${{ steps.image.outputs.name }}-web:latest

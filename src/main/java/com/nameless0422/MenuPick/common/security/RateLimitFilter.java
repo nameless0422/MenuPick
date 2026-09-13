@@ -56,6 +56,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final String PROXY_KEY_PREFIX = "rl:proxy:";
     /** 게스트 데모 픽 버킷 — 미인증 경로라 IP 기준밖에 없다. */
     private static final String DEMO_KEY_PREFIX = "rl:demo:";
+    private static final String ALTERNATIVES_KEY_PREFIX = "rl:pick-alternatives:";
 
     /**
      * 제한 대상 판정은 <b>반드시</b> {@link PathPatternRequestMatcher}로 한다.
@@ -123,6 +124,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final RequestMatcher DEMO_PICK_MATCHER =
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/pick/demo");
+
+    private static final RequestMatcher PICK_ALTERNATIVES_MATCHER =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/alternatives");
 
     private static final List<RequestMatcher> PROXY_RATE_LIMITED_MATCHERS = List.of(
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/kakao/**")
@@ -199,6 +203,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (DEMO_PICK_MATCHER.matches(request)) {
             return new Bucket(DEMO_KEY_PREFIX + resolveClientIp(request),
                     rateLimitProperties.demoLimitPerMinute());
+        }
+
+        if (PICK_ALTERNATIVES_MATCHER.matches(request)) {
+            return new Bucket(ALTERNATIVES_KEY_PREFIX + resolveClientIp(request),
+                    rateLimitProperties.alternativesLimitPerMinute());
         }
 
         if (matchesAny(PROXY_RATE_LIMITED_MATCHERS, request)) {
