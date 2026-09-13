@@ -160,6 +160,8 @@ services:
       # 전 사용자가 버킷 하나를 공유하고 인증 경로가 분당 10회에서 429로 막힌다.
       # web(nginx) 한 겹만 앞에 있으면 1, TLS 종단 프록시가 더 있으면 2 이상.
       RATE_LIMIT_TRUSTED_PROXY_HOPS: ${RATE_LIMIT_TRUSTED_PROXY_HOPS:-1}
+      # 후보 없음 조건 조정 API의 런타임 플래그. 프론트 빌드 플래그와 같은 릴리스에서 맞춘다.
+      PICK_ALTERNATIVES_ENABLED: ${PICK_ALTERNATIVES_ENABLED:-false}
       KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
       KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
       KAKAO_REDIRECT_URI: ${KAKAO_REDIRECT_URI}
