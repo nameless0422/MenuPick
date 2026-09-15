@@ -56,3 +56,24 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.visit-calendar { margin-bottom: 28px; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.visit-calendar-heading-row, .calendar-navigation { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.visit-calendar h2, .visit-calendar p { margin-top: 0; }
+.calendar-navigation strong { min-width: 92px; text-align: center; }
+.calendar-scroll { overflow-x: auto; }
+.calendar-table { width: 100%; min-width: 700px; border-collapse: collapse; table-layout: fixed; }
+.calendar-table caption { padding: 8px; font-weight: 700; }
+.calendar-table th, .calendar-table td { border: 1px solid var(--border); padding: 8px; vertical-align: top; }
+.calendar-table td { height: 92px; }
+.calendar-outside { background: var(--code-bg); }
+.calendar-day { display: block; margin-bottom: 6px; font-weight: 700; }
+.calendar-table ul { margin: 0; padding-left: 16px; }
+.calendar-table li { margin-bottom: 5px; font-size: var(--fs-xs); }
+.calendar-table li span { display: block; color: var(--text); }
+.calendar-notice { color: var(--text); }
+
+@media (max-width: 640px) {
+  .visit-calendar-heading-row { align-items: stretch; flex-direction: column; }
+  .calendar-navigation { justify-content: center; }
+}

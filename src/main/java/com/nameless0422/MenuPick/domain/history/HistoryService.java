@@ -12,6 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -20,6 +24,8 @@ import java.util.List;
 public class HistoryService {
 
     private static final int DEFAULT_DAYS = 7;
+    private static final int VISIT_CALENDAR_LIMIT = 500;
+    private static final YearMonth EARLIEST_CALENDAR_MONTH = YearMonth.of(2000, 1);
 
     private final HistoryRepository historyRepository;
     private final RestaurantRepository restaurantRepository;
@@ -50,6 +56,43 @@ public class HistoryService {
                 .toList();
 
         return new HistoryResponse.HistoryListResponse(summaries, nextCursor, hasNext);
+    }
+
+    public HistoryResponse.VisitCalendarResponse getVisitCalendar(Long userId, String requestedMonth) {
+        YearMonth currentMonth = YearMonth.from(LocalDateTime.now(clock));
+        YearMonth month = parseCalendarMonth(requestedMonth, currentMonth);
+        if (month.isBefore(EARLIEST_CALENDAR_MONTH) || month.isAfter(currentMonth)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+
+        LocalDateTime start = month.atDay(1).atStartOfDay();
+        LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
+        List<HistoryRepository.VisitCalendarRow> rows = historyRepository.findVisitCalendarRows(
+                userId, start, end, PageRequest.of(0, VISIT_CALENDAR_LIMIT + 1));
+        boolean truncated = rows.size() > VISIT_CALENDAR_LIMIT;
+        List<HistoryResponse.VisitCalendarEntry> entries = new ArrayList<>(rows.stream()
+                .limit(VISIT_CALENDAR_LIMIT)
+                .map(row -> new HistoryResponse.VisitCalendarEntry(
+                        row.getId(), row.getMenuName(), row.getRestaurantName(), row.getVisitedAt()))
+                .toList());
+        // DB에서는 최신 500건을 고른 뒤, 달력 계약에 맞게 오래된 순으로 응답한다.
+        Collections.reverse(entries);
+        return new HistoryResponse.VisitCalendarResponse(month, entries, truncated);
+    }
+
+    private YearMonth parseCalendarMonth(String requestedMonth, YearMonth defaultMonth) {
+        if (requestedMonth == null) {
+            return defaultMonth;
+        }
+        // YearMonth.parse alone accepts forms such as +2026-01; the public contract is exactly YYYY-MM.
+        if (!requestedMonth.matches("\\d{4}-(0[1-9]|1[0-2])")) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        try {
+            return YearMonth.parse(requestedMonth);
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
     }
 
     @Transactional

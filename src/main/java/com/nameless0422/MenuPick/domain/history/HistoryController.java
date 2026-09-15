@@ -29,6 +29,13 @@ public class HistoryController {
         return ResponseEntity.ok(ApiResponse.ok(historyService.getHistories(userId, cursor, days, size)));
     }
 
+    @GetMapping("/calendar")
+    public ResponseEntity<ApiResponse<HistoryResponse.VisitCalendarResponse>> getVisitCalendar(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) String month) {
+        return ResponseEntity.ok(ApiResponse.ok(historyService.getVisitCalendar(userId, month)));
+    }
+
     @PatchMapping("/{historyId}/visit")
     public ResponseEntity<ApiResponse<Void>> markVisited(
             @AuthenticationPrincipal Long userId,
