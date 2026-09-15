@@ -301,10 +301,22 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터) | Y |
+| GET | /history/calendar | 방문 처리 기록의 월별 캘린더 조회 (`month=YYYY-MM`, 생략 시 KST 현재 월, 최대 500건) — 구현·검증 완료, 미커밋·미PR·미배포 | Y |
 | PATCH | /history/{historyId}/visit | 방문 여부 업데이트 (바디 선택: restaurantId — 실제 방문 식당 기록) | Y |
 | DELETE | /history/{historyId} | 히스토리 삭제 | Y |
 
 > ℹ️ 초기 설계의 `POST /history`는 제거됨 — 히스토리는 `POST /pick` 처리 시 서버에서 자동 저장되며, 클라이언트는 응답의 historyId로 방문 처리 등 후속 작업을 수행한다.
+
+월별 캘린더는 `visited=true AND visited_at >= monthStart AND visited_at < nextStart`와
+인증 사용자의 소유 조건을 함께 적용한다. repository가 `visitedAt DESC, id DESC`로 501건을
+조회하고 서비스가 최신 500건을 선택해 뒤집으므로 응답은 `visitedAt ASC, id ASC`다.
+501번째 행의 존재로 `truncated`를 계산한다. 상세 계약은
+[VisitCalendarDesign.md](VisitCalendarDesign.md)를 따른다.
+
+2026-09-15 로컬 검증에서 백엔드 773개(실패 0), 캘린더 MySQL query budget 1,
+JaCoCo instruction 93%·branch 81%, Vitest 31개 파일 376개, 프론트 lint·build,
+Playwright 3/3을 통과했고 Astra 코드 리뷰 blocker는 0건이었다. 실사용 성공 지표는 아직
+측정하지 않았으며 커밋·PR·배포 전 상태다.
 
 
 ## 3. 데이터 모델 (ERD 및 테이블 명세, 1NF 적용)
@@ -335,6 +347,10 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 
 > 구현된 픽 조건 조정 대안은 기존 메뉴·분류·태그·식당 관계를 읽기만 한다. 대안이나
 > 진단 결과를 저장하지 않으므로 ERD 변경과 Flyway 마이그레이션은 없다.
+
+> 방문 캘린더도 기존 `histories.visited`·`visited_at`과 보존 이름만 읽으므로 ERD와
+> Flyway 마이그레이션을 변경하지 않는다. 좌표·필터 조건을 조회하지 않으며 기존 히스토리
+> 목록 계약도 그대로 둔다.
 
 
 ### 3.1 엔티티 관계 요약 (1NF 반영)

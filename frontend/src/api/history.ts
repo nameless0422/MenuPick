@@ -28,6 +28,47 @@ export interface HistoryListResponse {
   hasNext: boolean;
 }
 
+export interface HistoryCalendarEntry { id: number; menuName: string | null; restaurantName: string | null; visitedAt: string; }
+export interface HistoryCalendarResponse { month: string; entries: HistoryCalendarEntry[]; truncated: boolean; }
+
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const LOCAL_DATE_TIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,9})?$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStrictLocalDateTime(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = LOCAL_DATE_TIME_PATTERN.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1, 4).map(Number);
+  const check = new Date(Date.UTC(year, month - 1, day));
+  return check.getUTCFullYear() === year && check.getUTCMonth() === month - 1 && check.getUTCDate() === day;
+}
+
+export function validateHistoryCalendar(value: unknown, requestedMonth: string): HistoryCalendarResponse {
+  if (!MONTH_PATTERN.test(requestedMonth) || !isRecord(value)) throw new Error("방문 기록 달력 응답 형식이 올바르지 않습니다.");
+  const { month, entries, truncated } = value;
+  if (month !== requestedMonth || !Array.isArray(entries) || entries.length > 500 || typeof truncated !== "boolean") {
+    throw new Error("방문 기록 달력 응답 형식이 올바르지 않습니다.");
+  }
+  for (const entry of entries) {
+    if (!isRecord(entry) || !Number.isSafeInteger(entry.id) || Number(entry.id) <= 0
+      || !(typeof entry.menuName === "string" || entry.menuName === null)
+      || !(typeof entry.restaurantName === "string" || entry.restaurantName === null)
+      || !isStrictLocalDateTime(entry.visitedAt) || !entry.visitedAt.startsWith(`${requestedMonth}-`)) {
+      throw new Error("방문 기록 달력 응답 형식이 올바르지 않습니다.");
+    }
+  }
+  return value as unknown as HistoryCalendarResponse;
+}
+
+export async function fetchHistoryCalendar(month: string, signal?: AbortSignal) {
+  const res = await http.get<ApiResponse<unknown>>("/api/v1/history/calendar", { params: { month }, signal });
+  return validateHistoryCalendar(unwrap(res), month);
+}
+
 export async function fetchHistories(cursor?: number, days?: number, size = 20) {
   const res = await http.get<ApiResponse<HistoryListResponse>>("/api/v1/history", {
     params: { cursor, days, size },

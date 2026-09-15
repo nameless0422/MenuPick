@@ -173,6 +173,14 @@ async function installFakeApi(page: Page) {
         hasNext: false,
       });
     }
+    if (path === "/api/v1/history/calendar" && method === "GET") {
+      const month = url.searchParams.get("month")!;
+      return api(route, {
+        month,
+        entries: visited ? [{ id: 1, menuName: menu.name, restaurantName: restaurant.name, visitedAt: `${month}-08T12:00:00` }] : [],
+        truncated: false,
+      });
+    }
     if (path === "/api/v1/history/1/visit" && method === "PATCH") {
       visited = true;
       return api(route, null);
@@ -225,4 +233,13 @@ test("가입부터 방문 처리까지 핵심 사용자 여정을 완료한다",
   await page.getByRole("button", { name: `${menu.name} 방문했어요` }).click();
   await expect.poll(state.isVisited).toBe(true);
   await expect(page.getByText("방문완료", { exact: true })).toBeVisible();
+  const calendar = page.getByRole("region", { name: "방문 기록 달력" });
+  await expect(calendar.getByRole("heading", { name: "방문 기록 달력" })).toBeVisible();
+  const currentMonthTable = calendar.getByRole("table", { name: /방문했어요 기록/ });
+  await expect(currentMonthTable.getByText(menu.name, { exact: true })).toBeVisible();
+  await expect(currentMonthTable.getByText(restaurant.name, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "다음 달" })).toBeDisabled();
+  await page.getByRole("button", { name: "이전 달" }).click();
+  await expect(page.getByRole("button", { name: "다음 달" })).toBeEnabled();
+  await expect(page.getByRole("table", { name: /방문했어요 기록/ })).toBeVisible();
 });

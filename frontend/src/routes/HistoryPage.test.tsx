@@ -7,6 +7,8 @@ import { fetchHistories, fetchMenuRestaurants } from "../api/history";
 
 vi.mock("../api/history", () => ({
   fetchHistories: vi.fn(),
+  fetchHistoryCalendar: vi.fn().mockResolvedValue({ month: "2026-09", entries: [], truncated: false }),
+  validateHistoryCalendar: vi.fn(),
   fetchMenuRestaurants: vi.fn(),
   markVisited: vi.fn(),
   deleteHistory: vi.fn(),

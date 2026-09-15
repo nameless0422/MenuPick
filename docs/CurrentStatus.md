@@ -1,12 +1,26 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-14 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-15 / 기준 브랜치: `feat/visit-calendar`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-09-15 방문 캘린더 — 구현·검증 완료, 미커밋·미PR·미배포
+
+- 인증 사용자의 `visited=true` 기록을 월 단위로 읽는 API와 semantic table 화면을 구현했다.
+- 날짜 의미는 실제 식사일이 아니라 **‘방문했어요를 누른 날짜’**다.
+- KST 현재 월 기본값, `2000-01` 하한, 미래 월 400을 적용한다. 초과 시 최신 500건을
+  시간 오름차순으로 반환하고 `truncated`와 ‘최근 500개’ 안내를 제공한다.
+- 기존 히스토리 이름 보존 정책을 재사용하며 DB 마이그레이션, 좌표·필터 조건 조회,
+  기존 히스토리 목록 변경은 없다.
+- 백엔드 773개(실패 0), MySQL query budget 1, JaCoCo instruction 93%·branch 81%,
+  Vitest 31개 파일 376개, lint·build, Playwright 3/3을 통과했고 Astra blocker는 0건이다.
+- 아직 커밋·PR·배포하지 않았으며 실사용 성공 지표도 측정하지 않았다. 운영 기능으로
+  표시하지 않는다. 상세는
+  [VisitCalendarDesign.md](VisitCalendarDesign.md)를 따른다.
 
 - 이메일·카카오·구글 로그인, 메일 인증, 비밀번호 재설정, 계정 연동·탈퇴·복구 구현 완료
 - 메뉴·카테고리·태그·식당 관리와 메뉴-식당 연결, 별점·메모 구현 완료
