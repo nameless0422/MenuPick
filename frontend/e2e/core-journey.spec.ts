@@ -167,6 +167,7 @@ async function installFakeApi(page: Page) {
           isVisited: visited,
           recommendedAt: now,
           visitedAt: visited ? now : null,
+          recommendationFeedback: null,
           filterConditions: [],
         }] : [],
         nextCursor: null,
