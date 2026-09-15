@@ -147,6 +147,9 @@ class ApiSerializationIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.histories.length()").value(1))
                 .andExpect(jsonPath("$.data.histories[0].menuName").value("돈까스"))
                 .andExpect(jsonPath("$.data.histories[0].isVisited").value(false))
+                // 아직 누르지 않은 피드백은 필드가 빠지지 않고 null로 온다. 픽 화면의 방문 확인
+                // 질문이 "거절한 픽인가"를 이 필드로 가르므로, 필드 부재와 null이 섞이면 안 된다.
+                .andExpect(jsonPath("$.data.histories[0].recommendationFeedback").isEmpty())
                 .andExpect(jsonPath("$.data.histories[0].recommendedAt").exists())
                 .andExpect(jsonPath("$.data.histories[0].filterConditions[?(@.filterType == 'CATEGORY')].filterValue")
                         .value("일식"))

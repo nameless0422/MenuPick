@@ -21,6 +21,10 @@ async function installApi(page: Page, alternatives: unknown[]) {
     if (path === "/api/v1/tags") return response(route, []);
     if (path === "/api/v1/pick/preferences") return response(route, []);
     if (path === "/api/v1/pick/presets") return response(route, { presets: [], limit: 10 });
+    // 픽 화면의 방문 확인 질문이 최근 픽을 부른다. 기록이 없으면 질문이 그려지지 않는다.
+    if (path === "/api/v1/history" && method === "GET") {
+      return response(route, { histories: [], nextCursor: null, hasNext: false });
+    }
     if (path === "/api/v1/trends") return response(route, {
       status: "DISABLED", categories: [], menus: [], windowDays: 7, minUsers: 5, maxLabels: 10,
     });

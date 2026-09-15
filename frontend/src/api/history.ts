@@ -19,6 +19,8 @@ export interface HistorySummary {
   isVisited: boolean;
   recommendedAt: string;
   visitedAt: string | null;
+  /** 픽 결과에서 누른 수락/거절. 누르지 않았으면 null. */
+  recommendationFeedback: RecommendationFeedback | null;
   filterConditions: HistoryFilterCondition[];
 }
 

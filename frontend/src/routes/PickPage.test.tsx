@@ -5,7 +5,7 @@ import { renderWithProviders } from "../test/renderWithProviders";
 import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
 import { requestPickAlternatives } from "../api/pickAlternatives";
-import { recordPickFeedback } from "../api/history";
+import { fetchHistories, recordPickFeedback } from "../api/history";
 import { searchTags } from "../api/tags";
 import { fetchTrends } from "../api/trends";
 import { executePickPreset, fetchPickPresets } from "../api/pickPresets";
@@ -17,7 +17,13 @@ vi.mock("../api/pickAlternatives", async (importOriginal) => ({
   pickAlternativesEnabled: () => true,
   requestPickAlternatives: vi.fn(),
 }));
-vi.mock("../api/history", () => ({ recordPickFeedback: vi.fn() }));
+// 방문 확인 질문(VisitPrompt)도 마운트되자마자 최근 픽을 부른다. 빈 목록이면 질문을 그리지 않아
+// 이 파일의 다른 테스트가 보는 화면이 그대로다. 질문 자체는 VisitPrompt.test.tsx가 검증한다.
+vi.mock("../api/history", () => ({
+  recordPickFeedback: vi.fn(),
+  fetchHistories: vi.fn().mockResolvedValue({ histories: [], nextCursor: null, hasNext: false }),
+  markVisited: vi.fn(),
+}));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]), fetchAllTags: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/pickPreferences", () => ({ fetchDefaultExcludedTagIds: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/trends", () => ({ fetchTrends: vi.fn() }));
@@ -35,6 +41,7 @@ vi.mock("../api/pickPresets", async (importOriginal) => ({
 const requestPickMock = vi.mocked(requestPick);
 const requestPickAlternativesMock = vi.mocked(requestPickAlternatives);
 const recordPickFeedbackMock = vi.mocked(recordPickFeedback);
+const fetchHistoriesMock = vi.mocked(fetchHistories);
 const searchTagsMock = vi.mocked(searchTags);
 const fetchTrendsMock = vi.mocked(fetchTrends);
 const fetchPickPresetsMock = vi.mocked(fetchPickPresets);
@@ -392,6 +399,40 @@ describe("필터 입력의 이름", () => {
  * 일어났는지 알 수 없다. 특히 뽑는 동안은 최소 1.2초가 <b>완전한 무음</b>이었다:
  * 돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다.
  */
+describe("지난번 픽 방문 확인", () => {
+  /** 서버가 주는 KST LocalDateTime 문자열. 실제 시계 기준 두 시간 전으로 만든다. */
+  const kstTwoHoursAgo = () =>
+    new Date(Date.now() - 2 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).toISOString().slice(0, 19);
+
+  it("돌아온 사용자에게 먼저 묻고, 뽑기를 시작하면 질문을 거둔다", async () => {
+    const user = userEvent.setup();
+    fetchHistoriesMock.mockResolvedValueOnce({
+      histories: [{
+        id: 5,
+        menuName: "된장찌개",
+        restaurantName: null,
+        isVisited: false,
+        recommendedAt: kstTwoHoursAgo(),
+        visitedAt: null,
+        recommendationFeedback: null,
+        filterConditions: [],
+      }],
+      nextCursor: null,
+      hasNext: false,
+    });
+    renderWithProviders(<PickPage />);
+
+    expect(await screen.findByRole("heading", { name: /된장찌개, 드셨어요\?/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /오늘의 메뉴 뽑기/ }));
+
+    // 새 픽이 생기면 "지난번"이 바뀐다 — 옛 픽을 계속 묻지 않는다.
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: /된장찌개, 드셨어요\?/ })).toBeNull(),
+    );
+  });
+});
+
 describe("픽 진행·결과 통지", () => {
   it("뽑는 동안 무음으로 두지 않는다", async () => {
     const user = userEvent.setup();

@@ -300,7 +300,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터) | Y |
+| GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터). 항목에 `recommendationFeedback` 포함 | Y |
 | GET | /history/calendar | 방문 처리 기록의 월별 캘린더 조회 (`month=YYYY-MM`, 생략 시 KST 현재 월, 최대 500건) — 2026-09-15 운영 배포 | Y |
 | PATCH | /history/{historyId}/visit | 방문 여부 업데이트 (바디 선택: restaurantId — 실제 방문 식당 기록) | Y |
 | DELETE | /history/{historyId} | 히스토리 삭제 | Y |

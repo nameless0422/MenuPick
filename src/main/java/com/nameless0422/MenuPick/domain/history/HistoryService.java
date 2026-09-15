@@ -152,6 +152,7 @@ public class HistoryService {
                 history.isVisited(),
                 history.getRecommendedAt(),
                 history.getVisitedAt(),
+                history.getRecommendationFeedback(),
                 conditions
         );
     }
