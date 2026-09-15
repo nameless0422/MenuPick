@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 
 import static org.mockito.BDDMockito.given;
@@ -24,6 +25,52 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HistoryControllerTest extends AbstractControllerTest {
 
     @MockitoBean private HistoryService historyService;
+
+    @Test
+    @DisplayName("GET /api/v1/history/calendar - 월별 방문 기록 조회")
+    void getVisitCalendar_success() throws Exception {
+        var response = new HistoryResponse.VisitCalendarResponse(YearMonth.of(2026, 1), List.of(
+                new HistoryResponse.VisitCalendarEntry(7L, "김치찌개", null,
+                        LocalDateTime.of(2026, 1, 3, 12, 0))), false);
+        given(historyService.getVisitCalendar(1L, "2026-01")).willReturn(response);
+
+        mockMvc.perform(get("/api/v1/history/calendar").with(authentication(AUTH)).param("month", "2026-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.month").value("2026-01"))
+                .andExpect(jsonPath("$.data.entries[0].id").value(7))
+                .andExpect(jsonPath("$.data.entries[0].menuName").value("김치찌개"))
+                .andExpect(jsonPath("$.data.entries[0].restaurantName").doesNotExist())
+                .andExpect(jsonPath("$.data.truncated").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history/calendar - month 생략 전달")
+    void getVisitCalendar_defaultMonth() throws Exception {
+        given(historyService.getVisitCalendar(1L, null)).willReturn(
+                new HistoryResponse.VisitCalendarResponse(YearMonth.of(2026, 1), List.of(), false));
+        mockMvc.perform(get("/api/v1/history/calendar").with(authentication(AUTH)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.month").value("2026-01"));
+        verify(historyService).getVisitCalendar(1L, null);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history/calendar - 형식 오류와 미래 월은 400")
+    void getVisitCalendar_invalidMonth() throws Exception {
+        given(historyService.getVisitCalendar(1L, "2026-1"))
+                .willThrow(new BusinessException(ErrorCode.INVALID_INPUT));
+        given(historyService.getVisitCalendar(1L, "2027-01"))
+                .willThrow(new BusinessException(ErrorCode.INVALID_INPUT));
+        mockMvc.perform(get("/api/v1/history/calendar").with(authentication(AUTH)).param("month", "2026-1"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errorCode").value("INVALID_INPUT"));
+        mockMvc.perform(get("/api/v1/history/calendar").with(authentication(AUTH)).param("month", "2027-01"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history/calendar - 미인증 시 401")
+    void getVisitCalendar_unauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/history/calendar")).andExpect(status().isUnauthorized());
+    }
 
     @Test
     @DisplayName("GET /api/v1/history - 히스토리 목록 조회 성공")

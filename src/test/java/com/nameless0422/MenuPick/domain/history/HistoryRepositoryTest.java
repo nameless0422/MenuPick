@@ -2,6 +2,8 @@ package com.nameless0422.MenuPick.domain.history;
 
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -38,6 +41,9 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
 
     @Autowired
     private MenuRepository menuRepository;
+
+    @Autowired
+    private RestaurantRepository restaurantRepository;
 
     private User user;
     private Menu menu;
@@ -86,6 +92,39 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
         History found = historyRepository.findById(history.getId()).orElseThrow();
         assertThat(found.isVisited()).isTrue();
         assertThat(found.getVisitedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("방문 달력 projection은 소유자·방문·월 경계만 포함하고 시각/id 순으로 이름을 보존한다")
+    void findVisitCalendarRows_filtersBoundariesAndProjectsNames() {
+        LocalDateTime start = LocalDateTime.of(2026, 1, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 2, 1, 0, 0);
+        Restaurant restaurant = restaurantRepository.save(Restaurant.builder()
+                .user(user).name("방문식당").address("서울")
+                .latitude(new BigDecimal("37.5665")).longitude(new BigDecimal("126.9780")).build());
+        User other = userRepository.save(User.builder()
+                .email("calendar-other@example.com").nickname("달력다른유저").build());
+        Menu otherMenu = menuRepository.save(Menu.builder().user(other).name("남의메뉴").weight(1).build());
+
+        saveVisitedHistory(user, menu, restaurant, start.minusSeconds(1));
+        History first = saveVisitedHistory(user, menu, restaurant, start);
+        History second = saveVisitedHistory(user, null, null, start);
+        historyRepository.save(History.builder().user(user).menu(menu).recommendedAt(start).build());
+        saveVisitedHistory(other, otherMenu, null, start.plusDays(1));
+        saveVisitedHistory(user, menu, restaurant, end);
+        menu.softDelete(start.plusDays(2));
+        restaurant.softDelete(start.plusDays(2));
+        historyRepository.flush();
+
+        List<HistoryRepository.VisitCalendarRow> rows = historyRepository.findVisitCalendarRows(
+                user.getId(), start, end, PageRequest.of(0, 501));
+
+        assertThat(rows).extracting(HistoryRepository.VisitCalendarRow::getId)
+                .containsExactly(second.getId(), first.getId());
+        assertThat(rows.get(1).getMenuName()).isEqualTo("김치찌개");
+        assertThat(rows.get(1).getRestaurantName()).isEqualTo("방문식당");
+        assertThat(rows.get(0).getMenuName()).isNull();
+        assertThat(rows.get(0).getRestaurantName()).isNull();
     }
 
     /**
@@ -180,6 +219,14 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
         if (feedback != null) {
             history.recordFeedback(feedback);
         }
+        return historyRepository.save(history);
+    }
+
+    private History saveVisitedHistory(User owner, Menu pickedMenu, Restaurant pickedRestaurant,
+                                       LocalDateTime visitedAt) {
+        History history = History.builder().user(owner).menu(pickedMenu).restaurant(pickedRestaurant)
+                .recommendedAt(visitedAt.minusHours(1)).build();
+        history.markVisited(visitedAt);
         return historyRepository.save(history);
     }
 }

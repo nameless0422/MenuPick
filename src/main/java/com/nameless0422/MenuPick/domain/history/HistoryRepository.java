@@ -29,6 +29,25 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
 
+    /** 방문 처리 시각 범위로만 읽으며 연관 엔티티 이름까지 한 SQL에서 projection한다. */
+    @Query("select h.id as id, m.name as menuName, r.name as restaurantName, h.visitedAt as visitedAt " +
+            "from History h left join h.menu m left join h.restaurant r " +
+            "where h.user.id = :userId and h.isVisited = true " +
+            "and h.visitedAt >= :start and h.visitedAt < :end " +
+            "order by h.visitedAt desc, h.id desc")
+    List<VisitCalendarRow> findVisitCalendarRows(
+            @Param("userId") Long userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            Pageable pageable);
+
+    interface VisitCalendarRow {
+        Long getId();
+        String getMenuName();
+        String getRestaurantName();
+        LocalDateTime getVisitedAt();
+    }
+
     /**
      * 개인화에 필요한 최근 추천 시각과 피드백 합계를 메뉴별 한 행으로 돌려준다.
      * 이벤트를 전부 애플리케이션으로 올리지 않고 DB에서 먼저 상쇄해 요청당 조회를 한 번으로

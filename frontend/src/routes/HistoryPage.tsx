@@ -13,6 +13,7 @@ import {
 import { fetchMenus } from "../api/menus";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import "./HistoryPage.css";
+import VisitCalendar from "./VisitCalendar";
 
 // "전체" 필터는 백엔드에 별도 옵션이 없어 충분히 큰 값을 넘겨 사실상 전체 기간을 조회한다.
 // days를 아예 생략하면 백엔드가 7일로 대체하고(HistoryService), 0 이하는 @Min(1)에 걸려 400이다.
@@ -80,7 +81,10 @@ export default function HistoryPage() {
     menuIdByName.set(menu.name, menuIdByName.has(menu.name) ? null : menu.id);
   }
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["history"] });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["history"] });
+    void queryClient.invalidateQueries({ queryKey: ["history-calendar"] });
+  };
 
   const histories = historyQuery.data?.pages.flatMap((page) => page.histories) ?? [];
 
@@ -120,6 +124,8 @@ export default function HistoryPage() {
             무시된다. -1이므로 Tab 순서에는 끼지 않는다. */}
         <h1 ref={headingRef} tabIndex={-1}>픽 히스토리</h1>
       </header>
+
+      <VisitCalendar />
 
       {/* 세 버튼은 "조회 기간"이라는 하나의 질문에 대한 선택지인데, 묶음에 이름이 없으면
           스크린리더에는 "7일 버튼, 30일 버튼, 전체 버튼"이 페이지에 그냥 흩어져 있는 것으로

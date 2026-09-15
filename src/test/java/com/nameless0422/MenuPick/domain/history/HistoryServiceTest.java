@@ -21,6 +21,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -50,6 +52,55 @@ class HistoryServiceTest {
     private User user;
     private Menu menu;
     private Restaurant restaurant;
+
+    @Test
+    @DisplayName("방문 달력 - 생략 월은 KST 현재 월이며 정확한 반개구간과 501건을 조회한다")
+    void getVisitCalendar_defaultMonthAndBoundaries() {
+        historyService.getVisitCalendar(1L, null);
+
+        var start = ArgumentCaptor.forClass(LocalDateTime.class);
+        var end = ArgumentCaptor.forClass(LocalDateTime.class);
+        var pageable = ArgumentCaptor.forClass(PageRequest.class);
+        verify(historyRepository).findVisitCalendarRows(eq(1L), start.capture(), end.capture(), pageable.capture());
+        assertThat(start.getValue()).isEqualTo(LocalDateTime.of(2026, 1, 1, 0, 0));
+        assertThat(end.getValue()).isEqualTo(LocalDateTime.of(2026, 2, 1, 0, 0));
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(501);
+    }
+
+    @Test
+    @DisplayName("방문 달력 - 501번째 행은 잘라내고 truncated를 표시한다")
+    void getVisitCalendar_truncatesAt500() {
+        List<HistoryRepository.VisitCalendarRow> rows = new ArrayList<>();
+        for (long id = 501; id >= 1; id--) {
+            long rowId = id;
+            rows.add(new HistoryRepository.VisitCalendarRow() {
+                public Long getId() { return rowId; }
+                public String getMenuName() { return "메뉴" + rowId; }
+                public String getRestaurantName() { return null; }
+                public LocalDateTime getVisitedAt() { return NOW.plusSeconds(rowId); }
+            });
+        }
+        given(historyRepository.findVisitCalendarRows(eq(1L), any(), any(), any())).willReturn(rows);
+
+        var result = historyService.getVisitCalendar(1L, "2026-01");
+
+        assertThat(result.month()).isEqualTo(YearMonth.of(2026, 1));
+        assertThat(result.entries()).hasSize(500);
+        assertThat(result.entries()).extracting(HistoryResponse.VisitCalendarEntry::id)
+                .startsWith(2L).endsWith(501L);
+        assertThat(result.truncated()).isTrue();
+    }
+
+    @Test
+    @DisplayName("방문 달력 - 엄격하지 않은 형식, 2000-01 이전, 미래 월을 거절한다")
+    void getVisitCalendar_rejectsInvalidRange() {
+        assertThatThrownBy(() -> historyService.getVisitCalendar(1L, "2026-1"))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        assertThatThrownBy(() -> historyService.getVisitCalendar(1L, "1999-12"))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        assertThatThrownBy(() -> historyService.getVisitCalendar(1L, "2026-02"))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+    }
 
     @BeforeEach
     void setUp() {
