@@ -1,6 +1,6 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-15 / 기준 브랜치: `feat/visit-calendar`**
+**최종 갱신: 2026-09-15 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
@@ -8,7 +8,7 @@
 
 ## 제품 완성도
 
-### 2026-09-15 방문 캘린더 — 구현·검증 완료, 미커밋·미PR·미배포
+### 2026-09-15 방문 캘린더 — 운영 배포 완료
 
 - 인증 사용자의 `visited=true` 기록을 월 단위로 읽는 API와 semantic table 화면을 구현했다.
 - 날짜 의미는 실제 식사일이 아니라 **‘방문했어요를 누른 날짜’**다.
@@ -18,8 +18,10 @@
   기존 히스토리 목록 변경은 없다.
 - 백엔드 773개(실패 0), MySQL query budget 1, JaCoCo instruction 93%·branch 81%,
   Vitest 31개 파일 376개, lint·build, Playwright 3/3을 통과했고 Astra blocker는 0건이다.
-- 아직 커밋·PR·배포하지 않았으며 실사용 성공 지표도 측정하지 않았다. 운영 기능으로
-  표시하지 않는다. 상세는
+- PR #260·#261로 병합해 `main` SHA `bc518a5856fcde8236a2e2c66cfa16b50edc8f91`로 2026-09-15 운영 배포했다.
+  배포 전 DB 백업(`gzip -t` 통과), app·web healthy, Flyway 현재 버전 14(신규 마이그레이션 없음),
+  HTTPS 200, unauth API 401, 배포 번들의 캘린더 코드 포함을 확인했다. 기능 플래그는 없다.
+- 실사용 성공 지표는 아직 측정하지 않았다. 상세는
   [VisitCalendarDesign.md](VisitCalendarDesign.md)를 따른다.
 
 - 이메일·카카오·구글 로그인, 메일 인증, 비밀번호 재설정, 계정 연동·탈퇴·복구 구현 완료

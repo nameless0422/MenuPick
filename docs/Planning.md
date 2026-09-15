@@ -220,7 +220,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | POST | /pick | 필터(카테고리/태그/거리) 기반 가중치 랜덤 추천. 히스토리 자동 저장 후 historyId를 응답에 포함 | Y |
-| POST | /pick/alternatives | 수동 픽의 `NO_PICK_CANDIDATES`에 한해 안전한 최소 조건 조정안 조회. **구현 완료·기본 비활성·미배포** | Y |
+| POST | /pick/alternatives | 수동 픽의 `NO_PICK_CANDIDATES`에 한해 안전한 최소 조건 조정안 조회. **2026-09-14 운영 배포·운영 활성화(코드 기본값 비활성)** | Y |
 
 | GET | /pick/demo | 게스트 데모 픽. 고정 샘플에서 랜덤 반환, 저장 없음 (4.3) | N |
 
@@ -301,7 +301,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터) | Y |
-| GET | /history/calendar | 방문 처리 기록의 월별 캘린더 조회 (`month=YYYY-MM`, 생략 시 KST 현재 월, 최대 500건) — 구현·검증 완료, 미커밋·미PR·미배포 | Y |
+| GET | /history/calendar | 방문 처리 기록의 월별 캘린더 조회 (`month=YYYY-MM`, 생략 시 KST 현재 월, 최대 500건) — 2026-09-15 운영 배포 | Y |
 | PATCH | /history/{historyId}/visit | 방문 여부 업데이트 (바디 선택: restaurantId — 실제 방문 식당 기록) | Y |
 | DELETE | /history/{historyId} | 히스토리 삭제 | Y |
 
@@ -1493,7 +1493,7 @@ Spring Actuator: **운영은 관리 포트를 분리한다**(`management.server.
 | Phase 4 | MDC traceId (7.3) | 관측성 | ✅ 완료 |
 | Phase 4 | API 호출 로그 (7.3) | 관측성 | ✅ 완료 — `AccessLogFilter` |
 | Phase 4 | APM 연동 (Sentry/Datadog 등) | 관측성 | ⬜ 예정 |
-| Phase 7 | 픽 후보 없음 안전한 조건 조정 대안 | 조건 때문에 막힌 수동 픽 완료율 개선 | ✅ 구현 완료·기본 비활성·미배포 ([상세](PickAlternativesDesign.md)) |
+| Phase 7 | 픽 후보 없음 안전한 조건 조정 대안 | 조건 때문에 막힌 수동 픽 완료율 개선 | ✅ 2026-09-14 운영 배포·운영 활성화 ([상세](PickAlternativesDesign.md)) |
 
 본 문서는 개발 진행에 따라 지속 업데이트한다.
 
