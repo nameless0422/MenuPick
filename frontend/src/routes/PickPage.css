@@ -374,3 +374,17 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* 지난번 픽 방문 확인. 픽 화면 맨 위의 짧은 질문 한 줄이라 트렌드 절처럼 두드러진 테두리를
+   두지 않는다 — 뽑기 버튼보다 눈에 먼저 걸리면 안 된다. */
+.visit-prompt {
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.visit-prompt h2,
+.visit-prompt p {
+  margin: 0;
+  font-size: var(--fs-md, 1rem);
+  font-weight: 600;
+}

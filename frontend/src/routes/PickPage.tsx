@@ -15,6 +15,7 @@ import type { TagSummary } from "../api/menus";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import PickPresets from "./PickPresets";
 import PickTrends from "./PickTrends";
+import VisitPrompt from "./VisitPrompt";
 import PickAlternatives from "./PickAlternatives";
 import SavePickPresetForm from "./SavePickPresetForm";
 import type { PickPresetExecutionResult } from "../api/pickPresets";
@@ -328,6 +329,10 @@ export default function PickPage() {
       <header className="page-header">
         <h1>오늘 뭐 먹지</h1>
       </header>
+
+      {/* 지난번 픽을 먹었는지 묻는다. 맨 위에 두는 이유는 돌아온 직후가 대답을 받을 유일한
+          때이기 때문이다 — 뽑기를 시작하면 "지난번"이 바뀌므로 질문을 거둔다. */}
+      <VisitPrompt hidden={interactionBusy || !pickMutation.isIdle || presetResult != null} />
 
       {/* 이름 없는 <section>은 랜드마크로 노출되지 않는다 — 스크린리더의 랜드마크 목록에
           잡히지 않아 실질적으로 <div>였고, 필터 뭉치를 건너뛰어 뽑기 버튼으로 가거나

@@ -27,6 +27,7 @@ const KIMCHI_PICK = {
   isVisited: false,
   recommendedAt: "2026-08-21T19:30:00",
   visitedAt: null,
+  recommendationFeedback: null,
   filterConditions: [],
 };
 
