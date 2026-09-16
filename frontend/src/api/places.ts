@@ -29,6 +29,34 @@ export interface PlaceSearchResult {
   documents: KakaoPlace[];
 }
 
+/**
+ * 현재 위치 주변에서 키워드로 찾는다. 가까운 순이며 결과마다 `distance`(m, 문자열)가 채워진다.
+ *
+ * 반경은 2km가 기본이다 — 픽 거리 필터의 최대 단계(2000m)와 같고, 걸어서 점심 먹으러 갈
+ * 범위를 넘는 결과는 "근처"라고 부르기 어렵다.
+ */
+export async function searchNearbyPlaces(
+  query: string,
+  position: { latitude: number; longitude: number },
+  radius = 2000,
+) {
+  const res = await http.get<ApiResponse<PlaceSearchResult>>(
+    "/api/v1/kakao/search/keyword",
+    {
+      params: {
+        query,
+        // 카카오 규약: x=경도, y=위도.
+        x: String(position.longitude),
+        y: String(position.latitude),
+        radius,
+        sort: "distance",
+        size: 5,
+      },
+    },
+  );
+  return unwrap(res);
+}
+
 export async function searchPlacesByKeyword(query: string) {
   const res = await http.get<ApiResponse<PlaceSearchResult>>(
     "/api/v1/kakao/search/keyword",

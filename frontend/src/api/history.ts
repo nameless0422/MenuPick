@@ -1,5 +1,6 @@
 import { http, unwrap, type ApiResponse } from "./http";
 import { fetchMenuRestaurants as fetchMenuRestaurantList } from "./menuRestaurants";
+import type { KakaoPlace } from "./places";
 
 // 백엔드 PickService가 실제로 기록하는 filterType 값 (History.java / PickService.java 참고).
 // CATEGORY: 카테고리명 그대로, TAG_INCLUDE/TAG_EXCLUDE: 태그 "이름"(조회 실패 시에만 ID 문자열
@@ -91,6 +92,33 @@ export async function deleteHistory(historyId: number) {
 }
 
 export type RecommendationFeedback = "ACCEPTED" | "REJECTED";
+
+export interface PlaceChoiceResult {
+  restaurantId: number;
+  restaurantName: string;
+  /** 이번에 처음 저장한 식당인가. false면 이미 저장해 둔 식당을 썼다. */
+  restaurantCreated: boolean;
+  /** 이번에 메뉴와 새로 연결했는가. false면 이미 연결돼 있었다. */
+  linkCreated: boolean;
+}
+
+/**
+ * 뽑은 메뉴를 먹으러 갈 식당을 주변 검색 결과에서 고른다. 서버가 식당 저장·메뉴 연결·픽 기록을
+ * 한 번에 처리한다(HistoryPlaceService). 방문 처리는 하지 않는다 — 아직 가기 전이다.
+ */
+export async function choosePickPlace(historyId: number, place: KakaoPlace) {
+  const res = await http.post<ApiResponse<PlaceChoiceResult>>(`/api/v1/history/${historyId}/place`, {
+    name: place.place_name,
+    address: place.road_address_name || place.address_name || null,
+    phone: place.phone || null,
+    // 카카오 좌표는 x=경도, y=위도 (문자열)
+    latitude: Number(place.y),
+    longitude: Number(place.x),
+    naverUrl: place.place_url || null,
+    kakaoPlaceId: place.id,
+  });
+  return unwrap(res);
+}
 
 export async function recordPickFeedback(historyId: number, feedback: RecommendationFeedback) {
   await http.patch<ApiResponse<null>>(`/api/v1/history/${historyId}/feedback`, { feedback });

@@ -24,6 +24,8 @@ import { useRadioGroup } from "../a11y/radioGroup";
 import { CATEGORY_PRESETS } from "../constants";
 import KakaoMap from "../maps/KakaoMap";
 import { addTrendCategory } from "./trendValidation";
+import { formatDistance } from "./formatDistance";
+import NearbyPlaces from "./NearbyPlaces";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -592,6 +594,10 @@ function PickResultCard({
         </>
       )}
 
+      {/* 연결된 식당이 있어도 보여준다. 연결은 예전에 가 본 곳이고, 오늘은 근처 다른 곳이
+          나을 수 있다. 연결이 0곳이면 이것이 "어디서 먹지"에 답하는 유일한 경로다. */}
+      <NearbyPlaces historyId={result.historyId} menuId={menu.id} menuName={menu.name} />
+
       <div className="card-actions">
         <button onClick={() => feedbackMutation.mutate("ACCEPTED")}
           disabled={feedbackMutation.isPending} aria-pressed={feedback === "ACCEPTED"}>
@@ -781,10 +787,4 @@ function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-function formatDistance(meters: number) {
-  if (meters >= 1000) {
-    const km = meters / 1000;
-    return `${Number.isInteger(km) ? km : km.toFixed(1)}km`;
-  }
-  return `${Math.round(meters)}m`;
-}
+
