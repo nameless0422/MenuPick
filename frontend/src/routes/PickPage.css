@@ -388,3 +388,25 @@
   font-size: var(--fs-md, 1rem);
   font-weight: 600;
 }
+
+/* 결과 카드 안의 주변 식당 찾기. 카드 본문의 한 절이라 별도 테두리 없이 위쪽 구분선만 둔다. */
+.nearby-places {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.nearby-places h3,
+.nearby-places p {
+  margin: 0;
+}
+
+.nearby-places h3 {
+  font-size: var(--fs-md);
+}
+
+.nearby-places > button {
+  align-self: flex-start;
+}

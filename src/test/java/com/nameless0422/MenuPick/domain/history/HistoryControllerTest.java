@@ -14,7 +14,10 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -25,6 +28,47 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HistoryControllerTest extends AbstractControllerTest {
 
     @MockitoBean private HistoryService historyService;
+    @MockitoBean private HistoryPlaceService historyPlaceService;
+
+    private static final String PLACE_BODY = """
+            {"name":"할매김치찌개","address":"서울 중구 세종대로 110","phone":"02-123-4567",
+             "latitude":37.5665,"longitude":126.978,
+             "naverUrl":"https://place.map.kakao.com/1","kakaoPlaceId":"1"}
+            """;
+
+    @Test
+    @DisplayName("POST /api/v1/history/{id}/place - 고른 식당과 새로 생긴 것을 알려준다")
+    void choosePlace_success() throws Exception {
+        given(historyPlaceService.choosePlace(eq(1L), eq(5L), any()))
+                .willReturn(new HistoryResponse.PlaceChoiceResponse(9L, "할매김치찌개", true, true));
+
+        mockMvc.perform(post("/api/v1/history/5/place").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content(PLACE_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.restaurantId").value(9))
+                .andExpect(jsonPath("$.data.restaurantCreated").value(true))
+                .andExpect(jsonPath("$.data.linkCreated").value(true));
+    }
+
+    /** 식당 저장과 같은 검증을 탄다 — javascript: 링크가 이 경로로 새어 들어오면 안 된다. */
+    @Test
+    @DisplayName("POST /api/v1/history/{id}/place - 식당 저장과 같은 검증으로 400")
+    void choosePlace_invalidBody() throws Exception {
+        String unsafe = PLACE_BODY.replace("https://place.map.kakao.com/1", "javascript:alert(1)");
+
+        mockMvc.perform(post("/api/v1/history/5/place").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content(unsafe))
+                .andExpect(status().isBadRequest());
+        verify(historyPlaceService, never()).choosePlace(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/history/{id}/place - 미인증 시 401")
+    void choosePlace_unauthorized() throws Exception {
+        mockMvc.perform(post("/api/v1/history/5/place")
+                        .contentType(MediaType.APPLICATION_JSON).content(PLACE_BODY))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     @DisplayName("GET /api/v1/history/calendar - 월별 방문 기록 조회")

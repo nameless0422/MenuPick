@@ -36,6 +36,17 @@ public class HistoryResponse {
             boolean hasNext
     ) {}
 
+    /**
+     * 주변 식당 선택 결과. 두 플래그로 화면이 무엇이 새로 생겼는지 말할 수 있다 —
+     * "저장하고 연결했어요"와 "이미 연결된 식당이에요"는 사용자에게 다른 사실이다.
+     */
+    public record PlaceChoiceResponse(
+            Long restaurantId,
+            String restaurantName,
+            boolean restaurantCreated,
+            boolean linkCreated
+    ) {}
+
     public record VisitCalendarEntry(
             Long id,
             String menuName,

@@ -3,6 +3,7 @@ package com.nameless0422.MenuPick.domain.history;
 import com.nameless0422.MenuPick.common.dto.ApiResponse;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryRequest;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
+import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.Valid;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class HistoryController {
 
     private final HistoryService historyService;
+    private final HistoryPlaceService historyPlaceService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<HistoryResponse.HistoryListResponse>> getHistories(
@@ -44,6 +46,20 @@ public class HistoryController {
         historyService.markVisited(userId, historyId,
                 request != null ? request.restaurantId() : null);
         return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    /**
+     * 뽑은 메뉴를 먹으러 갈 식당을 주변 검색 결과에서 고른다. 식당 저장·메뉴 연결·기록을
+     * 한 번에 한다 — 근거는 {@link HistoryPlaceService}. 본문은 식당 저장 요청과 같은 모양이고
+     * {@code kakaoPlaceId}가 반드시 있어야 한다.
+     */
+    @PostMapping("/{historyId}/place")
+    public ResponseEntity<ApiResponse<HistoryResponse.PlaceChoiceResponse>> choosePlace(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long historyId,
+            @Valid @RequestBody RestaurantRequest.Create request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                historyPlaceService.choosePlace(userId, historyId, request)));
     }
 
     @PatchMapping("/{historyId}/feedback")
