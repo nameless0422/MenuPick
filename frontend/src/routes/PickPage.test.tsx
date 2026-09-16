@@ -471,6 +471,8 @@ describe("픽 진행·결과 통지", () => {
     // 지도를 못 보는 사람에게 이 목록은 유일한 경로다 — 건수부터 알아야 한다.
     // 슬롯 연출이 최소 1.2초라 기본 대기(1초)로는 결과가 아직 안 나온다.
     expect(await screen.findByText("추천 식당 2곳", {}, { timeout: 3000 })).toBeInTheDocument();
+    // 연결 식당이 있어도 근처 다른 곳을 찾을 수 있다. 위치는 누르기 전까지 묻지 않는다.
+    expect(screen.getByRole("button", { name: "📍 근처 김치찌개 식당 찾기" })).toBeInTheDocument();
   });
 
   it("위치 권한 실패를 통지한다 — 체크박스가 스스로 꺼지는 이유다", async () => {

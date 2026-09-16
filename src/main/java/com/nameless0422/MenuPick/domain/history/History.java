@@ -75,6 +75,16 @@ public class History {
         }
     }
 
+    /**
+     * 먹으러 갈 식당을 고른다. 식당을 적고 수락으로 표시하지만 <b>방문 처리는 하지 않는다</b> —
+     * 아직 가기 전이다. 나중에 {@link #markVisited(LocalDateTime)}로 방문 처리해도 여기서 적은
+     * 식당은 그대로 남는다.
+     */
+    public void choosePlace(Restaurant restaurant) {
+        this.restaurant = Objects.requireNonNull(restaurant);
+        this.recommendationFeedback = RecommendationFeedback.ACCEPTED;
+    }
+
     public void recordFeedback(RecommendationFeedback feedback) {
         this.recommendationFeedback = Objects.requireNonNull(feedback);
     }
