@@ -410,3 +410,17 @@
 .nearby-places > button {
   align-self: flex-start;
 }
+
+/* 자동 복사가 막혔을 때만 나오는 직접 복사 칸. 평소에는 화면에 없다. */
+.share-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.share-manual textarea {
+  width: 100%;
+  resize: vertical;
+  font-size: var(--fs-sm);
+}
