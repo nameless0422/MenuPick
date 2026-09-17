@@ -26,6 +26,7 @@ import KakaoMap from "../maps/KakaoMap";
 import { addTrendCategory } from "./trendValidation";
 import { formatDistance } from "./formatDistance";
 import NearbyPlaces from "./NearbyPlaces";
+import SharePickButton from "./SharePickButton";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -608,6 +609,7 @@ function PickResultCard({
           👎 별로예요
         </button>
         <button onClick={onRetry}>🔁 다시 돌리기</button>
+        <SharePickButton menuName={menu.name} />
         <Link to="/history">히스토리 보기 →</Link>
       </div>
       {feedback && <p className="card-muted-hint" role="status">의견을 저장했어요.</p>}
