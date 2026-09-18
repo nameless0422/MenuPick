@@ -117,7 +117,15 @@ public enum ErrorCode {
             "적용할 제외 태그가 너무 많습니다. 기본 제외 태그나 빠른 픽의 제외 조건을 줄여주세요."),
 
     // --- History ---
-    HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다.");
+    HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다."),
+
+    // --- Pick: 여럿이 같이 뽑기 (domain/room) ---
+    /** 없는 방과 만료된 방은 같은 404다 — 링크가 유효했는지를 바깥에서 알아낼 이유가 없다. */
+    PICK_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "방을 찾을 수 없거나 이미 만료되었습니다."),
+    /** 링크를 뿌려 두고 방만 쌓는 것을 막는다. */
+    PICK_ROOM_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "열려 있는 방이 너무 많습니다. 기존 방이 만료된 뒤 다시 만들어주세요."),
+    /** 모두가 전부 빼 버렸다. 조용히 아무거나 뽑지 않고 멈춘다 — 그건 같이 정한 결과가 아니다. */
+    PICK_ROOM_NO_CANDIDATES(HttpStatus.CONFLICT, "남은 메뉴가 없습니다. 제외를 조금 풀어주세요.");
 
     private final HttpStatus httpStatus;
     /** 클라이언트에 그대로 전달되는 메시지 — 민감 정보를 포함하지 않아야 한다. */

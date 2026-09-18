@@ -155,6 +155,15 @@ public class SecurityConfig {
                         // 게스트 데모 픽 — 온보딩 퍼널용 시연 (docs/Planning.md 4.3).
                         // 고정 샘플만 반환하고 DB를 건드리지 않으며, RateLimitFilter가 IP 기준으로 제한한다.
                         .requestMatchers(HttpMethod.GET, "/api/v1/pick/demo").permitAll()
+                        // 여럿이 같이 뽑기 — 참여는 링크만 있으면 된다. 점심 자리에 있는 사람
+                        // 전원이 가입해 있을 리 없고, 가입을 요구하면 방을 만들 이유가 사라진다.
+                        // 입장 자격은 추측 불가능한 방 코드(128비트 랜덤)이고, 응답에는 호스트가
+                        // 누구인지도 다른 참가자가 누구인지도 담기지 않는다(PickRoomResponse).
+                        // **방 만들기(POST /pick/rooms)는 여기 없다** — 자기 메뉴를 꺼내 공유하는
+                        // 행위라 계정이 필요하고, anyRequest().authenticated()가 그것을 지킨다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/pick/rooms/*").permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/pick/rooms/*/vetoes").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/pick/rooms/*/decide").permitAll()
                         // springdoc.api-docs/swagger-ui.enabled가 false면 경로 자체가 등록되지 않는다
                         // (기본 false, local 프로파일만 true — docs/ImprovementBacklog.md 7번)
                         .requestMatchers(

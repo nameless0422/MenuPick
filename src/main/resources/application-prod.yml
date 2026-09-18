@@ -145,6 +145,8 @@ rate-limit:
   # 인증 경로(IP 기준) / 외부 API 프록시 경로(사용자 기준) 분당 허용 횟수
   auth-limit-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
   proxy-limit-per-minute: ${RATE_LIMIT_PROXY_PER_MINUTE:30}
+  # 같이 뽑기의 인증 없는 경로(IP 기준). 사무실 한 회선에서 여러 명이 들어오는 것이 정상이라 넉넉히 둔다.
+  room-limit-per-minute: ${RATE_LIMIT_ROOM_PER_MINUTE:60}
   alternatives-limit-per-minute: ${RATE_LIMIT_ALTERNATIVES_PER_MINUTE:10}
 
 cors:

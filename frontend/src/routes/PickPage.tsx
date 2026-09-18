@@ -27,6 +27,7 @@ import { addTrendCategory } from "./trendValidation";
 import { formatDistance } from "./formatDistance";
 import NearbyPlaces from "./NearbyPlaces";
 import SharePickButton from "./SharePickButton";
+import StartPickRoom from "./StartPickRoom";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -439,6 +440,10 @@ export default function PickPage() {
             <>🎲 오늘의 메뉴 뽑기</>
           )}
         </button>
+
+        {/* 같이 뽑기 입구. 저장 폼 옆에 두는 이유는 둘 다 "지금 고른 조건으로 무언가를 더 한다"이기
+            때문이다 — 뽑기 버튼과 결과 사이를 가르지 않는다. */}
+        <StartPickRoom categories={categories} />
 
         <SavePickPresetForm
           categories={categories}
