@@ -23,6 +23,10 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  * <p>proxyLimitPerMinute: 외부 API 프록시 경로(kakao)의 사용자당 분당 허용 횟수.
  * <p>demoLimitPerMinute: 게스트 데모 픽의 IP당 분당 허용 횟수 (docs/Planning.md 4.3).
  * 미인증 경로라 사용자 단위로 묶을 수단이 없어 IP가 유일한 기준이다.
+ * <p>roomLimitPerMinute: 여럿이 같이 뽑기의 인증 없는 경로(IP당). 화면이 결과를 기다리며
+ * 5초마다 조회하므로 분당 12회가 정상 사용이고, 한 자리에 여러 명이 같은 회선(사무실 NAT)에서
+ * 들어오는 것이 흔하다 — 그래서 60으로 잡는다. 이 값이 너무 낮으면 같은 사무실 사람들이
+ * 서로를 밀어내며 429를 받는다.
  * <p>windowSeconds: 카운터 윈도우 길이(초). 429 응답의 Retry-After 값으로도 쓰인다.
  */
 @ConfigurationProperties(prefix = "rate-limit")
@@ -33,15 +37,21 @@ public record RateLimitProperties(
         @DefaultValue("30") int proxyLimitPerMinute,
         @DefaultValue("10") int demoLimitPerMinute,
         @DefaultValue("10") int alternativesLimitPerMinute,
+        @DefaultValue("60") int roomLimitPerMinute,
         @DefaultValue("60") int windowSeconds
 ) {
     @ConstructorBinding
     public RateLimitProperties {
     }
 
+    /**
+     * 테스트 편의 생성자. 새 한도를 더할 때마다 테스트를 전부 고치지 않도록 기본값을 채운다 —
+     * 다만 그 기본값은 위 {@code @DefaultValue}와 같아야 한다. 어긋나면 테스트가 운영과 다른
+     * 한도로 도는데, 그 차이는 테스트가 통과하는 동안에는 보이지 않는다.
+     */
     public RateLimitProperties(boolean trustProxy, int trustedProxyHops, int authLimitPerMinute,
             int proxyLimitPerMinute, int demoLimitPerMinute, int windowSeconds) {
         this(trustProxy, trustedProxyHops, authLimitPerMinute, proxyLimitPerMinute,
-                demoLimitPerMinute, 10, windowSeconds);
+                demoLimitPerMinute, 10, 60, windowSeconds);
     }
 }

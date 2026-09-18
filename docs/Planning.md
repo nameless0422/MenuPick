@@ -220,6 +220,10 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | POST | /pick | 필터(카테고리/태그/거리) 기반 가중치 랜덤 추천. 히스토리 자동 저장 후 historyId를 응답에 포함 | Y |
+| POST | /pick/rooms | 같이 뽑기 방 만들기 (내 메뉴 스냅샷, 카테고리로 좁히기 가능) | Y |
+| GET | /pick/rooms/{code} | 방 조회 (메뉴·제외 인원·참여 인원·결과) | N (링크) |
+| PUT | /pick/rooms/{code}/vetoes | 제외 전체 교체 (참가자 식별자 필요) | N (링크) |
+| POST | /pick/rooms/{code}/decide | 남은 메뉴 중 뽑기. 멱등 — 결과는 한 번만 정해진다 | N (링크) |
 | POST | /pick/alternatives | 수동 픽의 `NO_PICK_CANDIDATES`에 한해 안전한 최소 조건 조정안 조회. **2026-09-14 운영 배포·운영 활성화(코드 기본값 비활성)** | Y |
 
 | GET | /pick/demo | 게스트 데모 픽. 고정 샘플에서 랜덤 반환, 저장 없음 (4.3) | N |
