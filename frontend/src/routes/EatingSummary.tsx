@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchEatingSummary, type ForgottenMenu } from "../api/history";
 import { apiErrorMessage } from "../api/http";
+import { kstDayNumber, kstLocalDateTimeMillis } from "./kstTime";
 
 /**
  * 내 식사 기록 요약 — 히스토리 화면 맨 위의 "요즘 뭘 먹었나".
@@ -116,9 +117,10 @@ export default function EatingSummary() {
  */
 function lastPickedLabel(menu: ForgottenMenu, now: number): string {
   if (!menu.lastPickedAt) return "아직 안 뽑힘";
-  const picked = new Date(menu.lastPickedAt);
-  if (Number.isNaN(picked.getTime())) return "";
-  const days = Math.floor((now - picked.getTime()) / (24 * 60 * 60 * 1000));
+  // new Date(문자열)로 읽으면 브라우저 지역시간이 되어 시간대마다 하루씩 어긋난다 — 근거는 kstTime.ts.
+  const picked = kstLocalDateTimeMillis(menu.lastPickedAt);
+  if (picked === null) return "";
+  const days = kstDayNumber(now) - kstDayNumber(picked);
   if (days <= 0) return "오늘";
   if (days === 1) return "어제";
   return `${days}일 전`;
