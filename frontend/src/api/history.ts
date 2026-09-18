@@ -91,6 +91,37 @@ export async function deleteHistory(historyId: number) {
   await http.delete<ApiResponse<null>>(`/api/v1/history/${historyId}`);
 }
 
+export interface LabelCount {
+  label: string;
+  /** **횟수**다. 집단 통계(trends)의 userCount가 사람 수인 것과 다르다 — 여기는 내 기록이다. */
+  count: number;
+}
+
+export interface ForgottenMenu {
+  menuId: number;
+  name: string;
+  /** null이면 한 번도 뽑힌 적이 없다. 시각을 지어내지 않는다. */
+  lastPickedAt: string | null;
+}
+
+export interface EatingSummary {
+  periodDays: number;
+  picks: number;
+  /** 방문 처리했거나 "이걸로 먹을래요"를 누른 수. 비율이 아니라 건수로 온다. */
+  eaten: number;
+  categories: LabelCount[];
+  menus: LabelCount[];
+  /** 오래 안 뽑힌 내 메뉴. 이것만 집계 기간과 무관하게 전 기간을 본다. */
+  forgottenMenus: ForgottenMenu[];
+}
+
+export async function fetchEatingSummary(days?: number) {
+  const res = await http.get<ApiResponse<EatingSummary>>("/api/v1/history/summary", {
+    params: days != null ? { days } : undefined,
+  });
+  return unwrap(res);
+}
+
 export type RecommendationFeedback = "ACCEPTED" | "REJECTED";
 
 export interface PlaceChoiceResult {

@@ -1,5 +1,5 @@
 import type { HistorySummary } from "../api/history";
-import { trendComputedAtMillis as kstLocalDateTimeMillis } from "./trendValidation";
+import { kstDayNumber, kstLocalDateTimeMillis, KST_OFFSET_MS } from "./kstTime";
 
 /**
  * "지난번 뽑은 메뉴, 드셨어요?"를 물을 대상 고르기.
@@ -93,12 +93,7 @@ export function describePickedAt(recommendedAt: string, now: number): string {
   return `${kst.getUTCMonth() + 1}월 ${kst.getUTCDate()}일 ${time}`;
 }
 
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-/** KST 기준 1970-01-01부터 며칠째인가. KST는 서머타임이 없어 고정 오프셋으로 충분하다. */
-function kstDayNumber(epochMs: number): number {
-  return Math.floor((epochMs + KST_OFFSET_MS) / (24 * 60 * 60 * 1000));
-}
 
 /**
  * "안 먹었어요"라고 답한 기록 id 목록.

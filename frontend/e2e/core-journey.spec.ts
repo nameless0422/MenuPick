@@ -158,6 +158,13 @@ async function installFakeApi(page: Page) {
         reasons: ["선호도 3점을 반영했어요"],
       });
     }
+    // 히스토리 화면의 식사 요약. 이 여정은 요약 내용을 보지 않으므로 빈 값으로 둔다.
+    if (path === "/api/v1/history/summary" && method === "GET") {
+      return api(route, {
+        periodDays: 30, picks: picked ? 1 : 0, eaten: visited ? 1 : 0,
+        categories: [], menus: [], forgottenMenus: [],
+      });
+    }
     if (path === "/api/v1/history" && method === "GET") {
       return api(route, {
         histories: picked ? [{
