@@ -52,9 +52,14 @@ export type ShareOutcome =
  * 자기가 방금 한 행동을 고장으로 읽게 된다.
  */
 export async function sharePick(menuName: string, origin: string): Promise<ShareOutcome> {
-  const text = sharePickMessage(menuName);
-  const url = sharePickUrl(origin);
+  return shareTextAndUrl(sharePickMessage(menuName), sharePickUrl(origin));
+}
 
+/**
+ * 문구와 링크를 공유한다. 뽑은 결과와 같이 뽑기 방 초대가 이 경로를 함께 쓴다 —
+ * 세 갈래 폴백(아래)은 무엇을 공유하든 똑같이 필요하기 때문이다.
+ */
+export async function shareTextAndUrl(text: string, url: string): Promise<ShareOutcome> {
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({ title: "메뉴픽", text, url });

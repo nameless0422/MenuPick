@@ -5,6 +5,7 @@ import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.pick.PickPresetRepository;
+import com.nameless0422.MenuPick.domain.room.PickRoomRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import jakarta.persistence.EntityManager;
@@ -24,6 +25,7 @@ public class UserHardDeleteService {
     private final MenuRestaurantRepository menuRestaurantRepository;
     private final MenuRepository menuRepository;
     private final PickPresetRepository pickPresetRepository;
+    private final PickRoomRepository pickRoomRepository;
     private final TagRepository tagRepository;
     private final RestaurantRepository restaurantRepository;
     private final AuthProviderRepository authProviderRepository;
@@ -47,6 +49,10 @@ public class UserHardDeleteService {
         // 우연에 기대게 된다. 여기서 명시적으로 지워 purge 목록이 곧 삭제 대상 목록이 되게 한다.
         // (자식 pick_preset_categories·pick_preset_tags는 부모 FK cascade가 함께 지운다.)
         pickPresetRepository.deleteAllByUserId(userId);
+        // 같이 뽑기 방도 같은 이유로 명시적으로 지운다 — DB의 ON DELETE CASCADE가 처리해 주지만
+        // 그러면 purge 목록이 삭제 대상 목록이 아니게 된다.
+        // (자식 pick_room_menus·pick_room_vetoes는 방을 지울 때 FK cascade가 함께 지운다.)
+        pickRoomRepository.deleteAllByHostId(userId);
         tagRepository.deleteAllByUserId(userId);
         restaurantRepository.deleteAllByUserId(userId);
         authProviderRepository.deleteAllByUserId(userId);

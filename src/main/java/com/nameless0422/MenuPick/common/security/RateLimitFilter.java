@@ -57,6 +57,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** 게스트 데모 픽 버킷 — 미인증 경로라 IP 기준밖에 없다. */
     private static final String DEMO_KEY_PREFIX = "rl:demo:";
     private static final String ALTERNATIVES_KEY_PREFIX = "rl:pick-alternatives:";
+    private static final String ROOM_KEY_PREFIX = "rl:pick-room:";
 
     /**
      * 제한 대상 판정은 <b>반드시</b> {@link PathPatternRequestMatcher}로 한다.
@@ -127,6 +128,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final RequestMatcher PICK_ALTERNATIVES_MATCHER =
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/alternatives");
+
+    /**
+     * 여럿이 같이 뽑기의 <b>인증 없는</b> 경로. 링크만 있으면 누구나 부를 수 있으므로 IP로 묶는다.
+     * 조회는 화면이 5초마다 다시 부르고(결과를 기다리는 동안), 제출·뽑기는 사람이 누를 때만
+     * 나가므로 한도는 조회 기준으로 잡는다.
+     *
+     * <p>방 만들기(POST /pick/rooms)는 여기 없다 — 인증이 필요한 경로라 이미 주체가 특정되고,
+     * 방 수 상한(PickRoom.MAX_OPEN_ROOMS_PER_USER)이 따로 막는다.
+     */
+    private static final List<RequestMatcher> ROOM_RATE_LIMITED_MATCHERS = List.of(
+            PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/pick/rooms/*"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/pick/rooms/*/vetoes"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/rooms/*/decide")
+    );
 
     private static final List<RequestMatcher> PROXY_RATE_LIMITED_MATCHERS = List.of(
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/kakao/**")
@@ -208,6 +223,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (PICK_ALTERNATIVES_MATCHER.matches(request)) {
             return new Bucket(ALTERNATIVES_KEY_PREFIX + resolveClientIp(request),
                     rateLimitProperties.alternativesLimitPerMinute());
+        }
+
+        if (matchesAny(ROOM_RATE_LIMITED_MATCHERS, request)) {
+            return new Bucket(ROOM_KEY_PREFIX + resolveClientIp(request),
+                    rateLimitProperties.roomLimitPerMinute());
         }
 
         if (matchesAny(PROXY_RATE_LIMITED_MATCHERS, request)) {

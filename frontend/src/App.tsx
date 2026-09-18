@@ -6,6 +6,7 @@ import ForgotPasswordPage from "./routes/ForgotPasswordPage";
 import ResetPasswordPage from "./routes/ResetPasswordPage";
 import OAuthCallbackPage from "./routes/OAuthCallbackPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import PickRoomPage from "./routes/PickRoomPage";
 import Layout from "./routes/Layout";
 import PickPage from "./routes/PickPage";
 import MenusPage from "./routes/MenusPage";
@@ -23,6 +24,9 @@ export default function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* 같이 뽑기는 ProtectedRoute 바깥이다. 링크를 받은 사람이 가입 없이 들어와
+            빼고 결과를 보는 것이 이 기능의 전부이기 때문이다(PickRoomPage). */}
+        <Route path="/rooms/:code" element={<PickRoomPage />} />
         <Route path="/oauth/kakao/callback" element={<OAuthCallbackPage provider="kakao" />} />
         <Route path="/oauth/google/callback" element={<OAuthCallbackPage provider="google" />} />
 
