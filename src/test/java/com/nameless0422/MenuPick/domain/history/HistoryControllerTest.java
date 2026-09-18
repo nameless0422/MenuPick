@@ -29,6 +29,7 @@ class HistoryControllerTest extends AbstractControllerTest {
 
     @MockitoBean private HistoryService historyService;
     @MockitoBean private HistoryPlaceService historyPlaceService;
+    @MockitoBean private EatingSummaryService eatingSummaryService;
 
     private static final String PLACE_BODY = """
             {"name":"할매김치찌개","address":"서울 중구 세종대로 110","phone":"02-123-4567",
@@ -114,6 +115,45 @@ class HistoryControllerTest extends AbstractControllerTest {
     @DisplayName("GET /api/v1/history/calendar - 미인증 시 401")
     void getVisitCalendar_unauthorized() throws Exception {
         mockMvc.perform(get("/api/v1/history/calendar")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history/summary - 픽 수·먹은 수와 목록들을 준다")
+    void getEatingSummary() throws Exception {
+        given(eatingSummaryService.summarize(1L, null)).willReturn(
+                new HistoryResponse.EatingSummaryResponse(30, 12, 5,
+                        List.of(new HistoryResponse.LabelCount("한식", 4)),
+                        List.of(new HistoryResponse.LabelCount("김치찌개", 3)),
+                        List.of(new HistoryResponse.ForgottenMenu(9L, "제육볶음", null))));
+
+        mockMvc.perform(get("/api/v1/history/summary").with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.periodDays").value(30))
+                .andExpect(jsonPath("$.data.picks").value(12))
+                .andExpect(jsonPath("$.data.eaten").value(5))
+                .andExpect(jsonPath("$.data.categories[0].label").value("한식"))
+                .andExpect(jsonPath("$.data.menus[0].count").value(3))
+                .andExpect(jsonPath("$.data.forgottenMenus[0].name").value("제육볶음"))
+                // 한 번도 안 뽑힌 메뉴는 시각을 지어내지 않는다.
+                .andExpect(jsonPath("$.data.forgottenMenus[0].lastPickedAt").doesNotExist());
+    }
+
+    /** 범위를 벗어난 days는 400이 아니라 기본값으로 되돌린다 — 서비스가 판정한다. */
+    @Test
+    @DisplayName("GET /api/v1/history/summary - days를 그대로 서비스에 넘긴다")
+    void getEatingSummary_passesDays() throws Exception {
+        given(eatingSummaryService.summarize(1L, 99999)).willReturn(
+                new HistoryResponse.EatingSummaryResponse(30, 0, 0, List.of(), List.of(), List.of()));
+
+        mockMvc.perform(get("/api/v1/history/summary").with(authentication(AUTH)).param("days", "99999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.periodDays").value(30));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/history/summary - 미인증 시 401")
+    void getEatingSummary_unauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/history/summary")).andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -153,6 +155,75 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     interface TrendCount {
         String getLabel();
         Long getUserCount();
+    }
+
+    // ---------------------------------------------------------------
+    // 내 식사 기록 요약 (EatingSummaryService). 전부 인증 사용자 한 명으로 범위가 좁혀져 있다 —
+    // 집단 통계(위)와 달리 표본 문제가 없고, 최소 인원 같은 문턱도 필요 없다. 내 데이터이기 때문이다.
+    //
+    // "먹었다"의 정의는 집단 통계와 같다: 방문 처리했거나 추천을 수락했거나.
+    // 두 곳이 다른 기준을 쓰면 같은 화면 안에서 숫자가 어긋나 보인다.
+    // ---------------------------------------------------------------
+
+    /** 기간 내 내 픽 수와 그중 먹은 수. 비율이 아니라 둘 다 준다 — 0건과 0%는 다른 상태다. */
+    @Query("select count(h), sum(case when h.isVisited = true " +
+            "or h.recommendationFeedback = :accepted then 1 else 0 end) " +
+            "from History h where h.user.id = :userId and h.recommendedAt >= :since")
+    List<Object[]> countMyPicksAndEatenSince(@Param("userId") Long userId,
+                                            @Param("since") LocalDateTime since,
+                                            @Param("accepted") RecommendationFeedback accepted);
+
+    /**
+     * 기간 내 내가 먹은 카테고리별 횟수.
+     *
+     * <p>여기서는 <b>횟수</b>를 센다. 집단 통계가 사람 수를 세는 것과 다른데, 축이 다르기
+     * 때문이다 — 거기서는 한 사람이 여러 번 먹은 것이 인기가 되면 안 되고, 여기서는 내가
+     * 몇 번 먹었는지가 바로 내가 알고 싶은 값이다.
+     */
+    @Query("select c as label, count(h) as total " +
+            "from History h join h.menu m join m.categories c " +
+            "where h.user.id = :userId and h.recommendedAt >= :since " +
+            "and (h.isVisited = true or h.recommendationFeedback = :accepted) " +
+            "group by c order by count(h) desc, c asc")
+    List<LabelCount> countMyEatenByCategorySince(@Param("userId") Long userId,
+                                                 @Param("since") LocalDateTime since,
+                                                 @Param("accepted") RecommendationFeedback accepted,
+                                                 Pageable pageable);
+
+    /** 기간 내 내가 먹은 메뉴별 횟수. 내 메뉴끼리라 이름이 아니라 메뉴 자체로 묶어도 된다. */
+    @Query("select m.name as label, count(h) as total " +
+            "from History h join h.menu m " +
+            "where h.user.id = :userId and h.recommendedAt >= :since " +
+            "and (h.isVisited = true or h.recommendationFeedback = :accepted) " +
+            "group by m.id, m.name order by count(h) desc, m.name asc")
+    List<LabelCount> countMyEatenByMenuSince(@Param("userId") Long userId,
+                                             @Param("since") LocalDateTime since,
+                                             @Param("accepted") RecommendationFeedback accepted,
+                                             Pageable pageable);
+
+    interface LabelCount {
+        String getLabel();
+        Long getTotal();
+    }
+
+    /**
+     * 오랫동안 안 뽑힌 내 메뉴. 한 번도 안 뽑힌 것이 먼저 온다(MySQL은 ASC에서 NULL이 앞).
+     *
+     * <p>기간을 보지 않는다 — "최근 30일에 안 뽑혔다"가 아니라 "마지막이 언제였나"를 묻는
+     * 질문이기 때문이다. 추천에서 빼 둔 메뉴({@code isExcluded})와 지운 메뉴는 제외한다.
+     * 그것들은 안 나오는 게 정상이라 "잊힌 메뉴"라고 말하면 틀린 말이 된다.
+     */
+    @Query("select m.id as menuId, m.name as name, max(h.recommendedAt) as lastPickedAt " +
+            "from Menu m left join History h on h.menu.id = m.id " +
+            "where m.user.id = :userId and m.deletedAt is null and m.isExcluded = false " +
+            "group by m.id, m.name order by max(h.recommendedAt) asc, m.name asc")
+    List<ForgottenMenu> findMyForgottenMenus(@Param("userId") Long userId, Pageable pageable);
+
+    interface ForgottenMenu {
+        Long getMenuId();
+        String getName();
+        /** 한 번도 안 뽑혔으면 null. */
+        LocalDateTime getLastPickedAt();
     }
 
     /** 사용자별 첫 픽 시각. 7일 리텐션 코호트를 만드는 근거. */
