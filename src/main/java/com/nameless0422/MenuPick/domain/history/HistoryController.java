@@ -21,6 +21,7 @@ public class HistoryController {
 
     private final HistoryService historyService;
     private final HistoryPlaceService historyPlaceService;
+    private final EatingSummaryService eatingSummaryService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<HistoryResponse.HistoryListResponse>> getHistories(
@@ -29,6 +30,17 @@ public class HistoryController {
             @RequestParam(required = false) @Min(value = 1, message = "days는 1 이상이어야 합니다.") Integer days,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return ResponseEntity.ok(ApiResponse.ok(historyService.getHistories(userId, cursor, days, size)));
+    }
+
+    /**
+     * 내 식사 기록 요약. {@code days}는 생략하거나 범위를 벗어나면 기본 30일로 되돌린다 —
+     * 근거는 {@link EatingSummaryService#normalizeDays}. 그래서 여기에는 {@code @Min} 검증이 없다.
+     */
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<HistoryResponse.EatingSummaryResponse>> getEatingSummary(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) Integer days) {
+        return ResponseEntity.ok(ApiResponse.ok(eatingSummaryService.summarize(userId, days)));
     }
 
     @GetMapping("/calendar")

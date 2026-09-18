@@ -47,6 +47,27 @@ public class HistoryResponse {
             boolean linkCreated
     ) {}
 
+    /**
+     * 내 식사 기록 요약.
+     *
+     * <p>{@code picks}와 {@code eaten}을 둘 다 준다. 비율 하나로 줄이면 "10번 뽑아 3번 먹었다"와
+     * "3번 뽑아 3번 먹었다"가 같은 30%가 되는데, 사용자에게는 완전히 다른 이야기다.
+     */
+    public record EatingSummaryResponse(
+            int periodDays,
+            long picks,
+            long eaten,
+            List<LabelCount> categories,
+            List<LabelCount> menus,
+            /** 오래 안 뽑힌 메뉴. 이것만 기간을 보지 않는다 — 근거는 EatingSummaryService. */
+            List<ForgottenMenu> forgottenMenus
+    ) {}
+
+    public record LabelCount(String label, long count) {}
+
+    /** {@code lastPickedAt}이 null이면 한 번도 뽑힌 적이 없다는 뜻이다. */
+    public record ForgottenMenu(Long menuId, String name, LocalDateTime lastPickedAt) {}
+
     public record VisitCalendarEntry(
             Long id,
             String menuName,

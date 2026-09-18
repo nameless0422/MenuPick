@@ -77,3 +77,32 @@
   .visit-calendar-heading-row { align-items: stretch; flex-direction: column; }
   .calendar-navigation { justify-content: center; }
 }
+
+/* 내 식사 기록 요약. 히스토리 화면 맨 위의 짧은 요약이라 목록보다 조용해야 한다. */
+.eating-summary {
+  gap: 10px;
+}
+
+.eating-summary h2,
+.eating-summary h3,
+.eating-summary p {
+  margin: 0;
+}
+
+.eating-summary h3 {
+  font-size: var(--fs-sm);
+  margin-bottom: 6px;
+}
+
+.eating-summary-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 횟수는 읽는 글이 아니라 비교하는 값이다 — 자릿수가 흔들리지 않게 고정폭으로. */
+.eating-summary-count {
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  opacity: 0.75;
+}
