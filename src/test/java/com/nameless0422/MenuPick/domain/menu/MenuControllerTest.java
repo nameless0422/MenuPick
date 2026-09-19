@@ -206,6 +206,39 @@ class MenuControllerTest extends AbstractControllerTest {
     }
 
     @Test
+    @DisplayName("PATCH /api/v1/menus/exclusions - 여러 메뉴의 제외를 한 번에 바꾼다")
+    void batchUpdateExclusion_success() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/exclusions")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entries\":[{\"menuId\":1,\"excluded\":true},"
+                                + "{\"menuId\":2,\"excluded\":false}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+        verify(menuService).batchUpdateExclusion(eq(1L), any());
+    }
+
+    /** 원소의 @NotNull이 없으면 [null]이 그대로 통과해 서비스에서 NPE가 난다(가중치와 같은 함정). */
+    @Test
+    @DisplayName("PATCH /api/v1/menus/exclusions - excluded가 null이면 400")
+    void batchUpdateExclusion_nullFlag_badRequest() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/exclusions")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entries\":[{\"menuId\":1,\"excluded\":null}]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/menus/exclusions - 미인증 시 401")
+    void batchUpdateExclusion_unauthorized() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/exclusions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entries\":[{\"menuId\":1,\"excluded\":true}]}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("DELETE /api/v1/menus/{menuId} - 삭제 성공")
     void deleteMenu_success() throws Exception {
         mockMvc.perform(delete("/api/v1/menus/1")

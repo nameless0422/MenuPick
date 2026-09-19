@@ -31,6 +31,9 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
 
+    /** 픽을 한 번이라도 했는가. 첫 사용자 안내가 "이미 쓰기 시작했는지"를 판정하는 데 쓴다. */
+    boolean existsByUserId(Long userId);
+
     /** 방문 처리 시각 범위로만 읽으며 연관 엔티티 이름까지 한 SQL에서 projection한다. */
     @Query("select h.id as id, m.name as menuName, r.name as restaurantName, h.visitedAt as visitedAt " +
             "from History h left join h.menu m left join h.restaurant r " +

@@ -70,6 +70,15 @@ public class MenuController {
         return ResponseEntity.ok(ApiResponse.ok());
     }
 
+    /** 온보딩이 쓰는 일괄 제외. 계약은 {@code MenuRequest.BatchUpdateExclusion}. */
+    @PatchMapping("/exclusions")
+    public ResponseEntity<ApiResponse<Void>> batchUpdateExclusion(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody @Valid MenuRequest.BatchUpdateExclusion request) {
+        menuService.batchUpdateExclusion(userId, request);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
     @GetMapping("/excluded")
     public ResponseEntity<ApiResponse<List<MenuResponse.MenuSummary>>> getExcludedMenus(
             @AuthenticationPrincipal Long userId) {
