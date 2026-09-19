@@ -46,6 +46,19 @@ export interface MenuUpdateRequest extends MenuCreateRequest {
   version: number;
 }
 
+export interface MenuExclusionEntry {
+  menuId: number;
+  excluded: boolean;
+}
+
+/**
+ * 추천 제외를 한 번에 바꾼다. **담긴 메뉴만** 바뀌고 나머지는 그대로다(전체 교체가 아니다).
+ * 한 개씩 22번 보내면 중간에 하나가 실패했을 때 절반만 반영된 상태가 남는다.
+ */
+export async function batchUpdateExclusions(entries: MenuExclusionEntry[]) {
+  await http.patch<ApiResponse<null>>("/api/v1/menus/exclusions", { entries });
+}
+
 export async function fetchMenus(cursor?: number, size = 20) {
   const res = await http.get<ApiResponse<MenuListResponse>>("/api/v1/menus", {
     params: { cursor, size },

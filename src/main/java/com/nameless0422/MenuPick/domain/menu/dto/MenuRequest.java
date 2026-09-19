@@ -75,6 +75,29 @@ public class MenuRequest {
             List<@NotNull(message = "가중치 항목은 비어 있을 수 없습니다.") @Valid WeightEntry> entries
     ) {}
 
+    /**
+     * 추천 제외를 한 번에 바꾼다. 첫 사용자 온보딩이 쓰는 요청이다 — 기본 메뉴 22개 중 안 먹는
+     * 것을 한 화면에서 골라 한 번에 보낸다. 한 개씩 PATCH를 22번 보내면 중간에 하나가 실패했을 때
+     * 절반만 반영된 상태가 남는다.
+     *
+     * <p><b>전체 교체가 아니다.</b> 여기 담긴 메뉴만 {@code excluded} 값으로 바꾼다 — 전체
+     * 교체로 만들면 화면에 보이지 않던 메뉴(직접 추가한 것)의 제외가 조용히 풀린다.
+     */
+    public record BatchUpdateExclusion(
+            @NotEmpty(message = "변경 목록은 필수입니다.")
+            @Size(max = 100, message = "한 번에 100개까지만 변경할 수 있습니다.")
+            // @Valid는 null 원소를 검증 대상에서 빼므로, 원소의 @NotNull이 없으면 [null]이
+            // 그대로 통과해 서비스에서 NPE가 난다(BatchUpdateWeight와 같은 함정).
+            List<@NotNull(message = "제외 항목은 비어 있을 수 없습니다.") @Valid ExclusionEntry> entries
+    ) {}
+
+    public record ExclusionEntry(
+            @NotNull(message = "메뉴 ID는 필수입니다.")
+            Long menuId,
+            @NotNull(message = "제외 여부는 필수입니다.")
+            Boolean excluded
+    ) {}
+
     public record WeightEntry(
             @NotNull(message = "메뉴 ID는 필수입니다.")
             Long menuId,

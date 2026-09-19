@@ -16,6 +16,7 @@ import { apiErrorCode, apiErrorMessage } from "../api/http";
 import PickPresets from "./PickPresets";
 import PickTrends from "./PickTrends";
 import VisitPrompt from "./VisitPrompt";
+import OnboardingCard from "./OnboardingCard";
 import PickAlternatives from "./PickAlternatives";
 import SavePickPresetForm from "./SavePickPresetForm";
 import type { PickPresetExecutionResult } from "../api/pickPresets";
@@ -333,6 +334,10 @@ export default function PickPage() {
       <header className="page-header">
         <h1>오늘 뭐 먹지</h1>
       </header>
+
+      {/* 첫 사용자 안내. 방문 확인 질문보다 위에 둔다 — 둘 다 뜨는 경우는 없지만
+          (안내는 픽 기록이 없을 때만, 질문은 있을 때만), 순서가 곧 사용자의 시간 순서다. */}
+      <OnboardingCard />
 
       {/* 지난번 픽을 먹었는지 묻는다. 맨 위에 두는 이유는 돌아온 직후가 대답을 받을 유일한
           때이기 때문이다 — 뽑기를 시작하면 "지난번"이 바뀌므로 질문을 거둔다. */}
