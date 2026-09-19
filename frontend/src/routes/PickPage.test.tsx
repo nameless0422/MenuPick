@@ -905,7 +905,9 @@ describe("PickPage 후보가 없을 때의 안내", () => {
     const alternative = await screen.findByRole("button", {
       name: /카테고리 조건을 모두 풀고 다시 뽑기 · 후보 4개/,
     }, { timeout: 3000 });
-    expect(alternative.closest(".pick-alternatives")).toHaveFocus();
+    // 초점은 패널이 그려진 뒤 effect에서 옮겨진다. 나타나자마자 단정하면 그 한 틱을 앞질러,
+    // 느린 기계(CI)에서만 "초점이 아직 뽑기 버튼에 있다"로 실패한다 — 2026-09-19 실제로 그랬다.
+    await waitFor(() => expect(alternative.closest(".pick-alternatives")).toHaveFocus());
 
     await user.click(alternative);
     await waitFor(() => expect(requestPickMock).toHaveBeenCalledTimes(2));
