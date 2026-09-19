@@ -131,6 +131,34 @@ public class MenuService {
                 menuMap.get(entry.menuId()).updateWeight(entry.weight()));
     }
 
+    /**
+     * 추천 제외를 한 번에 바꾼다. 근거와 계약은 {@code MenuRequest.BatchUpdateExclusion}.
+     *
+     * <p>{@code batchUpdateWeight}와 같은 방식으로 소유권을 한 번에 확인한다 — 하나라도 남의
+     * 메뉴이거나 없는 메뉴면 아무것도 바꾸지 않고 404다. 일부만 반영되는 것이 가장 나쁘다.
+     */
+    @Transactional
+    public void batchUpdateExclusion(Long userId, MenuRequest.BatchUpdateExclusion request) {
+        List<Long> menuIds = request.entries().stream()
+                .map(MenuRequest.ExclusionEntry::menuId).distinct().toList();
+        List<Menu> menus = menuRepository.findAllByIdInAndUserIdAndDeletedAtIsNull(menuIds, userId);
+
+        if (menus.size() != menuIds.size()) {
+            throw new BusinessException(ErrorCode.MENU_NOT_FOUND,
+                    "존재하지 않거나 접근할 수 없는 메뉴가 포함되어 있습니다.");
+        }
+
+        Map<Long, Menu> menuMap = menus.stream().collect(Collectors.toMap(Menu::getId, m -> m));
+        request.entries().forEach(entry -> {
+            Menu menu = menuMap.get(entry.menuId());
+            if (entry.excluded()) {
+                menu.exclude();
+            } else {
+                menu.include();
+            }
+        });
+    }
+
     public List<MenuResponse.MenuSummary> getExcludedMenus(Long userId) {
         return menuRepository.findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(userId)
                 .stream().map(this::toSummary).toList();

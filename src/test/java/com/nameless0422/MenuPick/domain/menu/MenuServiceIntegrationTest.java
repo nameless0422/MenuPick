@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.menu;
 
 import com.nameless0422.MenuPick.common.config.JpaConfig;
+import com.nameless0422.MenuPick.domain.menu.dto.MenuRequest;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
@@ -67,5 +68,51 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
         MenuResponse.MenuDetail detail = menuService.getMenu(user.getId(), menuId);
 
         assertThat(detail.categories()).containsExactly("양식");
+    }
+
+    /**
+     * 온보딩이 22개를 한 번에 보낸다. 일부만 반영되면 사용자는 뺐다고 믿는데 그 메뉴가 계속 나온다.
+     */
+    @org.junit.jupiter.api.Test
+    @DisplayName("일괄 제외 - 담긴 메뉴만 바꾸고 나머지는 건드리지 않는다")
+    void batchUpdateExclusion_changesOnlyListed() {
+        User user = userRepository.save(
+                User.builder().email("bulk-exclude@test.com").nickname("일괄유저").build());
+        Menu kimchi = menuRepository.save(Menu.builder().user(user).name("김치찌개").weight(1).build());
+        Menu mara = menuRepository.save(Menu.builder().user(user).name("마라탕").weight(1).build());
+        Menu untouched = menuRepository.save(Menu.builder().user(user).name("비빔밥").weight(1).build());
+        untouched.exclude();
+        menuRepository.save(untouched);
+
+        menuService.batchUpdateExclusion(user.getId(), new MenuRequest.BatchUpdateExclusion(java.util.List.of(
+                new MenuRequest.ExclusionEntry(mara.getId(), true),
+                new MenuRequest.ExclusionEntry(kimchi.getId(), false))));
+
+        assertThat(menuRepository.findById(mara.getId()).orElseThrow().isExcluded()).isTrue();
+        assertThat(menuRepository.findById(kimchi.getId()).orElseThrow().isExcluded()).isFalse();
+        // 목록에 없던 메뉴의 제외는 그대로 남는다 — 전체 교체가 아니다.
+        assertThat(menuRepository.findById(untouched.getId()).orElseThrow().isExcluded()).isTrue();
+    }
+
+    /** 하나라도 남의 메뉴면 아무것도 바꾸지 않는다. 일부만 반영되는 것이 가장 나쁘다. */
+    @org.junit.jupiter.api.Test
+    @DisplayName("일괄 제외 - 남의 메뉴가 섞이면 아무것도 바꾸지 않는다")
+    void batchUpdateExclusion_rejectsForeignMenu() {
+        User user = userRepository.save(
+                User.builder().email("bulk-mine@test.com").nickname("내유저").build());
+        User other = userRepository.save(
+                User.builder().email("bulk-other@test.com").nickname("남유저").build());
+        Menu mine = menuRepository.save(Menu.builder().user(user).name("김치찌개").weight(1).build());
+        Menu theirs = menuRepository.save(Menu.builder().user(other).name("파스타").weight(1).build());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                menuService.batchUpdateExclusion(user.getId(), new MenuRequest.BatchUpdateExclusion(
+                        java.util.List.of(
+                                new MenuRequest.ExclusionEntry(mine.getId(), true),
+                                new MenuRequest.ExclusionEntry(theirs.getId(), true)))))
+                .isInstanceOf(com.nameless0422.MenuPick.common.exception.BusinessException.class);
+
+        assertThat(menuRepository.findById(mine.getId()).orElseThrow().isExcluded()).isFalse();
+        assertThat(menuRepository.findById(theirs.getId()).orElseThrow().isExcluded()).isFalse();
     }
 }

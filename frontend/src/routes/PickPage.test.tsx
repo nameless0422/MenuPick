@@ -26,6 +26,12 @@ vi.mock("../api/history", () => ({
 }));
 vi.mock("../api/tags", () => ({ searchTags: vi.fn().mockResolvedValue([]), fetchAllTags: vi.fn().mockResolvedValue([]) }));
 vi.mock("../api/pickPreferences", () => ({ fetchDefaultExcludedTagIds: vi.fn().mockResolvedValue([]) }));
+// 첫 사용자 안내도 마운트되자마자 상태를 묻는다. 이 파일은 이미 쓰고 있는 사용자를 가정하므로
+// needed=false로 둔다(안내 자체는 OnboardingCard.test.tsx가 검증한다).
+vi.mock("../api/onboarding", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/onboarding")>()),
+  fetchOnboardingStatus: vi.fn().mockResolvedValue({ needed: false, menus: [] }),
+}));
 vi.mock("../api/trends", () => ({ fetchTrends: vi.fn() }));
 // 빠른 픽 절도 마운트되자마자 목록을 부른다. 갈아 끼우지 않으면 이 화면의 테스트마다
 // 실패한 요청의 에러 alert가 하나씩 더 그려져 role="alert" 조회가 어느 것을 가리키는지

@@ -305,6 +305,8 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
 | GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터). 항목에 `recommendationFeedback` 포함 | Y |
+| PATCH | /menus/exclusions | 추천 제외 일괄 변경 (담긴 메뉴만 변경, 전체 교체 아님) | Y |
+| GET | /onboarding | 첫 사용자 안내 필요 여부와 기본 메뉴 목록 | Y |
 | GET | /history/summary | 내 식사 기록 요약 (최근 N일 픽·먹은 수, 카테고리·메뉴 상위, 오래 안 뽑힌 메뉴). days 범위 밖은 기본 30일 | Y |
 | GET | /history/calendar | 방문 처리 기록의 월별 캘린더 조회 (`month=YYYY-MM`, 생략 시 KST 현재 월, 최대 500건) — 2026-09-15 운영 배포 | Y |
 | POST | /history/{historyId}/place | 픽 결과에서 주변 식당 선택 — 식당 저장·메뉴 연결·픽 기록을 한 번에(방문 처리 안 함). 본문은 식당 저장과 같고 `kakaoPlaceId` 필수 | Y |

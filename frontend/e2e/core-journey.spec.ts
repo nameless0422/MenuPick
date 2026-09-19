@@ -159,6 +159,11 @@ async function installFakeApi(page: Page) {
       });
     }
     // 히스토리 화면의 식사 요약. 이 여정은 요약 내용을 보지 않으므로 빈 값으로 둔다.
+    // 첫 사용자 안내. 이 여정은 안내를 지나 바로 뽑기로 가므로 needed=false로 둔다
+    // (안내 자체는 OnboardingCard.test.tsx가 검증한다).
+    if (path === "/api/v1/onboarding" && method === "GET") {
+      return api(route, { needed: false, menus: [] });
+    }
     if (path === "/api/v1/history/summary" && method === "GET") {
       return api(route, {
         periodDays: 30, picks: picked ? 1 : 0, eaten: visited ? 1 : 0,
