@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verify;
 class DefaultMenuProvisionerTest {
 
     @Mock private MenuRepository menuRepository;
+    @Mock private com.nameless0422.MenuPick.domain.tag.TagRepository tagRepository;
 
     @InjectMocks private DefaultMenuProvisioner provisioner;
 
@@ -102,5 +103,56 @@ class DefaultMenuProvisionerTest {
 
         assertThat(provisioner.provision(user)).isZero();
         verify(menuRepository, never()).saveAll(anyList());
+    }
+
+    /**
+     * 태그가 0개인 계정에서는 픽의 포함·제외 필터, 기본 제외 태그, 빠른 픽의 태그 조건이 전부
+     * 아무 일도 하지 않는다. 기본 메뉴와 같은 이유로 처음부터 넣어 준다.
+     */
+    @Test
+    @DisplayName("기본 태그도 함께 만들고 해당 메뉴에 붙인다")
+    void seedsDefaultTags() {
+        User user = user(1L);
+        given(menuRepository.existsByUserId(1L)).willReturn(false);
+
+        provisioner.provision(user);
+
+        ArgumentCaptor<java.util.Collection<com.nameless0422.MenuPick.domain.tag.Tag>> tagCaptor =
+                ArgumentCaptor.forClass(java.util.Collection.class);
+        verify(tagRepository).saveAll(tagCaptor.capture());
+        assertThat(tagCaptor.getValue())
+                .extracting(com.nameless0422.MenuPick.domain.tag.Tag::getName)
+                .containsExactlyInAnyOrderElementsOf(DefaultTags.NAMES);
+
+        Menu kimchi = savedMenus().stream()
+                .filter(menu -> menu.getName().equals("김치찌개")).findFirst().orElseThrow();
+        assertThat(kimchi.getTags())
+                .extracting(com.nameless0422.MenuPick.domain.tag.Tag::getName)
+                .containsExactlyInAnyOrderElementsOf(DefaultTags.MENU_TAGS.get("김치찌개"));
+    }
+
+    /** 애매한 메뉴에 억지로 붙이면, 그 태그로 거르는 사람이 "왜 이게 걸렸지"를 겪는다. */
+    @Test
+    @DisplayName("목록에 없는 메뉴에는 태그를 붙이지 않는다")
+    void leavesUnmappedMenusUntagged() {
+        User user = user(1L);
+        given(menuRepository.existsByUserId(1L)).willReturn(false);
+
+        provisioner.provision(user);
+
+        Menu pork = savedMenus().stream()
+                .filter(menu -> menu.getName().equals("삼겹살")).findFirst().orElseThrow();
+        assertThat(pork.getTags()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이미 메뉴가 있는 계정에는 태그도 넣지 않는다")
+    void skipsTagsWhenMenusExist() {
+        User user = user(1L);
+        given(menuRepository.existsByUserId(1L)).willReturn(true);
+
+        provisioner.provision(user);
+
+        verify(tagRepository, never()).saveAll(anyList());
     }
 }

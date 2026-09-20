@@ -6,7 +6,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.nameless0422.MenuPick.domain.tag.Tag;
+import com.nameless0422.MenuPick.domain.tag.TagRepository;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 갓 만들어진 계정에 {@link DefaultMenus}의 기본 메뉴를 한 번 넣어 준다.
@@ -29,6 +35,7 @@ import java.util.List;
 public class DefaultMenuProvisioner {
 
     private final MenuRepository menuRepository;
+    private final TagRepository tagRepository;
 
     /**
      * @return 새로 넣은 메뉴 수. 이미 메뉴를 가진 계정이면 0
@@ -45,6 +52,10 @@ public class DefaultMenuProvisioner {
             return 0;
         }
 
+        // 태그를 먼저 만든다. 메뉴를 저장하기 전에 붙여 두면 저장이 한 번으로 끝나고,
+        // "메뉴는 들어갔는데 태그만 빠진" 중간 상태가 애초에 생기지 않는다.
+        Map<String, Tag> tags = provisionTags(user);
+
         List<Menu> menus = DefaultMenus.PRESETS.stream()
                 .map(preset -> {
                     // 가중치는 지정하지 않는다 — 빌더가 기본값 1을 넣는다. 제외 여부도 기본 false다.
@@ -53,6 +64,9 @@ public class DefaultMenuProvisioner {
                             .name(preset.name())
                             .build();
                     menu.addCategory(preset.category());
+                    // 목록에 없는 메뉴(삼겹살·치킨 등)에는 아무 태그도 붙지 않는다 — 근거는 DefaultTags.
+                    DefaultTags.MENU_TAGS.getOrDefault(preset.name(), Set.of())
+                            .forEach(tagName -> menu.addTag(tags.get(tagName)));
                     return menu;
                 })
                 .toList();
@@ -60,5 +74,23 @@ public class DefaultMenuProvisioner {
         menuRepository.saveAll(menus);
         log.info("기본 메뉴를 생성했습니다: userId={}, count={}", user.getId(), menus.size());
         return menus.size();
+    }
+
+    /**
+     * 기본 태그를 만든다.
+     *
+     * <p>메뉴와 <b>같은 트랜잭션·같은 호출</b>에서 한다. 따로 떼면 "메뉴는 있는데 태그만 없는
+     * 계정"이 생기고, 그 상태는 나중에 알아채 고칠 방법이 없다(이 클래스 주석의 같은 이유).
+     *
+     * <p>메뉴가 이미 있어 위에서 일찍 빠져나간 계정에는 태그도 넣지 않는다. 자기 목록을 손질한
+     * 사용자에게 앱이 뒤늦게 무언가를 채워 넣는 동작은 하지 않는다({@link DefaultTags}).
+     */
+    private Map<String, Tag> provisionTags(User user) {
+        Map<String, Tag> tags = new HashMap<>();
+        for (String name : DefaultTags.NAMES) {
+            tags.put(name, Tag.builder().user(user).name(name).build());
+        }
+        tagRepository.saveAll(tags.values());
+        return tags;
     }
 }
