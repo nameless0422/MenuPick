@@ -34,6 +34,8 @@ import "./PickPage.css";
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
 const SPIN_MS = 1200; // 슬롯머신 연출 최소 시간 — 응답이 더 빨라도 이만큼은 돌린다
 const DISTANCE_OPTIONS = [300, 500, 1000, 2000, 5000];
+/** 타이핑 전에 보여줄 태그 수. 한 줄에 들어가는 만큼만 — 근거는 TagFilter의 suggestions. */
+const DEFAULT_TAG_SUGGESTIONS = 8;
 
 type GeoState =
   | { status: "idle" }
@@ -718,17 +720,37 @@ function TagFilter({
   const [keyword, setKeyword] = useState("");
   const deferredKeyword = useDeferredValue(keyword);
   const searchInput = useRef<HTMLInputElement>(null);
+  const searching = deferredKeyword.trim().length > 0;
 
   const tagsQuery = useQuery({
     queryKey: ["tags", deferredKeyword],
     queryFn: () => searchTags(deferredKeyword),
+    // 키워드가 비면 서버가 의도적으로 빈 목록을 준다(TagService.searchTags). 부를 이유가 없다.
+    enabled: searching,
   });
 
-  const suggestions = (tagsQuery.data ?? []).filter(
-    (tag) =>
-      !selected.some((s) => s.id === tag.id) &&
-      !disabledTags.some((d) => d.id === tag.id),
-  );
+  /**
+   * 타이핑하기 전에 보여줄 목록.
+   *
+   * <p>예전에는 검색 결과만 제안했다. 그런데 자동완성은 키워드가 비면 빈 목록이라, 화면에
+   * 들어온 사람에게는 <b>태그라는 것이 있는지조차 보이지 않았다</b> — 이름을 이미 아는
+   * 사람만 쓸 수 있는 필터였던 셈이다. 2026-09-21에 기본 태그 6개를 깔고 나서 그 문제가
+   * 분명해졌다(깔아 둔 태그가 어디에도 안 보였다).
+   *
+   * <p>설정 화면의 태그 관리와 같은 조회를 쓴다(같은 쿼리 키라 한 번만 나간다).
+   */
+  const allTagsQuery = useQuery({ queryKey: ["tags", "all"], queryFn: fetchAllTags });
+
+  const pool = searching ? (tagsQuery.data ?? []) : (allTagsQuery.data ?? []);
+  const suggestions = pool
+    .filter(
+      (tag) =>
+        !selected.some((s) => s.id === tag.id) &&
+        !disabledTags.some((d) => d.id === tag.id),
+    )
+    // 타이핑 전 목록은 한 줄을 넘기지 않게 자른다. 태그가 많은 사용자에게 칩 수십 개를
+    // 펼치면 필터 화면이 통째로 밀려 내려가고, 정작 뽑기 버튼이 화면 밖으로 나간다.
+    .slice(0, searching ? undefined : DEFAULT_TAG_SUGGESTIONS);
 
   // 태그는 고르든 풀든 누른 버튼이 사라진다 — 제안 칩은 선택 행으로 옮겨가고, 선택 칩은
   // 제안 행으로 돌아간다. 돌아갈 자리가 없으므로 초점을 검색 입력으로 모은다: 이 컨트롤의
@@ -772,6 +794,12 @@ function TagFilter({
         />
       </div>
       {tagsQuery.isError && <p className="error" role="alert">{apiErrorMessage(tagsQuery.error)}</p>}
+      {/* 태그가 하나도 없으면 칩 줄이 비는데, 그 빈 자리는 "없음"과 "고장"을 구분해 주지 않는다. */}
+      {!searching && allTagsQuery.isSuccess && suggestions.length === 0 && selected.length === 0 && (
+        <p className="card-muted-hint">
+          쓸 태그가 없어요. <Link to="/settings">설정</Link>에서 만들 수 있어요.
+        </p>
+      )}
       {suggestions.length > 0 && (
         <div className="chip-row">
           {suggestions.map((tag) => (
