@@ -6,7 +6,7 @@ import PickPage from "./PickPage";
 import { requestPick } from "../api/pick";
 import { requestPickAlternatives } from "../api/pickAlternatives";
 import { fetchHistories, recordPickFeedback } from "../api/history";
-import { searchTags } from "../api/tags";
+import { fetchAllTags, searchTags } from "../api/tags";
 import { fetchTrends } from "../api/trends";
 import { executePickPreset, fetchPickPresets } from "../api/pickPresets";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
@@ -49,6 +49,7 @@ const requestPickAlternativesMock = vi.mocked(requestPickAlternatives);
 const recordPickFeedbackMock = vi.mocked(recordPickFeedback);
 const fetchHistoriesMock = vi.mocked(fetchHistories);
 const searchTagsMock = vi.mocked(searchTags);
+const fetchAllTagsMock = vi.mocked(fetchAllTags);
 const fetchTrendsMock = vi.mocked(fetchTrends);
 const fetchPickPresetsMock = vi.mocked(fetchPickPresets);
 const executePickPresetMock = vi.mocked(executePickPreset);
@@ -91,6 +92,8 @@ beforeEach(() => {
   recordPickFeedbackMock.mockResolvedValue(undefined);
   // 태그 제안을 쓰는 테스트가 뒤 테스트로 새지 않게 매번 빈 목록으로 되돌린다.
   searchTagsMock.mockResolvedValue([]);
+  fetchAllTagsMock.mockReset();
+  fetchAllTagsMock.mockResolvedValue([]);
   fetchTrendsMock.mockReset();
   fetchTrendsMock.mockResolvedValue({
     status: "DISABLED",
@@ -579,7 +582,7 @@ describe("필터 칩 — 눌러도 갈 곳이 남는다", () => {
   });
 
   it("태그를 고르면 초점이 그 태그 검색 입력으로 간다", async () => {
-    searchTagsMock.mockResolvedValue([HONBAP]);
+    fetchAllTagsMock.mockResolvedValue([HONBAP]);
     const user = userEvent.setup();
     renderWithProviders(<PickPage />);
 
@@ -592,7 +595,7 @@ describe("필터 칩 — 눌러도 갈 곳이 남는다", () => {
   });
 
   it("선택한 태그를 해제해도 초점이 검색 입력에 남는다", async () => {
-    searchTagsMock.mockResolvedValue([HONBAP]);
+    fetchAllTagsMock.mockResolvedValue([HONBAP]);
     const user = userEvent.setup();
     renderWithProviders(<PickPage />);
 
@@ -652,8 +655,41 @@ describe("모션 최소화", () => {
  * 검색되는지 지워지는지 알 수 없다.
  */
 describe("태그 제안 칩", () => {
+  /**
+   * 자동완성은 키워드가 비면 빈 목록이라, 예전에는 태그가 있다는 사실조차 화면에 안 보였다 —
+   * 이름을 이미 아는 사람만 쓸 수 있는 필터였다. 기본 태그를 깔고 나서 그 문제가 분명해졌다.
+   */
+  it("타이핑하기 전에도 내 태그를 보여준다", async () => {
+    fetchAllTagsMock.mockResolvedValue([HONBAP]);
+    renderWithProviders(<PickPage />);
+
+    expect((await screen.findAllByRole("button", { name: "혼밥 태그 추가" })).length)
+      .toBeGreaterThan(0);
+    // 키워드가 비었을 때는 서버를 부르지 않는다 — 어차피 빈 목록이 돌아온다.
+    expect(searchTagsMock).not.toHaveBeenCalled();
+  });
+
+  it("검색어를 치면 검색 결과로 바뀐다", async () => {
+    const user = userEvent.setup();
+    fetchAllTagsMock.mockResolvedValue([HONBAP]);
+    searchTagsMock.mockResolvedValue([{ id: 9, name: "국물", createdAt: "2026-01-01T00:00:00" }]);
+    renderWithProviders(<PickPage />);
+
+    await screen.findAllByRole("button", { name: "혼밥 태그 추가" });
+    await user.type(screen.getByRole("textbox", { name: "포함 태그 검색" }), "국");
+
+    expect((await screen.findAllByRole("button", { name: "국물 태그 추가" })).length)
+      .toBeGreaterThan(0);
+  });
+
+  it("태그가 하나도 없으면 어디서 만드는지 알려준다", async () => {
+    renderWithProviders(<PickPage />);
+
+    expect((await screen.findAllByText(/쓸 태그가 없어요/)).length).toBeGreaterThan(0);
+  });
+
   it("토글이 아니므로 aria-pressed를 달지 않고, 이름이 무엇을 하는지 말한다", async () => {
-    searchTagsMock.mockResolvedValue([HONBAP]);
+    fetchAllTagsMock.mockResolvedValue([HONBAP]);
     renderWithProviders(<PickPage />);
 
     // 포함/제외 두 필터가 같은 키로 조회하므로 제안 칩도 두 벌 나온다.
@@ -666,7 +702,7 @@ describe("태그 제안 칩", () => {
 
   it("반대로 선택된 칩은 눌러서 해제되는 진짜 토글이라 aria-pressed가 남는다", async () => {
     const user = userEvent.setup();
-    searchTagsMock.mockResolvedValue([HONBAP]);
+    fetchAllTagsMock.mockResolvedValue([HONBAP]);
     renderWithProviders(<PickPage />);
 
     await user.click((await screen.findAllByRole("button", { name: "혼밥 태그 추가" }))[0]);
