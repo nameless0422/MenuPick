@@ -216,6 +216,31 @@ class HistoryServiceTest {
     }
 
     @Test
+    @DisplayName("방문 취소는 시각만 지우고 고른 식당과 추천 피드백은 유지한다")
+    void unmarkVisited_keepsOtherChoices() {
+        var history = createHistory(1L, menu, restaurant, true, NOW);
+        history.recordFeedback(RecommendationFeedback.ACCEPTED);
+        given(historyRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(history));
+
+        historyService.unmarkVisited(1L, 1L);
+
+        assertThat(history.isVisited()).isFalse();
+        assertThat(history.getVisitedAt()).isNull();
+        assertThat(history.getRestaurant()).isSameAs(restaurant);
+        assertThat(history.getRecommendationFeedback()).isEqualTo(RecommendationFeedback.ACCEPTED);
+    }
+
+    @Test
+    @DisplayName("방문 취소는 본인 소유 기록이 아니면 404")
+    void unmarkVisited_notFound() {
+        given(historyRepository.findByIdAndUserId(99L, 1L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> historyService.unmarkVisited(1L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.HISTORY_NOT_FOUND);
+    }
+
+    @Test
     @DisplayName("방문 여부 업데이트 — 히스토리 미존재 시 404")
     void markVisited_notFound() {
         given(historyRepository.findByIdAndUserId(99L, 1L)).willReturn(Optional.empty());

@@ -87,6 +87,10 @@ export async function markVisited(historyId: number, restaurantId?: number) {
   );
 }
 
+export async function unmarkVisited(historyId: number) {
+  await http.delete<ApiResponse<null>>(`/api/v1/history/${historyId}/visit`);
+}
+
 export async function deleteHistory(historyId: number) {
   await http.delete<ApiResponse<null>>(`/api/v1/history/${historyId}`);
 }

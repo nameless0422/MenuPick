@@ -75,6 +75,12 @@ public class History {
         }
     }
 
+    /** 방문 여부만 되돌린다. 고른 식당과 추천 수락 기록은 별개의 결정으로 남긴다. */
+    public void unmarkVisited() {
+        this.isVisited = false;
+        this.visitedAt = null;
+    }
+
     /**
      * 먹으러 갈 식당을 고른다. 식당을 적고 수락으로 표시하지만 <b>방문 처리는 하지 않는다</b> —
      * 아직 가기 전이다. 나중에 {@link #markVisited(LocalDateTime)}로 방문 처리해도 여기서 적은

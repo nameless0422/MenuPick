@@ -38,6 +38,21 @@ class HistoryControllerTest extends AbstractControllerTest {
             """;
 
     @Test
+    @DisplayName("DELETE /api/v1/history/{id}/visit - 방문 취소")
+    void unmarkVisited_success() throws Exception {
+        mockMvc.perform(delete("/api/v1/history/5/visit").with(authentication(AUTH)))
+                .andExpect(status().isOk());
+        verify(historyService).unmarkVisited(1L, 5L);
+    }
+
+    @Test
+    @DisplayName("DELETE /api/v1/history/{id}/visit - 미인증 401")
+    void unmarkVisited_unauthorized() throws Exception {
+        mockMvc.perform(delete("/api/v1/history/5/visit"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("POST /api/v1/history/{id}/place - 고른 식당과 새로 생긴 것을 알려준다")
     void choosePlace_success() throws Exception {
         given(historyPlaceService.choosePlace(eq(1L), eq(5L), any()))
