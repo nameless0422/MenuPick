@@ -1,12 +1,19 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-15 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-23 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-09-23 방문 처리 취소 — 구현, 미배포
+
+- 히스토리에서 잘못 누른 방문 처리를 취소할 수 있다. `DELETE /history/{id}/visit`는 본인
+  기록의 `isVisited`와 `visitedAt`만 되돌린다. 픽 기록, 고른 식당, 추천 피드백은 유지한다.
+- 취소 후 히스토리 목록·방문 달력·식사 기록 요약을 다시 읽는다. DB 마이그레이션과 기능
+  플래그는 없다.
 
 ### 2026-09-21 태그 빠른 선택 — 운영 배포 완료
 

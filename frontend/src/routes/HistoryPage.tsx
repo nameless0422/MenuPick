@@ -6,6 +6,7 @@ import {
   fetchHistories,
   fetchMenuRestaurants,
   markVisited,
+  unmarkVisited,
   type HistoryFilterCondition,
   type HistorySummary,
   type MenuRestaurant,
@@ -87,6 +88,14 @@ export default function HistoryPage() {
     void queryClient.invalidateQueries({ queryKey: ["history-calendar"] });
   };
 
+  const undoVisitMutation = useMutation({
+    mutationFn: (id: number) => unmarkVisited(id),
+    onSuccess: () => {
+      listRef.current?.focus();
+      invalidate();
+    },
+  });
+
   const histories = historyQuery.data?.pages.flatMap((page) => page.histories) ?? [];
 
   // 삭제를 누른 버튼은 그 <li>와 함께 사라진다 — window.confirm이 초점을 버튼으로 되돌려
@@ -115,6 +124,8 @@ export default function HistoryPage() {
     ? "픽 기록을 더 불러오는 중…"
     : deleteMutation.isSuccess
       ? `'${deleteMutation.variables.label}' 픽 기록을 삭제했습니다. 픽 기록 ${histories.length}개.`
+      : undoVisitMutation.isSuccess
+        ? "방문 처리를 취소했습니다."
       : `픽 기록 ${histories.length}개`;
 
   return (
@@ -157,6 +168,9 @@ export default function HistoryPage() {
       {/* 삭제 실패 시 목록만 새로고침되어 항목이 그대로 남는다 — 이유를 알려야 한다 */}
       {deleteMutation.isError && (
         <p className="error" role="alert">삭제하지 못했습니다. {errorMessage(deleteMutation.error)}</p>
+      )}
+      {undoVisitMutation.isError && (
+        <p className="error" role="alert">방문 처리를 취소하지 못했습니다. {errorMessage(undoVisitMutation.error)}</p>
       )}
       {/* 기간 필터를 바꾸면 목록이 통째로 갈리는데 화면 아래가 조용히 다시 그려질 뿐이다.
           리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
@@ -211,12 +225,22 @@ export default function HistoryPage() {
 
             <div className="card-actions">
               {history.isVisited ? (
-                history.visitedAt && (
-                  <span className="history-visited-at">
-                  방문 시각{" "}
-                  <time dateTime={history.visitedAt}>{formatDateTime(history.visitedAt)}</time>
-                </span>
-                )
+                <>
+                  {history.visitedAt && (
+                    <span className="history-visited-at">
+                      방문 시각{" "}
+                      <time dateTime={history.visitedAt}>{formatDateTime(history.visitedAt)}</time>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={undoVisitMutation.isPending}
+                    aria-label={`${label} 방문 처리 취소 (${formatDateTime(history.recommendedAt)})`}
+                    onClick={() => undoVisitMutation.mutate(history.id)}
+                  >
+                    {undoVisitMutation.isPending && undoVisitMutation.variables === history.id ? "처리 중…" : "방문 취소"}
+                  </button>
+                </>
               ) : (
                 <VisitAction
                   history={history}

@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import HistoryPage from "./HistoryPage";
-import { fetchHistories, fetchMenuRestaurants } from "../api/history";
+import { fetchHistories, fetchMenuRestaurants, unmarkVisited } from "../api/history";
 
 vi.mock("../api/history", () => ({
   fetchHistories: vi.fn(),
@@ -16,6 +16,7 @@ vi.mock("../api/history", () => ({
   validateHistoryCalendar: vi.fn(),
   fetchMenuRestaurants: vi.fn(),
   markVisited: vi.fn(),
+  unmarkVisited: vi.fn(),
   deleteHistory: vi.fn(),
 }));
 vi.mock("../api/menus", () => ({
@@ -24,6 +25,7 @@ vi.mock("../api/menus", () => ({
 
 const fetchHistoriesMock = vi.mocked(fetchHistories);
 const fetchMenuRestaurantsMock = vi.mocked(fetchMenuRestaurants);
+const unmarkVisitedMock = vi.mocked(unmarkVisited);
 
 const KIMCHI_PICK = {
   id: 10,
@@ -39,11 +41,32 @@ const KIMCHI_PICK = {
 beforeEach(() => {
   fetchHistoriesMock.mockReset();
   fetchMenuRestaurantsMock.mockReset();
+  unmarkVisitedMock.mockReset();
+  unmarkVisitedMock.mockResolvedValue(undefined);
   fetchMenuRestaurantsMock.mockResolvedValue([]);
   fetchHistoriesMock.mockResolvedValue({
     histories: [KIMCHI_PICK],
     nextCursor: null,
     hasNext: false,
+  });
+});
+
+describe("방문 처리 취소", () => {
+  it("방문한 기록에서 취소하고 목록을 다시 읽는다", async () => {
+    const user = userEvent.setup();
+    fetchHistoriesMock.mockResolvedValueOnce({
+      histories: [{ ...KIMCHI_PICK, isVisited: true, visitedAt: "2026-08-21T20:00:00" }],
+      nextCursor: null,
+      hasNext: false,
+    });
+    renderWithProviders(<HistoryPage />);
+
+    await user.click(await screen.findByRole("button", { name: /김치찌개 방문 처리 취소/ }));
+
+    await waitFor(() => expect(unmarkVisitedMock).toHaveBeenCalledWith(10));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "김치찌개 방문했어요" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("방문 처리를 취소했습니다.");
   });
 });
 

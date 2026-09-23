@@ -60,6 +60,14 @@ public class HistoryController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @DeleteMapping("/{historyId}/visit")
+    public ResponseEntity<ApiResponse<Void>> unmarkVisited(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long historyId) {
+        historyService.unmarkVisited(userId, historyId);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
     /**
      * 뽑은 메뉴를 먹으러 갈 식당을 주변 검색 결과에서 고른다. 식당 저장·메뉴 연결·기록을
      * 한 번에 한다 — 근거는 {@link HistoryPlaceService}. 본문은 식당 저장 요청과 같은 모양이고
