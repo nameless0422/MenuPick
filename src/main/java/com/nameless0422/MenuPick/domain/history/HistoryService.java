@@ -110,6 +110,13 @@ public class HistoryService {
     }
 
     @Transactional
+    public void unmarkVisited(Long userId, Long historyId) {
+        History history = historyRepository.findByIdAndUserId(historyId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        history.unmarkVisited();
+    }
+
+    @Transactional
     public void deleteHistory(Long userId, Long historyId) {
         History history = historyRepository.findByIdAndUserId(historyId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
