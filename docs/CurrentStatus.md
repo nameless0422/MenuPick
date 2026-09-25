@@ -1,6 +1,6 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-23 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-26 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
@@ -8,12 +8,23 @@
 
 ## 제품 완성도
 
-### 2026-09-23 방문 처리 취소 — 구현, 미배포
+### 2026-09-26 픽 기록 방문 상태 필터 — 운영 배포 완료
+
+- 히스토리에서 전체·방문·미방문을 선택한다. `GET /history?visited=true|false`가 기간과
+  커서를 함께 적용하므로 다음 페이지에도 같은 조건이 유지된다. 값을 생략하면 전체를 조회한다.
+- DB 마이그레이션과 기능 플래그는 없다. 백엔드 `check`, 프론트 lint·build, UTC Vitest 448개,
+  CI Playwright 3/3 및 PR #301의 세 CI 잡이 통과했다.
+- `main` SHA `aed070f39f015127c655aa69c3b8d25fef292505`로 운영 배포했다. DB 백업
+  `menupick-20260925-172241Z.sql.gz`의 `gzip -t`를 확인했고, app·web healthy, readiness UP,
+  HTTPS 200, HTTP 301, 새 API 미인증 401, 최근 app·web ERROR 0건을 확인했다.
+
+### 2026-09-23 방문 처리 취소 — 운영 배포 완료
 
 - 히스토리에서 잘못 누른 방문 처리를 취소할 수 있다. `DELETE /history/{id}/visit`는 본인
   기록의 `isVisited`와 `visitedAt`만 되돌린다. 픽 기록, 고른 식당, 추천 피드백은 유지한다.
 - 취소 후 히스토리 목록·방문 달력·식사 기록 요약을 다시 읽는다. DB 마이그레이션과 기능
   플래그는 없다.
+- `main` SHA `aed070f39f015127c655aa69c3b8d25fef292505`에 포함해 2026-09-26 운영 배포했다.
 
 ### 2026-09-21 태그 빠른 선택 — 운영 배포 완료
 
