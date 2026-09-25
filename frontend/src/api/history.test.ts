@@ -1,10 +1,24 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { AxiosResponse, InternalAxiosRequestConfig } from "axios";
-import { fetchHistoryCalendar, validateHistoryCalendar } from "./history";
+import { fetchHistories, fetchHistoryCalendar, validateHistoryCalendar } from "./history";
 import { http } from "./http";
 
 const realAdapter = http.defaults.adapter;
 afterEach(() => { http.defaults.adapter = realAdapter; });
+
+describe("픽 기록 조회 API", () => {
+  it("방문 상태와 커서를 같은 요청에 보낸다", async () => {
+    let sent: InternalAxiosRequestConfig | undefined;
+    http.defaults.adapter = async (config) => {
+      sent = config;
+      return { data: { success: true, data: { histories: [], nextCursor: null, hasNext: false } },
+        status: 200, statusText: "OK", headers: {}, config } as AxiosResponse;
+    };
+
+    await fetchHistories(42, 30, 20, false);
+    expect(sent?.params).toEqual({ cursor: 42, days: 30, size: 20, visited: false });
+  });
+});
 
 describe("방문 기록 달력 API", () => {
   it("month와 취소 신호를 보내고 응답을 검증한다", async () => {

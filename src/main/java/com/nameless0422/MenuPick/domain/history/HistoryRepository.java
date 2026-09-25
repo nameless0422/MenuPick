@@ -29,6 +29,18 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     List<History> findByUserIdAndRecommendedAtAfterOrderByIdDesc(
             Long userId, LocalDateTime after, Pageable pageable);
 
+    @Query("select h from History h where h.user.id = :userId and h.isVisited = :visited " +
+            "and h.recommendedAt > :after order by h.id desc")
+    List<History> findByUserIdAndIsVisitedAndRecommendedAtAfterOrderByIdDesc(
+            @Param("userId") Long userId, @Param("visited") boolean visited,
+            @Param("after") LocalDateTime after, Pageable pageable);
+
+    @Query("select h from History h where h.user.id = :userId and h.isVisited = :visited " +
+            "and h.recommendedAt > :after and h.id < :cursor order by h.id desc")
+    List<History> findByUserIdAndIsVisitedAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
+            @Param("userId") Long userId, @Param("visited") boolean visited,
+            @Param("after") LocalDateTime after, @Param("cursor") Long cursor, Pageable pageable);
+
     Optional<History> findByIdAndUserId(Long id, Long userId);
 
     /** 픽을 한 번이라도 했는가. 첫 사용자 안내가 "이미 쓰기 시작했는지"를 판정하는 데 쓴다. */

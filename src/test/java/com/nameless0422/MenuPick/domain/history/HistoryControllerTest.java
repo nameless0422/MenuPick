@@ -180,7 +180,7 @@ class HistoryControllerTest extends AbstractControllerTest {
                 List.of(new HistoryResponse.FilterCondition("CATEGORY", "한식")));
         var response = new HistoryResponse.HistoryListResponse(List.of(summary), null, false);
 
-        given(historyService.getHistories(1L, null, null, 20)).willReturn(response);
+        given(historyService.getHistories(1L, null, null, null, 20)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/history")
                         .with(authentication(AUTH)))
@@ -200,10 +200,19 @@ class HistoryControllerTest extends AbstractControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/history - 방문 상태와 커서를 함께 전달한다")
+    void getHistories_withVisitFilter() throws Exception {
+        mockMvc.perform(get("/api/v1/history").with(authentication(AUTH))
+                        .param("cursor", "42").param("visited", "false"))
+                .andExpect(status().isOk());
+        verify(historyService).getHistories(1L, 42L, null, false, 20);
+    }
+
+    @Test
     @DisplayName("GET /api/v1/history - days 파라미터 전달")
     void getHistories_withDays() throws Exception {
         var response = new HistoryResponse.HistoryListResponse(List.of(), null, false);
-        given(historyService.getHistories(1L, null, 30, 10)).willReturn(response);
+        given(historyService.getHistories(1L, null, 30, null, 10)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/history")
                         .with(authentication(AUTH))

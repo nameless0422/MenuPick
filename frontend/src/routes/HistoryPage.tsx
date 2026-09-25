@@ -61,10 +61,11 @@ function filterChipClass(condition: HistoryFilterCondition): string {
 export default function HistoryPage() {
   const queryClient = useQueryClient();
   const [days, setDays] = useState(7);
+  const [visited, setVisited] = useState<boolean | undefined>(undefined);
 
   const historyQuery = useInfiniteQuery({
-    queryKey: ["history", days],
-    queryFn: ({ pageParam }) => fetchHistories(pageParam, days),
+    queryKey: ["history", days, visited],
+    queryFn: ({ pageParam }) => fetchHistories(pageParam, days, 20, visited),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => (last.hasNext && last.nextCursor != null ? last.nextCursor : undefined),
   });
@@ -91,7 +92,7 @@ export default function HistoryPage() {
   const undoVisitMutation = useMutation({
     mutationFn: (id: number) => unmarkVisited(id),
     onSuccess: () => {
-      listRef.current?.focus();
+      (visited === true && histories.length <= 1 ? headingRef : listRef).current?.focus();
       invalidate();
     },
   });
@@ -163,6 +164,24 @@ export default function HistoryPage() {
         ))}
       </div>
 
+      <div className="days-filter" role="group" aria-label="방문 상태">
+        {([
+          { label: "모두", value: undefined },
+          { label: "방문", value: true },
+          { label: "미방문", value: false },
+        ] as const).map((option) => (
+          <button
+            key={option.label}
+            type="button"
+            className={visited === option.value ? "active" : ""}
+            aria-pressed={visited === option.value}
+            onClick={() => setVisited(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
       {historyQuery.isError && <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>}
 
       {/* 삭제 실패 시 목록만 새로고침되어 항목이 그대로 남는다 — 이유를 알려야 한다 */}
@@ -179,7 +198,9 @@ export default function HistoryPage() {
         {historyQuery.isPending && <p>불러오는 중…</p>}
         {historyQuery.isSuccess && histories.length === 0 && (
           <p>
-            아직 픽 기록이 없어요. <Link to="/pick">오늘 뭐 먹을지 골라볼까요?</Link>
+            {visited === undefined ? (
+              <>아직 픽 기록이 없어요. <Link to="/pick">오늘 뭐 먹을지 골라볼까요?</Link></>
+            ) : "선택한 방문 상태의 픽 기록이 없어요."}
           </p>
         )}
         {historyQuery.isSuccess && histories.length > 0 && (
@@ -245,7 +266,12 @@ export default function HistoryPage() {
                 <VisitAction
                   history={history}
                   menuId={history.menuName != null ? menuIdByName.get(history.menuName) ?? null : null}
-                  onVisited={invalidate}
+                  onVisited={() => {
+                    if (visited === false) {
+                      (histories.length <= 1 ? headingRef : listRef).current?.focus();
+                    }
+                    invalidate();
+                  }}
                 />
               )}
               {/* 이름 없는 "삭제"가 기록 수만큼 늘어서고, 확인 대화상자마저 무엇을 지우는지

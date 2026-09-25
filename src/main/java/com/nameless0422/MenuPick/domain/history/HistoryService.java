@@ -32,14 +32,20 @@ public class HistoryService {
     /** 기준 시간대(KST) 고정 — days 필터 경계가 서버 JVM 시간대에 좌우되지 않게 한다. */
     private final Clock clock;
 
-    public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, int size) {
+    public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, Boolean visited, int size) {
         // days는 컨트롤러에서 @Min(1)로 검증되므로 여기서는 미지정(null) 여부만 판단한다.
         int effectiveDays = (days != null) ? days : DEFAULT_DAYS;
         LocalDateTime after = LocalDateTime.now(clock).minusDays(effectiveDays);
         PageRequest pageable = PageRequest.of(0, size + 1);
 
         List<History> histories;
-        if (cursor != null) {
+        if (visited != null && cursor != null) {
+            histories = historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
+                    userId, visited, after, cursor, pageable);
+        } else if (visited != null) {
+            histories = historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterOrderByIdDesc(
+                    userId, visited, after, pageable);
+        } else if (cursor != null) {
             histories = historyRepository
                     .findByUserIdAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(userId, after, cursor, pageable);
         } else {

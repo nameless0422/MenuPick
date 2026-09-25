@@ -72,9 +72,9 @@ export async function fetchHistoryCalendar(month: string, signal?: AbortSignal) 
   return validateHistoryCalendar(unwrap(res), month);
 }
 
-export async function fetchHistories(cursor?: number, days?: number, size = 20) {
+export async function fetchHistories(cursor?: number, days?: number, size = 20, visited?: boolean) {
   const res = await http.get<ApiResponse<HistoryListResponse>>("/api/v1/history", {
-    params: { cursor, days, size },
+    params: { cursor, days, size, visited },
   });
   return unwrap(res);
 }
