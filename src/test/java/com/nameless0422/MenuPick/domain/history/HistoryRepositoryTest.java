@@ -172,6 +172,30 @@ class HistoryRepositoryTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("방문 상태 필터는 소유자와 기간, 커서를 함께 지킨다")
+    void findByVisitStatus_withCursor() {
+        LocalDateTime now = LocalDateTime.now();
+        User other = userRepository.save(User.builder()
+                .email("visit-filter-other@example.com").nickname("다른유저").build());
+        saveVisitedHistory(user, menu, null, now.minusDays(10));
+        History first = saveVisitedHistory(user, menu, null, now.minusDays(2));
+        History second = saveVisitedHistory(user, menu, null, now.minusDays(1));
+        History unvisited = saveHistory(user, menu, now, null);
+        saveVisitedHistory(other, null, null, now);
+
+        var page = PageRequest.of(0, 2);
+        assertThat(historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterOrderByIdDesc(
+                user.getId(), true, now.minusDays(3), page))
+                .extracting(History::getId).containsExactly(second.getId(), first.getId());
+        assertThat(historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
+                user.getId(), true, now.minusDays(3), second.getId(), page))
+                .extracting(History::getId).containsExactly(first.getId());
+        assertThat(historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterOrderByIdDesc(
+                user.getId(), false, now.minusDays(3), page))
+                .extracting(History::getId).containsExactly(unvisited.getId());
+    }
+
+    @Test
     @DisplayName("개인화 신호는 사용자·30일 경계를 지키고 메뉴별 최신 시각과 상쇄된 피드백을 집계한다")
     void findMenuRecommendationSignalsSince_aggregatesWithBoundariesAndIsolation() {
         LocalDateTime since = LocalDateTime.of(2026, 1, 1, 0, 0);

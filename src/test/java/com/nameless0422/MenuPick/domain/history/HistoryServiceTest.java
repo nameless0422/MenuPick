@@ -125,7 +125,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of(history));
 
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 20);
 
         assertThat(result.histories()).hasSize(1);
         assertThat(result.histories().get(0).menuName()).isEqualTo("김치찌개");
@@ -149,7 +149,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of(history));
 
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 20);
 
         // "그날 김치찌개를 먹었다"는 사실은 메뉴를 나중에 지웠다고 없던 일이 되지 않는다.
         assertThat(result.histories().get(0).menuName()).isEqualTo("김치찌개");
@@ -165,10 +165,28 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), eq(10L), any(PageRequest.class)))
                 .willReturn(List.of(history));
 
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, 10L, null, 20);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, 10L, null, null, 20);
 
         assertThat(result.histories()).hasSize(1);
         assertThat(result.histories().get(0).restaurantName()).isNull();
+    }
+
+    @Test
+    @DisplayName("방문 상태 필터는 첫 페이지와 다음 페이지 모두 DB에서 적용한다")
+    void getHistories_withVisitFilter() {
+        var visited = createHistory(5L, menu, null, true, NOW);
+        given(historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), eq(true), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of(visited));
+        given(historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
+                eq(1L), eq(false), any(LocalDateTime.class), eq(10L), any(PageRequest.class)))
+                .willReturn(List.of());
+
+        var first = historyService.getHistories(1L, null, 30, true, 20);
+        var next = historyService.getHistories(1L, 10L, 30, false, 20);
+
+        assertThat(first.histories()).extracting(HistoryResponse.HistorySummary::id).containsExactly(5L);
+        assertThat(next.histories()).isEmpty();
     }
 
     @Test
@@ -178,7 +196,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of());
 
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, 30, 20);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, 30, null, 20);
 
         assertThat(result.histories()).isEmpty();
         assertThat(result.hasNext()).isFalse();
@@ -195,7 +213,7 @@ class HistoryServiceTest {
                 .willReturn(List.of(h1, h2));
 
         // size=1 이므로 2개 반환 시 hasNext=true, 실제 반환은 1개
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 1);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 1);
 
         assertThat(result.histories()).hasSize(1);
         assertThat(result.hasNext()).isTrue();
@@ -338,7 +356,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of());
 
-        historyService.getHistories(1L, null, null, 20);
+        historyService.getHistories(1L, null, null, null, 20);
 
         verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), afterCaptor.capture(), any(PageRequest.class));
@@ -353,7 +371,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of());
 
-        historyService.getHistories(1L, null, 30, 20);
+        historyService.getHistories(1L, null, 30, null, 20);
 
         verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), afterCaptor.capture(), any(PageRequest.class));
@@ -370,7 +388,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of());
 
-        historyService.getHistories(1L, null, 1, 20);
+        historyService.getHistories(1L, null, 1, null, 20);
 
         verify(historyRepository).findByUserIdAndRecommendedAtAfterOrderByIdDesc(
                 eq(1L), afterCaptor.capture(), any(PageRequest.class));
@@ -412,7 +430,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of(history));
 
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 20);
 
         assertThat(result.histories().get(0).menuName()).isNull();
         assertThat(result.histories().get(0).restaurantName()).isNull();
@@ -431,7 +449,7 @@ class HistoryServiceTest {
                 eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
                 .willReturn(List.of(history));
 
-        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, 20);
+        HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 20);
 
         assertThat(result.histories().get(0).filterConditions()).isEmpty();
     }

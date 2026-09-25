@@ -6,6 +6,7 @@
   display: inline-flex;
   gap: 4px;
   margin-bottom: 20px;
+  margin-right: 12px;
   padding: 4px;
   background: var(--code-bg);
   border: 1px solid var(--border);

@@ -256,3 +256,39 @@ describe("기간 필터 그룹", () => {
     expect(within(group).getByRole("button", { name: "전체" })).toBeInTheDocument();
   });
 });
+
+describe("방문 상태 필터", () => {
+  it("방문과 미방문을 서버 조회 조건으로 보내고 빈 결과를 구분한다", async () => {
+    const user = userEvent.setup();
+    fetchHistoriesMock.mockResolvedValueOnce({
+      histories: [KIMCHI_PICK], nextCursor: null, hasNext: false,
+    });
+    fetchHistoriesMock.mockResolvedValue({ histories: [], nextCursor: null, hasNext: false });
+    renderWithProviders(<HistoryPage />);
+
+    const group = await screen.findByRole("group", { name: "방문 상태" });
+    await user.click(within(group).getByRole("button", { name: /^방문$/ }));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledWith(undefined, 7, 20, true));
+    expect(await screen.findByText("선택한 방문 상태의 픽 기록이 없어요.")).toBeInTheDocument();
+
+    await user.click(within(group).getByRole("button", { name: "미방문" }));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledWith(undefined, 7, 20, false));
+    expect(within(group).getByRole("button", { name: "미방문" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("방문 필터에서 마지막 기록을 취소하면 제목으로 초점을 옮긴다", async () => {
+    const user = userEvent.setup();
+    const visitedPick = { ...KIMCHI_PICK, isVisited: true, visitedAt: "2026-08-21T20:00:00" };
+    fetchHistoriesMock.mockResolvedValueOnce({ histories: [visitedPick], nextCursor: null, hasNext: false });
+    fetchHistoriesMock.mockResolvedValueOnce({ histories: [visitedPick], nextCursor: null, hasNext: false });
+    fetchHistoriesMock.mockResolvedValue({ histories: [], nextCursor: null, hasNext: false });
+    renderWithProviders(<HistoryPage />);
+
+    const group = await screen.findByRole("group", { name: "방문 상태" });
+    await user.click(within(group).getByRole("button", { name: /^방문$/ }));
+    await user.click(await screen.findByRole("button", { name: /김치찌개 방문 처리 취소/ }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "픽 히스토리" })).toHaveFocus());
+    await screen.findByText("선택한 방문 상태의 픽 기록이 없어요.");
+  });
+});
