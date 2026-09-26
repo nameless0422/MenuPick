@@ -1,12 +1,26 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-26 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-27 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-09-27 같이 뽑기 결과에서 식당 고르기 — 운영 배포 완료
+
+- 방장이 결과 화면에서 주변 식당 한 곳을 정하면, 링크를 받은 참가자도 식당 이름과 카카오맵
+  링크를 본다. 식당 저장·메뉴 연결·수락 표시는 호스트 픽 기록에 함께 남고 방문 처리는 하지
+  않는다([D-051](DecisionLog.md)). 참가자에게 로그인은 필요 없고 식당 선택은 방장만 할 수 있다.
+- 새 마이그레이션·외부 키·기능 플래그는 없다. 백엔드 `check` 847개, 프론트 lint·build,
+  UTC Vitest 450개, PR #303의 frontend·test·docker-build CI가 통과했다. 새 흐름을 포함한
+  Playwright 4개 시나리오도 CI에서 통과했다.
+- `main` SHA `11d4ff4a7138c5b76a8bdb8c4679ee8f4739787e`로 운영 배포했다. 배포 전 DB 백업
+  `menupick-20260926-170854Z.sql.gz`의 `gzip -t`를 확인했다. app·web healthy, readiness UP,
+  HTTPS 200, HTTP 301, 새 API 미인증 401, 배포 web 번들에 새 코드 포함, 최근 ERROR 0건이다.
+- 운영 계정으로 방을 만들고 실제 카카오 검색 결과를 선택하는 흐름은 아직 실행하지 않았다.
+  원본 메뉴가 방 생성 후 삭제돼 호스트 픽 기록이 없으면 식당 선택도 제공하지 않는다.
 
 ### 2026-09-26 픽 기록 방문 상태 필터 — 운영 배포 완료
 
