@@ -4,6 +4,12 @@ import com.nameless0422.MenuPick.common.config.JpaConfig;
 import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
+import com.nameless0422.MenuPick.domain.history.History;
+import com.nameless0422.MenuPick.domain.history.HistoryPlaceService;
+import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantService;
+import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.room.dto.PickRoomRequest;
@@ -18,9 +24,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Clock;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -49,6 +57,8 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
     @Autowired private PickRoomVetoRepository vetoRepository;
     @Autowired private MenuRepository menuRepository;
     @Autowired private HistoryRepository historyRepository;
+    @Autowired private RestaurantRepository restaurantRepository;
+    @Autowired private MenuRestaurantRepository menuRestaurantRepository;
     @Autowired private UserRepository userRepository;
 
     private PickRoomService service;
@@ -62,8 +72,13 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
     }
 
     private PickRoomService serviceAt(LocalDateTime now) {
+        Clock clock = Clock.fixed(now.atZone(KST).toInstant(), KST);
+        RestaurantService restaurants = new RestaurantService(
+                restaurantRepository, userRepository, menuRestaurantRepository, clock);
+        HistoryPlaceService places = new HistoryPlaceService(
+                historyRepository, restaurants, restaurantRepository, menuRestaurantRepository);
         return new PickRoomService(roomRepository, vetoRepository, menuRepository,
-                historyRepository, userRepository, Clock.fixed(now.atZone(KST).toInstant(), KST));
+                historyRepository, places, userRepository, clock);
     }
 
     private User newUser() {
@@ -294,6 +309,52 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
                     assertThat(history.getMenu().getName()).isEqualTo("김치찌개");
                     assertThat(history.isVisited()).isFalse();
                 });
+    }
+
+    private RestaurantRequest.Create nearbyPlace(String id) {
+        return new RestaurantRequest.Create("할매김치찌개", "서울 중구 세종대로 110", null,
+                new BigDecimal("37.5665000"), new BigDecimal("126.9780000"),
+                "https://place.map.kakao.com/" + id, id);
+    }
+
+    @Test
+    @DisplayName("방장은 식당을 한 번 정하고 참가자는 같은 결과를 본다")
+    void hostChoosesOnePlaceForRoom() {
+        menu("김치찌개", "한식", 1);
+        PickRoomResponse room = createRoom();
+        service.decide(room.code());
+
+        assertThat(service.get(room.code(), null, host.getId()).canChoosePlace()).isTrue();
+        assertThat(service.get(room.code(), null).canChoosePlace()).isFalse();
+        PickRoomResponse chosen = service.choosePlace(room.code(), host.getId(), nearbyPlace("one"));
+        assertThat(chosen.decision().place().name()).isEqualTo("할매김치찌개");
+        assertThat(chosen.canChoosePlace()).isFalse();
+        assertThat(service.get(room.code(), null).decision().place().name()).isEqualTo("할매김치찌개");
+
+        service.choosePlace(room.code(), host.getId(), nearbyPlace("two"));
+        History history = historyRepository.findRoomHistory(host.getId(), room.code(),
+                Pageable.ofSize(1)).get(0);
+        assertThat(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(host.getId())).hasSize(1);
+        assertThat(menuRestaurantRepository.findAllByMenuId(history.getMenu().getId())).hasSize(1);
+        assertThat(history.getRestaurant().getName()).isEqualTo("할매김치찌개");
+        assertThat(history.isVisited()).isFalse();
+    }
+
+    @Test
+    @DisplayName("방장이 아닌 사람과 결과 전에는 식당을 정할 수 없다")
+    void placeRequiresHostAndDecision() {
+        menu("김치찌개", "한식", 1);
+        PickRoomResponse room = createRoom();
+        User other = newUser();
+
+        assertThatThrownBy(() -> service.choosePlace(room.code(), host.getId(), nearbyPlace("one")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        service.decide(room.code());
+        assertThatThrownBy(() -> service.choosePlace(room.code(), other.getId(), nearbyPlace("one")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PICK_ROOM_NOT_FOUND);
+        assertThat(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(host.getId())).isEmpty();
     }
 
     // --- 수명 ---

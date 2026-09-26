@@ -17,7 +17,9 @@ public record PickRoomResponse(
         /** 이 방에서 제외를 남긴 서로 다른 사람 수. */
         long participantCount,
         /** 아직 안 정해졌으면 null. */
-        Decision decision
+        Decision decision,
+        /** 로그인한 방장에게만 true. 식당은 방장이 자기 기록에 저장한다. */
+        boolean canChoosePlace
 ) {
 
     public record Menu(
@@ -29,5 +31,7 @@ public record PickRoomResponse(
             boolean vetoedByMe
     ) {}
 
-    public record Decision(String menuName, LocalDateTime decidedAt) {}
+    public record Decision(String menuName, LocalDateTime decidedAt, Place place) {}
+
+    public record Place(String name, String url) {}
 }

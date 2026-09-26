@@ -3,6 +3,8 @@ package com.nameless0422.MenuPick.domain.room;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -12,6 +14,10 @@ import java.util.Optional;
 public interface PickRoomRepository extends JpaRepository<PickRoom, Long> {
 
     Optional<PickRoom> findByCode(String code);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from PickRoom r where r.code = :code")
+    Optional<PickRoom> findByCodeForUpdate(@Param("code") String code);
 
     /**
      * 아직 살아 있는 내 방 수. 링크를 뿌려 두고 방만 쌓는 것을 막는 상한에 쓴다

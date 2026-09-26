@@ -159,8 +159,8 @@ public class SecurityConfig {
                         // 전원이 가입해 있을 리 없고, 가입을 요구하면 방을 만들 이유가 사라진다.
                         // 입장 자격은 추측 불가능한 방 코드(128비트 랜덤)이고, 응답에는 호스트가
                         // 누구인지도 다른 참가자가 누구인지도 담기지 않는다(PickRoomResponse).
-                        // **방 만들기(POST /pick/rooms)는 여기 없다** — 자기 메뉴를 꺼내 공유하는
-                        // 행위라 계정이 필요하고, anyRequest().authenticated()가 그것을 지킨다.
+                        // **방 만들기와 식당 선택은 여기 없다** — 자기 메뉴와 식당 데이터를 쓰므로
+                        // 계정이 필요하고, anyRequest().authenticated()가 그것을 지킨다.
                         .requestMatchers(HttpMethod.GET, "/api/v1/pick/rooms/*").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/pick/rooms/*/vetoes").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/pick/rooms/*/decide").permitAll()

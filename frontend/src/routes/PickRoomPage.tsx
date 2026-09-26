@@ -3,11 +3,16 @@ import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   decidePickRoom,
+  choosePickRoomPlace,
   fetchPickRoom,
   participantIdFor,
   replacePickRoomVetoes,
 } from "../api/pickRooms";
 import { apiErrorMessage } from "../api/http";
+import { useAuth } from "../auth/AuthContext";
+import type { KakaoPlace } from "../api/places";
+import { safeExternalUrl } from "../externalUrl";
+import NearbyPlaces from "./NearbyPlaces";
 import { chipToggle } from "../a11y/chipToggle";
 import "./PickRoomPage.css";
 
@@ -20,7 +25,7 @@ const POLL_MS = 5000;
  * <h2>로그인 없이 열리는 화면이다</h2>
  *
  * 링크를 받은 사람은 가입하지 않고 들어와 "이건 빼주세요"를 누르고 결과를 본다. 그래서 이
- * 경로는 {@code ProtectedRoute} 바깥에 있고, 화면 어디에도 계정이 필요한 동작을 두지 않는다.
+ * 경로는 {@code ProtectedRoute} 바깥에 있다. 결과 식당을 정하는 동작만 방장 로그인이 필요하다.
  *
  * <h2>왜 각자 빼고 한 번만 뽑는가</h2>
  *
@@ -30,6 +35,7 @@ const POLL_MS = 5000;
  */
 export default function PickRoomPage() {
   const { code = "" } = useParams();
+  const { isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   // 방마다 하나씩 만든다 — 근거는 participantIdFor.
   const participant = useMemo(() => participantIdFor(code), [code]);
@@ -37,8 +43,10 @@ export default function PickRoomPage() {
   const roomQuery = useQuery({
     queryKey: ["pick-room", code, participant],
     queryFn: () => fetchPickRoom(code, participant),
+    enabled: !authLoading,
     // 결과가 나오기 전까지만 폴링한다. 다른 사람의 제외가 화면에 들어와야 "같이" 정하는 느낌이 된다.
-    refetchInterval: (query) => (query.state.data?.decision ? false : POLL_MS),
+    refetchInterval: (query) => query.state.data?.decision?.place ? false
+      : query.state.data?.decision ? 15000 : POLL_MS,
     retry: false,
   });
 
@@ -64,7 +72,11 @@ export default function PickRoomPage() {
 
   const decide = useMutation({
     mutationFn: () => decidePickRoom(code),
-    onSuccess: (updated) => queryClient.setQueryData(["pick-room", code, participant], updated),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["pick-room", code, participant], updated);
+      // decide는 공개 API라 호스트 여부를 모른다. 인증 정보가 있는 GET으로 바로 다시 읽는다.
+      void queryClient.invalidateQueries({ queryKey: ["pick-room", code, participant] });
+    },
   });
 
   // 결과가 나오면 그 카드로 초점을 옮긴다. 다른 사람이 누른 결과가 폴링으로 들어올 수도 있어,
@@ -118,6 +130,33 @@ export default function PickRoomPage() {
           <p className="card-muted-hint">
             한 번 정해진 결과는 바뀌지 않아요. 다시 정하려면 새 방을 만들어 주세요.
           </p>
+          {room.decision.place ? (
+            <p className="card-muted-hint" role="status">
+              먹으러 갈 곳: <strong>{room.decision.place.name}</strong>{" "}
+              {safeExternalUrl(room.decision.place.url) && (
+                <a href={safeExternalUrl(room.decision.place.url)!} target="_blank" rel="noopener noreferrer">
+                  카카오맵에서 보기<span className="sr-only"> (새 창)</span>
+                </a>
+              )}
+            </p>
+          ) : room.canChoosePlace ? (
+            <NearbyPlaces
+              menuName={room.decision.menuName}
+              roomMode
+              choosePlace={async (place: KakaoPlace) => {
+                const updated = await choosePickRoomPlace(code, place);
+                queryClient.setQueryData(["pick-room", code, participant], updated);
+                return {
+                  restaurantId: 0,
+                  restaurantName: updated.decision!.place!.name,
+                  restaurantCreated: false,
+                  linkCreated: false,
+                };
+              }}
+            />
+          ) : (
+            <p className="card-muted-hint">방을 만든 사람이 근처 식당을 고르면 여기에 함께 보여요.</p>
+          )}
           <Link to="/pick">내 메뉴로 뽑으러 가기 →</Link>
         </section>
       ) : (

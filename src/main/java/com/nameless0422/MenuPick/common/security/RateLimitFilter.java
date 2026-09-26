@@ -134,8 +134,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * 조회는 화면이 5초마다 다시 부르고(결과를 기다리는 동안), 제출·뽑기는 사람이 누를 때만
      * 나가므로 한도는 조회 기준으로 잡는다.
      *
-     * <p>방 만들기(POST /pick/rooms)는 여기 없다 — 인증이 필요한 경로라 이미 주체가 특정되고,
-     * 방 수 상한(PickRoom.MAX_OPEN_ROOMS_PER_USER)이 따로 막는다.
+     * <p>방 만들기와 식당 선택은 여기 없다 — 둘 다 인증이 필요한 경로다. 방 만들기는
+     * 방 수 상한(PickRoom.MAX_OPEN_ROOMS_PER_USER)도 따로 적용한다.
      */
     private static final List<RequestMatcher> ROOM_RATE_LIMITED_MATCHERS = List.of(
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/pick/rooms/*"),

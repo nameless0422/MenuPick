@@ -20,6 +20,7 @@ const room: PickRoom = {
     { id: 2, name: "파스타", vetoedBy: 0, vetoedByMe: false },
   ],
   participantCount: 0,
+  canChoosePlace: false,
   decision: null,
 };
 
