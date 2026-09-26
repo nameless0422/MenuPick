@@ -4,12 +4,16 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
+import com.nameless0422.MenuPick.domain.history.HistoryPlaceService;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.room.dto.PickRoomRequest;
 import com.nameless0422.MenuPick.domain.room.dto.PickRoomResponse;
+import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
+import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -64,6 +69,7 @@ public class PickRoomService {
     private final PickRoomVetoRepository vetoRepository;
     private final MenuRepository menuRepository;
     private final HistoryRepository historyRepository;
+    private final HistoryPlaceService historyPlaceService;
     private final UserRepository userRepository;
     private final Clock clock;
 
@@ -89,12 +95,17 @@ public class PickRoomService {
                 .forEach(menu -> room.addMenu(menu.getId(), menu.getName(), menu.getWeight()));
 
         roomRepository.save(room);
-        return toResponse(room, null);
+        return toResponse(room, null, userId);
     }
 
     @Transactional(readOnly = true)
     public PickRoomResponse get(String code, String participant) {
-        return toResponse(openRoom(code), participant);
+        return get(code, participant, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PickRoomResponse get(String code, String participant, Long viewerId) {
+        return toResponse(openRoom(code), participant, viewerId);
     }
 
     /**
@@ -134,7 +145,7 @@ public class PickRoomService {
                 .toList();
         vetoRepository.saveAll(vetoes);
 
-        return toResponse(room, participant);
+        return toResponse(room, participant, null);
     }
 
     /**
@@ -148,7 +159,7 @@ public class PickRoomService {
     public PickRoomResponse decide(String code) {
         PickRoom room = openRoom(code);
         if (room.isDecided()) {
-            return toResponse(room, null);
+            return toResponse(room, null, null);
         }
 
         Map<Long, Long> vetoCounts = vetoCounts(room);
@@ -165,7 +176,30 @@ public class PickRoomService {
         if (room.decide(chosen, now)) {
             recordHostHistory(room, chosen, now);
         }
-        return toResponse(room, null);
+        return toResponse(room, null, null);
+    }
+
+    /** 방장이 정한 장소를 자신의 픽 기록에 저장하고, 방 링크로 모두에게 보여준다. */
+    @Transactional
+    public PickRoomResponse choosePlace(String code, Long userId, RestaurantRequest.Create request) {
+        PickRoom room = roomRepository.findByCodeForUpdate(code)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PICK_ROOM_NOT_FOUND));
+        if (room.isExpired(LocalDateTime.now(clock))) {
+            throw new BusinessException(ErrorCode.PICK_ROOM_NOT_FOUND);
+        }
+        if (userId == null || !room.getHost().getId().equals(userId)) {
+            throw new BusinessException(ErrorCode.PICK_ROOM_NOT_FOUND);
+        }
+        if (!room.isDecided()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        }
+        History history = roomHistory(room)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        // 첫 장소만 지킨다. 다시 제출해도 이미 모두에게 공유된 결정을 바꾸지 않는다.
+        if (history.getRestaurant() == null) {
+            historyPlaceService.choosePlace(userId, history.getId(), request);
+        }
+        return toResponse(room, null, userId);
     }
 
     /**
@@ -235,7 +269,12 @@ public class PickRoomService {
         return counts;
     }
 
-    private PickRoomResponse toResponse(PickRoom room, String participant) {
+    private Optional<History> roomHistory(PickRoom room) {
+        return historyRepository.findRoomHistory(room.getHost().getId(), room.getCode(),
+                Pageable.ofSize(1)).stream().findFirst();
+    }
+
+    private PickRoomResponse toResponse(PickRoom room, String participant, Long viewerId) {
         Map<Long, Long> counts = vetoCounts(room);
         Set<Long> mine = participant == null || participant.isBlank()
                 ? Set.of()
@@ -250,12 +289,19 @@ public class PickRoomService {
                         counts.getOrDefault(menu.getId(), 0L),
                         mine.contains(menu.getId()))));
 
+        History history = room.isDecided() ? roomHistory(room).orElse(null) : null;
+        Restaurant chosenPlace = history == null ? null : history.getRestaurant();
+        PickRoomResponse.Place place = chosenPlace == null ? null
+                : new PickRoomResponse.Place(chosenPlace.getName(), chosenPlace.getNaverUrl());
         PickRoomResponse.Decision decision = room.isDecided()
-                ? new PickRoomResponse.Decision(room.getDecidedMenu().getName(), room.getDecidedAt())
+                ? new PickRoomResponse.Decision(room.getDecidedMenu().getName(), room.getDecidedAt(), place)
                 : null;
+        boolean canChoosePlace = history != null && chosenPlace == null
+                && history.getMenu() != null && !history.getMenu().isDeleted()
+                && viewerId != null && room.getHost().getId().equals(viewerId);
 
         return new PickRoomResponse(room.getCode(), room.getExpiresAt(), menus,
-                vetoRepository.countParticipants(room.getId()), decision);
+                vetoRepository.countParticipants(room.getId()), decision, canChoosePlace);
     }
 
     private String newCode() {

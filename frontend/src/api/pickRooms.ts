@@ -1,11 +1,11 @@
 import { http, unwrap, type ApiResponse } from "./http";
+import type { KakaoPlace } from "./places";
 
 /**
  * 여럿이 같이 뽑기.
  *
- * 방을 만드는 것만 로그인이 필요하고, 참여(조회·제외·뽑기)는 링크만 있으면 된다 —
- * 점심 자리에 있는 사람 전원이 가입해 있을 리 없기 때문이다. 그래서 이 파일의 함수 중
- * {@link createPickRoom}만 인증된 요청이다.
+ * 참여(조회·제외·뽑기)는 링크만 있으면 된다 — 점심 자리에 있는 사람 전원이 가입해 있을
+ * 리 없기 때문이다. 방 만들기와 결과 식당 선택은 호스트의 데이터를 쓰므로 로그인이 필요하다.
  */
 
 export interface PickRoomMenu {
@@ -19,6 +19,7 @@ export interface PickRoomMenu {
 export interface PickRoomDecision {
   menuName: string;
   decidedAt: string;
+  place: { name: string; url: string | null } | null;
 }
 
 export interface PickRoom {
@@ -28,6 +29,7 @@ export interface PickRoom {
   participantCount: number;
   /** 아직 안 정해졌으면 null. 한 번 정해지면 바뀌지 않는다. */
   decision: PickRoomDecision | null;
+  canChoosePlace: boolean;
 }
 
 export async function createPickRoom(categories?: string[]) {
@@ -56,6 +58,23 @@ export async function replacePickRoomVetoes(code: string, participant: string, v
 export async function decidePickRoom(code: string) {
   const res = await http.post<ApiResponse<PickRoom>>(
     `/api/v1/pick/rooms/${encodeURIComponent(code)}/decide`,
+  );
+  return unwrap(res);
+}
+
+/** 방장이 카카오 검색 결과에서 정한 식당을 자기 픽 기록과 방 결과에 연결한다. */
+export async function choosePickRoomPlace(code: string, place: KakaoPlace) {
+  const res = await http.post<ApiResponse<PickRoom>>(
+    `/api/v1/pick/rooms/${encodeURIComponent(code)}/place`,
+    {
+      name: place.place_name,
+      address: place.road_address_name || place.address_name || null,
+      phone: place.phone || null,
+      latitude: Number(place.y),
+      longitude: Number(place.x),
+      naverUrl: place.place_url || null,
+      kakaoPlaceId: place.id,
+    },
   );
   return unwrap(res);
 }

@@ -5,6 +5,7 @@ import { render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PickRoomPage from "./PickRoomPage";
+vi.mock("../auth/AuthContext", () => ({ useAuth: () => ({ isLoading: false }) }));
 import {
   decidePickRoom,
   fetchPickRoom,
@@ -32,6 +33,7 @@ const room = (overrides: Partial<PickRoom> = {}): PickRoom => ({
   ],
   participantCount: 2,
   decision: null,
+  canChoosePlace: false,
   ...overrides,
 });
 
@@ -65,9 +67,13 @@ beforeEach(() => {
       ],
     }),
   );
-  decideMock.mockResolvedValue(
-    room({ decision: { menuName: "김치찌개", decidedAt: "2026-09-19T12:30:00" } }),
-  );
+  decideMock.mockImplementation(async () => {
+    const decided = room({
+      decision: { menuName: "김치찌개", decidedAt: "2026-09-19T12:30:00", place: null },
+    });
+    fetchMock.mockResolvedValue(decided);
+    return decided;
+  });
 });
 
 describe("여럿이 같이 뽑기 — 방", () => {
@@ -142,12 +148,38 @@ describe("여럿이 같이 뽑기 — 방", () => {
   /** 다른 사람이 먼저 눌러 결과가 들어오는 경우다 — 폴링으로 도착해도 같은 화면이어야 한다. */
   it("이미 정해진 방은 들어가자마자 결과만 보여준다", async () => {
     fetchMock.mockResolvedValue(
-      room({ decision: { menuName: "파스타", decidedAt: "2026-09-19T12:30:00" } }),
+      room({ decision: { menuName: "파스타", decidedAt: "2026-09-19T12:30:00", place: null } }),
     );
     renderRoom();
 
     expect(await screen.findByRole("status")).toHaveTextContent("파스타");
     expect(screen.queryByRole("button", { name: /김치찌개/ })).toBeNull();
+  });
+
+  it("방장이 고른 식당은 참가자도 지도 링크와 함께 본다", async () => {
+    fetchMock.mockResolvedValue(room({
+      decision: {
+        menuName: "김치찌개", decidedAt: "2026-09-19T12:30:00",
+        place: { name: "할매김치찌개", url: "https://place.map.kakao.com/1" },
+      },
+    }));
+    renderRoom();
+
+    expect(await screen.findByText("할매김치찌개")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /카카오맵에서 보기/ })).toHaveAttribute(
+      "href", "https://place.map.kakao.com/1",
+    );
+  });
+
+  it("방장에게만 주변 식당 찾기 버튼을 보여준다", async () => {
+    fetchMock.mockResolvedValue(room({
+      canChoosePlace: true,
+      decision: { menuName: "김치찌개", decidedAt: "2026-09-19T12:30:00", place: null },
+    }));
+    renderRoom();
+
+    expect(await screen.findByRole("button", { name: /근처 김치찌개 식당 찾기/ })).toBeInTheDocument();
+    expect(screen.queryByText(/방을 만든 사람이 근처 식당을 고르면/)).toBeNull();
   });
 
   it("없거나 만료된 방이면 무엇을 해야 하는지 알려준다", async () => {

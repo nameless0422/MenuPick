@@ -43,6 +43,13 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
 
+    /** 방 코드로 남긴 호스트의 픽 기록. 방당 한 건이며 원본 메뉴가 지워졌으면 없을 수 있다. */
+    @Query("select h from History h join h.filterConditions fc " +
+            "where h.user.id = :userId and fc.filterType = 'ROOM' and fc.filterValue = :code " +
+            "order by h.id desc")
+    List<History> findRoomHistory(@Param("userId") Long userId, @Param("code") String code,
+                                  Pageable pageable);
+
     /** 픽을 한 번이라도 했는가. 첫 사용자 안내가 "이미 쓰기 시작했는지"를 판정하는 데 쓴다. */
     boolean existsByUserId(Long userId);
 

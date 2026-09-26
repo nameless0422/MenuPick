@@ -36,10 +36,14 @@ export default function NearbyPlaces({
   historyId,
   menuId,
   menuName,
+  choosePlace,
+  roomMode = false,
 }: {
-  historyId: number;
-  menuId: number;
+  historyId?: number;
+  menuId?: number;
   menuName: string;
+  choosePlace?: (place: KakaoPlace) => Promise<PlaceChoiceResult>;
+  roomMode?: boolean;
 }) {
   const headingId = useId();
   const queryClient = useQueryClient();
@@ -70,11 +74,13 @@ export default function NearbyPlaces({
   });
 
   const chooseMutation = useMutation({
-    mutationFn: (place: KakaoPlace) => choosePickPlace(historyId, place),
+    mutationFn: (place: KakaoPlace) => choosePlace
+      ? choosePlace(place)
+      : choosePickPlace(historyId!, place),
     onSuccess: (result) => {
       setChosen(result);
       void queryClient.invalidateQueries({ queryKey: ["restaurants"] });
-      void queryClient.invalidateQueries({ queryKey: ["menu-restaurants", menuId] });
+      if (menuId != null) void queryClient.invalidateQueries({ queryKey: ["menu-restaurants", menuId] });
       void queryClient.invalidateQueries({ queryKey: ["history"] });
     },
   });
@@ -120,10 +126,12 @@ export default function NearbyPlaces({
         <h3 id={headingId} className="sr-only">근처 식당</h3>
         <p ref={doneRef} tabIndex={-1} role="status" className="nearby-places-done">
           <strong>{chosen.restaurantName}</strong>(으)로 정했어요.{" "}
-          {chosen.linkCreated
-            ? `${menuName}에 연결해 뒀으니 다음엔 거리로 뽑을 때도 후보가 돼요.`
-            : `이미 ${menuName}에 연결된 식당이에요.`}{" "}
-          다녀오시면 다음에 먹었는지 여쭤볼게요.
+          {roomMode
+            ? "방에 있는 모두에게 이 식당을 보여줘요."
+            : <>{chosen.linkCreated
+              ? `${menuName}에 연결해 뒀으니 다음엔 거리로 뽑을 때도 후보가 돼요.`
+              : `이미 ${menuName}에 연결된 식당이에요.`}{" "}
+              다녀오시면 다음에 먹었는지 여쭤볼게요.</>}
         </p>
       </section>
     );

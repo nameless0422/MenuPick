@@ -37,7 +37,7 @@ class PickRoomControllerTest extends AbstractControllerTest {
 
     private static PickRoomResponse room() {
         return new PickRoomResponse("abc123", LocalDateTime.of(2026, 9, 19, 18, 0),
-                List.of(new PickRoomResponse.Menu(1L, "김치찌개", 2, true)), 3, null);
+                List.of(new PickRoomResponse.Menu(1L, "김치찌개", 2, true)), 3, null, false);
     }
 
     @Test
@@ -75,7 +75,7 @@ class PickRoomControllerTest extends AbstractControllerTest {
     @Test
     @DisplayName("GET /pick/rooms/{code} - 로그인 없이 볼 수 있다")
     void get_withoutLogin() throws Exception {
-        given(pickRoomService.get("abc123", "p-1")).willReturn(room());
+        given(pickRoomService.get("abc123", "p-1", null)).willReturn(room());
 
         mockMvc.perform(get("/api/v1/pick/rooms/abc123").param("participant", "p-1"))
                 .andExpect(status().isOk())
@@ -112,10 +112,27 @@ class PickRoomControllerTest extends AbstractControllerTest {
     void decide_withoutLogin() throws Exception {
         given(pickRoomService.decide("abc123")).willReturn(new PickRoomResponse(
                 "abc123", LocalDateTime.of(2026, 9, 19, 18, 0), List.of(), 3,
-                new PickRoomResponse.Decision("김치찌개", LocalDateTime.of(2026, 9, 19, 12, 30))));
+                new PickRoomResponse.Decision("김치찌개", LocalDateTime.of(2026, 9, 19, 12, 30), null), false));
 
         mockMvc.perform(post("/api/v1/pick/rooms/abc123/decide"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.decision.menuName").value("김치찌개"));
+    }
+
+    @Test
+    @DisplayName("POST /pick/rooms/{code}/place - 로그인해야 식당을 고를 수 있다")
+    void place_requiresLogin() throws Exception {
+        String body = "{\"name\":\"식당\",\"latitude\":37.5665,\"longitude\":126.978," +
+                "\"kakaoPlaceId\":\"place-1\"}";
+        mockMvc.perform(post("/api/v1/pick/rooms/abc123/place")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        verify(pickRoomService, never()).choosePlace(any(), any(), any());
+
+        given(pickRoomService.choosePlace(eq("abc123"), eq(1L), any())).willReturn(room());
+        mockMvc.perform(post("/api/v1/pick/rooms/abc123/place")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
     }
 }
