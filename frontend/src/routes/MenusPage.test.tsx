@@ -5,16 +5,20 @@ import { AxiosError } from "axios";
 import { renderWithProviders } from "../test/renderWithProviders";
 import MenusPage from "./MenusPage";
 import {
+  createBulkMenus,
   createMenu,
   deleteMenu,
   fetchMenu,
   fetchMenus,
+  previewBulkMenus,
   updateMenu,
   type MenuDetail,
 } from "../api/menus";
 import { searchTags } from "../api/tags";
 
 vi.mock("../api/menus", () => ({
+  createBulkMenus: vi.fn(),
+  previewBulkMenus: vi.fn(),
   fetchMenus: vi.fn(),
   fetchMenu: vi.fn(),
   createMenu: vi.fn(),
@@ -37,6 +41,8 @@ vi.mock("../api/tags", () => ({
 }));
 
 const fetchMenusMock = vi.mocked(fetchMenus);
+const previewBulkMenusMock = vi.mocked(previewBulkMenus);
+const createBulkMenusMock = vi.mocked(createBulkMenus);
 const fetchMenuMock = vi.mocked(fetchMenu);
 const createMenuMock = vi.mocked(createMenu);
 const deleteMenuMock = vi.mocked(deleteMenu);
@@ -79,6 +85,8 @@ const detail = (overrides: Partial<MenuDetail> = {}): MenuDetail => ({
 });
 
 beforeEach(() => {
+  previewBulkMenusMock.mockReset();
+  createBulkMenusMock.mockReset();
   fetchMenusMock.mockReset();
   fetchMenuMock.mockReset();
   createMenuMock.mockReset();
@@ -87,6 +95,7 @@ beforeEach(() => {
   fetchMenusMock.mockResolvedValue({ menus: [KIMCHI], nextCursor: null, hasNext: false });
   fetchMenuMock.mockResolvedValue(detail());
   createMenuMock.mockResolvedValue(detail());
+  createBulkMenusMock.mockResolvedValue({ createdCount: 2 });
   deleteMenuMock.mockResolvedValue(undefined);
   // 제안 태그가 필요한 테스트만 따로 채운다 — 기본은 빈 결과다.
   searchTagsMock.mockResolvedValue([]);
@@ -94,6 +103,50 @@ beforeEach(() => {
 
 const editButton = () => screen.getByRole("button", { name: "김치찌개 수정" });
 const newMenuButton = () => screen.getByRole("button", { name: "+ 새 메뉴" });
+
+describe("메뉴 여러 개 추가", () => {
+  it("미리보기 뒤 한 번의 요청으로 저장하고 결과에 초점을 둔다", async () => {
+    const user = userEvent.setup();
+    previewBulkMenusMock.mockResolvedValue({
+      entries: [
+        { line: 1, name: "순대국", status: "ADD" },
+        { line: 2, name: "김치찌개", status: "EXISTING" },
+        { line: 3, name: "양꼬치", status: "ADD" },
+      ],
+      addCount: 2,
+      hasInvalid: false,
+    });
+    renderWithProviders(<MenusPage />);
+
+    await user.click(screen.getByRole("button", { name: "여러 개 한 번에 추가" }));
+    const heading = screen.getByRole("heading", { name: "메뉴 여러 개 추가" });
+    await waitFor(() => expect(heading).toHaveFocus());
+    await user.type(screen.getByRole("textbox", { name: "메뉴 이름" }), "순대국{enter}김치찌개{enter}양꼬치");
+    await user.click(screen.getByRole("button", { name: "미리보기" }));
+    await screen.findByText("2번째 줄: 김치찌개 — 이미 있는 메뉴");
+    await user.click(screen.getByRole("button", { name: "모두 저장" }));
+
+    await waitFor(() => expect(createBulkMenusMock).toHaveBeenCalledTimes(1));
+    expect(createBulkMenusMock.mock.calls[0][0]).toEqual(["순대국", "김치찌개", "양꼬치"]);
+    await waitFor(() => expect(screen.getByText("2개를 추가했어요.")).toHaveFocus());
+  });
+
+  it("잘못된 줄이 있으면 저장을 막는다", async () => {
+    const user = userEvent.setup();
+    previewBulkMenusMock.mockResolvedValue({
+      entries: [{ line: 1, name: "가".repeat(101), status: "INVALID" }],
+      addCount: 0,
+      hasInvalid: true,
+    });
+    renderWithProviders(<MenusPage />);
+    await user.click(screen.getByRole("button", { name: "여러 개 한 번에 추가" }));
+    await user.type(screen.getByRole("textbox", { name: "메뉴 이름" }), "가".repeat(101));
+    await user.click(screen.getByRole("button", { name: "미리보기" }));
+    await screen.findByText(/1번째 줄:.*이름 100자 초과/);
+    expect(screen.getByRole("button", { name: "모두 저장" })).toBeDisabled();
+    expect(createBulkMenusMock).not.toHaveBeenCalled();
+  });
+});
 
 /**
  * 수정 폼은 카드를 통째로 대체한다 — 방금 누른 "수정" 버튼이 DOM에서 사라진다는 뜻이다.

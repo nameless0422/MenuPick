@@ -21,6 +21,13 @@ import java.util.Set;
  */
 public class MenuRequest {
 
+    /** 빈 줄과 중복 이름은 건너뛴다. 원본 줄 번호를 유지하려고 문자열 배열로 받는다. */
+    public record BulkCreate(
+            @NotNull(message = "메뉴 목록은 필수입니다.")
+            @Size(max = 100, message = "한 번에 100줄까지만 추가할 수 있습니다.")
+            List<String> names
+    ) {}
+
     public record Create(
             @NotBlank(message = "메뉴 이름은 필수입니다.")
             @Size(max = 100)

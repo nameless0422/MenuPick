@@ -17,6 +17,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.stream.Collectors;
 import java.util.Set;
 
@@ -64,6 +66,58 @@ public class MenuService {
         }
 
         return toDetail(menuRepository.save(menu));
+    }
+
+    public MenuResponse.BulkPreview previewBulkCreate(Long userId, MenuRequest.BulkCreate request) {
+        return planBulkCreate(userId, request);
+    }
+
+    @Transactional
+    public MenuResponse.BulkCreateResult bulkCreate(Long userId, MenuRequest.BulkCreate request) {
+        MenuResponse.BulkPreview preview = planBulkCreate(userId, request);
+        if (preview.hasInvalid()) {
+            String lines = preview.entries().stream()
+                    .filter(entry -> entry.status().equals("INVALID"))
+                    .map(entry -> Integer.toString(entry.line()))
+                    .collect(Collectors.joining(", "));
+            throw new BusinessException(ErrorCode.INVALID_INPUT, lines + "번째 줄의 이름은 100자 이하여야 합니다.");
+        }
+        var user = userRepository.getReferenceById(userId);
+        List<Menu> menus = preview.entries().stream()
+                .filter(entry -> entry.status().equals("ADD"))
+                .map(entry -> Menu.builder().user(user).name(entry.name()).build())
+                .toList();
+        menuRepository.saveAll(menus);
+        return new MenuResponse.BulkCreateResult(menus.size());
+    }
+
+    private MenuResponse.BulkPreview planBulkCreate(Long userId, MenuRequest.BulkCreate request) {
+        Set<String> existing = menuRepository.findAllByUserIdAndDeletedAtIsNull(userId).stream()
+                .map(Menu::getName).collect(Collectors.toSet());
+        Set<String> seen = new HashSet<>();
+        List<MenuResponse.BulkEntry> entries = new ArrayList<>();
+        int addCount = 0;
+        boolean hasInvalid = false;
+        for (int i = 0; i < request.names().size(); i++) {
+            String raw = request.names().get(i);
+            String name = raw == null ? "" : raw.trim();
+            String status;
+            if (name.isEmpty()) {
+                status = "EMPTY";
+            } else if (name.length() > 100) {
+                status = "INVALID";
+                hasInvalid = true;
+            } else if (!seen.add(name)) {
+                status = "DUPLICATE";
+            } else if (existing.contains(name)) {
+                status = "EXISTING";
+            } else {
+                status = "ADD";
+                addCount++;
+            }
+            entries.add(new MenuResponse.BulkEntry(i + 1, name, status));
+        }
+        return new MenuResponse.BulkPreview(entries, addCount, hasInvalid);
     }
 
     @Transactional

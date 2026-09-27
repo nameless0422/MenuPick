@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 서비스 트랜잭션이 닫힌 뒤(open-in-view=false 직렬화 시점과 동일 조건) DTO의
@@ -38,6 +39,26 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Test
+    void bulkCreate_persistsOnlyNewNamesAndRejectsInvalidBatch() {
+        User user = userRepository.save(
+                User.builder().email("bulk-create@test.com").nickname("여러메뉴유저").build());
+        menuRepository.save(Menu.builder().user(user).name("김치찌개").build());
+
+        var result = menuService.bulkCreate(user.getId(), new MenuRequest.BulkCreate(
+                java.util.List.of(" 순대국 ", "김치찌개", "순대국", "양꼬치")));
+
+        assertThat(result.createdCount()).isEqualTo(2);
+        assertThat(menuRepository.findAllByUserIdAndDeletedAtIsNull(user.getId()))
+                .extracting(Menu::getName).containsExactlyInAnyOrder("김치찌개", "순대국", "양꼬치");
+
+        assertThatThrownBy(() -> menuService.bulkCreate(user.getId(),
+                new MenuRequest.BulkCreate(java.util.List.of("콩국수", "가".repeat(101)))))
+                .isInstanceOf(com.nameless0422.MenuPick.common.exception.BusinessException.class);
+        assertThat(menuRepository.findAllByUserIdAndDeletedAtIsNull(user.getId()))
+                .extracting(Menu::getName).doesNotContain("콩국수");
+    }
 
     @Test
     @DisplayName("메뉴 목록 조회 결과의 categories는 트랜잭션 종료 후에도 접근 가능하다")

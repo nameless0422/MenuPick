@@ -40,6 +40,22 @@ export interface MenuCreateRequest {
   tagIds: number[];
 }
 
+export interface BulkMenuPreview {
+  entries: { line: number; name: string; status: "ADD" | "EMPTY" | "DUPLICATE" | "EXISTING" | "INVALID" }[];
+  addCount: number;
+  hasInvalid: boolean;
+}
+
+export async function previewBulkMenus(names: string[]) {
+  const res = await http.post<ApiResponse<BulkMenuPreview>>("/api/v1/menus/bulk/preview", { names });
+  return unwrap(res);
+}
+
+export async function createBulkMenus(names: string[]) {
+  const res = await http.post<ApiResponse<{ createdCount: number }>>("/api/v1/menus/bulk", { names });
+  return unwrap(res);
+}
+
 export interface MenuUpdateRequest extends MenuCreateRequest {
   isExcluded: boolean;
   // 화면을 그릴 때 받은 MenuDetail.version을 그대로 싣는다.
