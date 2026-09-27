@@ -1,12 +1,26 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-27 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-28 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-09-28 메뉴 여러 개 추가 — 운영 배포 완료
+
+- 내 메뉴에서 이름을 한 줄씩 붙여넣고 미리본 뒤 최대 100줄을 한 번에 저장한다. 빈 줄,
+  입력 중복, 이미 가진 메뉴는 건너뛴다. 이름이 100자를 넘는 줄이 있으면 전체 저장을 막고
+  줄 번호를 보여준다. 새 메뉴의 선호도는 1이며 카테고리와 태그는 비어 있다.
+- PR #305의 frontend·test·docker-build CI가 통과했다. 로컬 백엔드 `check`, 새 MySQL 통합
+  테스트, 프론트 lint·build·Vitest 452개도 통과했다. DB 마이그레이션과 새 외부 키는 없다.
+- `main` SHA `bf7baec96ee9e3018496f1999a79e57b55effb4d`로 운영 배포했다. 배포 전 백업
+  `menupick-20260927-165009Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후
+  app·web·mysql·redis·mailpit healthy, readiness UP, HTTPS 200, HTTP 301, 새 API 미인증
+  401, 프론트 번들에 새 경로 포함을 확인했다.
+- 요청에 따라 검증 후 운영 컨테이너 다섯 개를 모두 중지했다. 운영 계정으로 실제 메뉴를
+  저장하는 흐름은 실행하지 않았다.
 
 ### 2026-09-27 같이 뽑기 결과에서 식당 고르기 — 운영 배포 완료
 
