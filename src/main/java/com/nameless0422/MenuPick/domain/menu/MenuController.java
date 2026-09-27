@@ -39,6 +39,21 @@ public class MenuController {
                 .body(ApiResponse.ok(menuService.createMenu(userId, request)));
     }
 
+    @PostMapping("/bulk/preview")
+    public ResponseEntity<ApiResponse<MenuResponse.BulkPreview>> previewBulkCreate(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody @Valid MenuRequest.BulkCreate request) {
+        return ResponseEntity.ok(ApiResponse.ok(menuService.previewBulkCreate(userId, request)));
+    }
+
+    @PostMapping("/bulk")
+    public ResponseEntity<ApiResponse<MenuResponse.BulkCreateResult>> bulkCreate(
+            @AuthenticationPrincipal Long userId,
+            @RequestBody @Valid MenuRequest.BulkCreate request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(menuService.bulkCreate(userId, request)));
+    }
+
     @GetMapping("/{menuId}")
     public ResponseEntity<ApiResponse<MenuResponse.MenuDetail>> getMenu(
             @AuthenticationPrincipal Long userId,

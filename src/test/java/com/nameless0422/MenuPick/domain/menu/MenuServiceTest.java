@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class MenuServiceTest {
@@ -62,6 +63,35 @@ class MenuServiceTest {
 
         menu = Menu.builder().user(user).name("김치찌개").memo("맛있음").weight(3).build();
         setId(menu, 1L);
+    }
+
+    @Test
+    void bulkCreate_skipsBlankDuplicateAndExistingNames() {
+        given(menuRepository.findAllByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of(menu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+
+        var result = menuService.bulkCreate(1L,
+                new MenuRequest.BulkCreate(List.of("  순대국  ", "", "순대국", "김치찌개", "양꼬치")));
+
+        assertThat(result.createdCount()).isEqualTo(2);
+        org.mockito.ArgumentCaptor<List<Menu>> captor = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(menuRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(Menu::getName).containsExactly("순대국", "양꼬치");
+        assertThat(captor.getValue()).allSatisfy(created -> {
+            assertThat(created.getWeight()).isEqualTo(1);
+            assertThat(created.isExcluded()).isFalse();
+        });
+    }
+
+    @Test
+    void bulkCreate_rejectsAllRowsWhenOneNameIsTooLong() {
+        given(menuRepository.findAllByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of());
+
+        assertThatThrownBy(() -> menuService.bulkCreate(1L,
+                new MenuRequest.BulkCreate(List.of("순대국", "가".repeat(101)))))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("2번째 줄");
+        verify(menuRepository, never()).saveAll(any());
     }
 
     // --- 목록 조회 ---

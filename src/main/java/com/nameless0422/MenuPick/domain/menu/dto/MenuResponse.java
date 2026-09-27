@@ -6,6 +6,12 @@ import java.util.Set;
 
 public class MenuResponse {
 
+    public record BulkPreview(List<BulkEntry> entries, int addCount, boolean hasInvalid) {}
+
+    public record BulkEntry(int line, String name, String status) {}
+
+    public record BulkCreateResult(int createdCount) {}
+
     public record MenuSummary(
             Long id,
             String name,

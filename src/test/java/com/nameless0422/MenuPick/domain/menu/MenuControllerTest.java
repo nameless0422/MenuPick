@@ -81,6 +81,25 @@ class MenuControllerTest extends AbstractControllerTest {
     }
 
     @Test
+    void bulkCreate_rejectsMoreThanOneHundredRows() throws Exception {
+        var names = IntStream.range(0, 101).mapToObj(i -> "메뉴" + i).toList();
+        mockMvc.perform(post("/api/v1/menus/bulk")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new MenuRequest.BulkCreate(names))))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(menuService);
+    }
+
+    @Test
+    void bulkCreate_requiresAuthentication() throws Exception {
+        mockMvc.perform(post("/api/v1/menus/bulk")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"names\":[\"순대국\"]}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("GET /api/v1/menus/{menuId} - 상세 조회 성공")
     void getMenu_success() throws Exception {
         var detail = new MenuResponse.MenuDetail(

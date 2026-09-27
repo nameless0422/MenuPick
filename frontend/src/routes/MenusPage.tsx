@@ -6,10 +6,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  createBulkMenus,
   createMenu,
   deleteMenu,
   fetchMenu,
   fetchMenus,
+  previewBulkMenus,
   toggleExclude,
   updateMenu,
   type TagSummary,
@@ -25,7 +27,7 @@ import { CATEGORY_PRESETS } from "../constants";
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
 
 /** 편집 중인 대상. "new"면 신규 등록 폼, 숫자면 해당 메뉴 수정 폼. */
-type Editing = "new" | number;
+type Editing = "new" | "bulk" | number;
 
 export default function MenusPage() {
   const queryClient = useQueryClient();
@@ -121,10 +123,16 @@ export default function MenusPage() {
         >
           + 새 메뉴
         </button>
+        <button ref={opener("bulk")} onClick={() => setEditing("bulk")}>
+          여러 개 한 번에 추가
+        </button>
       </header>
 
       {editing === "new" && (
         <MenuForm onClose={closeForm} onSaved={() => { closeForm(); invalidate(); }} />
+      )}
+      {editing === "bulk" && (
+        <BulkMenuForm onClose={closeForm} onSaved={invalidate} />
       )}
 
       {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
@@ -241,6 +249,91 @@ export default function MenusPage() {
         </button>
       )}
     </div>
+  );
+}
+
+function BulkMenuForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const headingRef = useFocusOnMount<HTMLHeadingElement>();
+  const resultRef = useRef<HTMLParagraphElement>(null);
+  const [text, setText] = useState("");
+  const [result, setResult] = useState("");
+  const previewMutation = useMutation({ mutationFn: previewBulkMenus });
+  const saveMutation = useMutation({
+    mutationFn: createBulkMenus,
+    onSuccess: ({ createdCount }) => {
+      setResult(`${createdCount}개를 추가했어요.`);
+      setText("");
+      previewMutation.reset();
+      onSaved();
+      resultRef.current?.focus();
+    },
+  });
+  const names = text.split(/\r?\n/);
+  const tooMany = names.length > 100;
+  const preview = previewMutation.data;
+  const busy = previewMutation.isPending || saveMutation.isPending;
+  const labels = {
+    ADD: "추가 예정",
+    EMPTY: "빈 줄",
+    DUPLICATE: "입력에서 중복",
+    EXISTING: "이미 있는 메뉴",
+    INVALID: "이름 100자 초과",
+  };
+
+  return (
+    <section className="card" aria-labelledby="bulk-menu-heading">
+      <h2 id="bulk-menu-heading" ref={headingRef} tabIndex={-1}>메뉴 여러 개 추가</h2>
+      <p>한 줄에 메뉴 하나를 입력하세요. 카테고리와 태그는 추가한 뒤 지정할 수 있습니다.</p>
+      <label htmlFor="bulk-menu-names">메뉴 이름</label>
+      <textarea
+        id="bulk-menu-names"
+        rows={8}
+        value={text}
+        disabled={busy}
+        placeholder={"순대국\n콩국수\n양꼬치"}
+        onChange={(event) => {
+          setText(event.target.value);
+          setResult("");
+          previewMutation.reset();
+          saveMutation.reset();
+        }}
+      />
+      <p>{names.length}줄 / 최대 100줄</p>
+      {tooMany && <p className="error" role="alert">한 번에 100줄까지만 추가할 수 있습니다.</p>}
+      <div className="form-actions">
+        <button
+          type="button"
+          disabled={busy || tooMany || !text.trim()}
+          onClick={() => previewMutation.mutate(names)}
+        >
+          {previewMutation.isPending ? "확인 중…" : "미리보기"}
+        </button>
+        <button
+          type="button"
+          disabled={busy || !preview || preview.hasInvalid || preview.addCount === 0}
+          onClick={() => saveMutation.mutate(names)}
+        >
+          {saveMutation.isPending ? "저장 중…" : "모두 저장"}
+        </button>
+        <button type="button" disabled={busy} onClick={onClose}>닫기</button>
+      </div>
+      {previewMutation.isError && <p className="error" role="alert">미리보기를 불러오지 못했습니다. {errorMessage(previewMutation.error)}</p>}
+      {saveMutation.isError && <p className="error" role="alert">저장하지 못했습니다. {errorMessage(saveMutation.error)}</p>}
+      <p ref={resultRef} tabIndex={-1} role="status">{result}</p>
+      {preview && (
+        <div>
+          <p role="status">추가 예정 {preview.addCount}개{preview.hasInvalid ? ", 긴 이름을 고쳐야 저장할 수 있습니다." : ""}</p>
+          {preview.addCount === 0 && !preview.hasInvalid && <p>추가할 것이 없어요.</p>}
+          <ul>
+            {preview.entries.map((entry) => (
+              <li key={entry.line}>
+                {entry.line}번째 줄: {entry.name || "(빈 줄)"} — {labels[entry.status]}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 
