@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.menu.MenuRepositoryCustom.PickCandidate;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
@@ -115,8 +116,7 @@ class PickServiceTest {
 
         pickService.pick(1L, null);
 
-        verify(menuRepository).findAll(ArgumentMatchers.<Specification<Menu>>any());
-        verify(menuRepository, never()).findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(any());
+        verify(menuRepository).findPickCandidates(ArgumentMatchers.<Specification<Menu>>any());
     }
 
     @Test
@@ -330,8 +330,8 @@ class PickServiceTest {
     @Test
     @DisplayName("피드백 보정은 ±2로 제한하고 유효 가중치는 최소 1을 유지한다")
     void effectiveWeight_boundsFeedbackAdjustment() {
-        assertThat(PickService.effectiveWeight(japaneseMenu, Map.of(2L, -2))).isEqualTo(1);
-        assertThat(PickService.effectiveWeight(koreanMenu, Map.of(1L, 2))).isEqualTo(5);
+        assertThat(PickService.effectiveWeight(new PickCandidate(2L, 1), Map.of(2L, -2))).isEqualTo(1);
+        assertThat(PickService.effectiveWeight(new PickCandidate(1L, 3), Map.of(1L, 2))).isEqualTo(5);
     }
 
     @Test
@@ -554,20 +554,29 @@ class PickServiceTest {
                 .isEqualTo(LocalDateTime.of(2026, 1, 15, 0, 30));
     }
 
-    /**
-     * 후보 조회 스텁.
-     *
-     * <p>필터가 붙은 픽은 Specification 조회를, 붙지 않은 픽은 파생 쿼리를 탄다 — 어느 쪽으로
-     * 들어와도 같은 목록을 돌려준다. 이 파일이 보는 것은 "무엇이 걸러지는가"가 아니라 그 뒤의
-     * 처리(가중 랜덤·결과 목록·히스토리)이므로 여기서 조건을 흉내 낼 이유가 없고, 흉내 내면
-     * 오히려 "테스트가 정한 필터"를 검증하게 된다. 조건 자체는 실 MySQL 위에서 본다 —
-     * {@code PickCandidateQueryTest}.
-     */
+    /** 후보의 가벼운 행과 당첨 메뉴의 상세 조회를 연결한다. SQL 필터는 MySQL 통합 테스트가 맡는다. */
     private void givenCandidates(List<Menu> candidates) {
-        lenient().when(menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L))
-                .thenReturn(candidates);
-        lenient().when(menuRepository.findAll(ArgumentMatchers.<Specification<Menu>>any()))
-                .thenReturn(candidates);
+        lenient().when(menuRepository.findPickCandidates(ArgumentMatchers.<Specification<Menu>>any()))
+                .thenReturn(candidates.stream().map(m -> new PickCandidate(m.getId(), m.getWeight())).toList());
+        for (Menu menu : candidates) {
+            lenient().when(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(menu.getId(), 1L))
+                    .thenReturn(Optional.of(menu));
+        }
+        lenient().when(menuRepository.findPickCandidateRestaurants(any())).thenAnswer(inv -> {
+            List<Long> ids = inv.getArgument(0);
+            return candidates.stream().filter(menu -> ids.contains(menu.getId()))
+                    .flatMap(menu -> menu.getMenuRestaurants().stream().map(link ->
+                            new MenuRepository.PickCandidateRestaurant() {
+                                @Override public Long getMenuId() { return menu.getId(); }
+                                @Override public BigDecimal getLatitude() {
+                                    return link.getRestaurant().getLatitude();
+                                }
+                                @Override public BigDecimal getLongitude() {
+                                    return link.getRestaurant().getLongitude();
+                                }
+                            }))
+                    .toList();
+        });
     }
 
     private void givenRecommendationSignals(

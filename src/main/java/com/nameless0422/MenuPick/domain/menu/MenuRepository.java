@@ -11,7 +11,18 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificationExecutor<Menu> {
+public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificationExecutor<Menu>, MenuRepositoryCustom {
+
+    @Query("select mr.menu.id as menuId, r.latitude as latitude, r.longitude as longitude " +
+            "from MenuRestaurant mr join mr.restaurant r " +
+            "where mr.menu.id in :menuIds and r.deletedAt is null")
+    List<PickCandidateRestaurant> findPickCandidateRestaurants(@Param("menuIds") List<Long> menuIds);
+
+    interface PickCandidateRestaurant {
+        Long getMenuId();
+        java.math.BigDecimal getLatitude();
+        java.math.BigDecimal getLongitude();
+    }
 
     /** 메뉴/카테고리/태그를 곱집합 없이 선형 행으로 읽는 대안 진단 projection. */
     @Query(value = """
