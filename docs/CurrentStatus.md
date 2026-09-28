@@ -1,12 +1,27 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-28 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-29 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-09-29 픽 조회 비용 개선 — 운영 배포 완료
+
+- 픽 후보 조회는 메뉴 ID와 가중치만 읽고, 선택한 메뉴 한 건의 상세 정보를 조회한다. 거리
+  조건에서는 연결 식당 좌표를 묶어서 읽고 기존 거리 판정을 유지한다. 최근 30일 추천·피드백
+  집계를 위해 `histories(user_id, recommended_at, menu_id, recommendation_feedback)` 인덱스를
+  V17로 추가했다.
+- 로컬 `./gradlew check` 853개와 PR #307의 frontend·test·docker-build CI가 통과했다.
+  JDBC 구문 수는 일반 픽 7→8건, 거리 픽 12→14건이다. 이번 배포에서 부하 테스트는 다시
+  실행하지 않았으므로 응답 시간 개선 수치는 없다.
+- `main` SHA `12bb7622a74d65e76603a36278d255815c09ca90`으로 운영 배포했다. 배포 전 백업
+  `menupick-20260928-161902Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후
+  V17 적용과 인덱스 4개 컬럼, 다섯 컨테이너 healthy, readiness UP, HTTPS 200, HTTP 301,
+  미인증 메뉴 API 401을 확인했다.
+- 검증 후 요청에 따라 app·web·mysql·redis·mailpit을 모두 중지했다.
 
 ### 2026-09-28 메뉴 여러 개 추가 — 운영 배포 완료
 
