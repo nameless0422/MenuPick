@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.menu.MenuRepositoryCustom.PickCandidate;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
@@ -81,7 +82,7 @@ public class PickService {
         request = normalized.request();
         Set<String> categories = normalized.categories();
         PickCandidateEvaluator.Evaluation evaluation = candidateEvaluator.evaluate(userId, normalized);
-        List<Menu> candidates = evaluation.candidates();
+        List<PickCandidate> candidates = evaluation.candidates();
 
         if (candidates.isEmpty()) {
             throw new BusinessException(diagnoseEmpty(userId, request));
@@ -89,7 +90,9 @@ public class PickService {
 
         boolean avoidedRecentRecommendation = evaluation.avoidedRecentRecommendation();
         Map<Long, Integer> feedbackAdjustments = feedbackAdjustments(evaluation.signals());
-        Menu picked = weightedRandom(candidates, feedbackAdjustments);
+        PickCandidate selected = weightedRandom(candidates, feedbackAdjustments);
+        Menu picked = menuRepository.findByIdAndUserIdAndDeletedAtIsNull(selected.id(), userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NO_PICK_CANDIDATES));
 
         BigDecimal lat = request != null ? request.latitude() : null;
         BigDecimal lng = request != null ? request.longitude() : null;
@@ -211,7 +214,7 @@ public class PickService {
         return scores;
     }
 
-    private Menu weightedRandom(List<Menu> menus, Map<Long, Integer> feedbackAdjustments) {
+    private PickCandidate weightedRandom(List<PickCandidate> menus, Map<Long, Integer> feedbackAdjustments) {
         int totalWeight = menus.stream()
                 .mapToInt(menu -> effectiveWeight(menu, feedbackAdjustments))
                 .sum();
@@ -224,7 +227,7 @@ public class PickService {
 
         int random = ThreadLocalRandom.current().nextInt(totalWeight);
         int cumulative = 0;
-        for (Menu menu : menus) {
+        for (PickCandidate menu : menus) {
             cumulative += effectiveWeight(menu, feedbackAdjustments);
             if (random < cumulative) {
                 return menu;
@@ -233,8 +236,8 @@ public class PickService {
         return menus.get(menus.size() - 1);
     }
 
-    static int effectiveWeight(Menu menu, Map<Long, Integer> feedbackAdjustments) {
-        return Math.max(1, menu.getWeight() + feedbackAdjustments.getOrDefault(menu.getId(), 0));
+    static int effectiveWeight(PickCandidate menu, Map<Long, Integer> feedbackAdjustments) {
+        return Math.max(1, menu.weight() + feedbackAdjustments.getOrDefault(menu.id(), 0));
     }
 
     /**

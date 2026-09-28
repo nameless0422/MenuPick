@@ -438,9 +438,11 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
                 .isEqualTo(2);
     }
 
-    // ── 실측값 (2026-09-12). 바꾸려면 클래스 주석의 "이 숫자를 올려도 되는가"를 먼저 읽을 것.
+    // ── 실측값 (2026-09-29). 후보 전체의 엔티티 로딩을 없애기 위해 id/weight만 먼저
+    // 읽고 당첨된 메뉴 한 건을 조회한다. 이 선택으로 일반 픽은 JDBC 1건, 거리 픽은
+    // 좌표 projection까지 합쳐 2건 늘었다. 메뉴가 많은 계정의 객체 로딩량은 줄어든다.
     //
-    // 필터를 건 픽 12건의 내역은 이렇다:
+    // 변경 전 필터 픽 12건의 내역은 이렇다:
     //   1  후보 조회 (PickCandidates 명세)
     //   2  지연 로딩 — menu_restaurants (거리 필터가 후보의 연결을 본다)
     //   3  지연 로딩 — restaurants
@@ -456,14 +458,14 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
     // IDENTITY 키 생성을 쓰기 때문에 하이버네이트가 생성된 키를 받으려고 INSERT를 즉시
     // 실행해야 하고, 그러면 JDBC 배치가 성립하지 않는다. 줄이려면 키 생성 전략을 바꿔야
     // 하는데 그건 마이그레이션이고 다른 테이블까지 함께 걸리는 결정이라 여기서 다루지 않는다.
-    private static final long PLAIN_PICK_BUDGET = 7;
-    private static final long FILTERED_PICK_BUDGET = 12;
+    private static final long PLAIN_PICK_BUDGET = 8;
+    private static final long FILTERED_PICK_BUDGET = 14;
     /**
      * 빠른 픽 실행. 일반 픽과 <b>별도 예산</b>이며 위 두 값을 바꾸지 않는다.
      *
-     * <p>필터 픽(12)보다 2건 많다 — 프리셋 잠금 조회와 조건 컬렉션 로딩이다. 태그 소유권
+     * <p>필터 픽보다 1건 많다 — 프리셋 잠금 조회와 조건 컬렉션 로딩의 순효과다. 태그 소유권
      * 재확인과 기본 제외 조회는 이미 세어진 조회와 합쳐지거나 빈 집합이면 생략된다.
      * 늘었다면 합칠 수 있는지부터 본다(클래스 주석의 "이 숫자를 올려도 되는가").
      */
-    private static final long PRESET_EXECUTION_BUDGET = 14;
+    private static final long PRESET_EXECUTION_BUDGET = 15;
 }

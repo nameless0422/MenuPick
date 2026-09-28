@@ -126,7 +126,18 @@ class PerformanceIndexMigrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("histories에 남는 user_id 선두 인덱스는 커서 정렬용 하나뿐이다")
+    @DisplayName("추천 신호 집계 인덱스 마이그레이션(V17)이 성공 상태로 기록된다")
+    void v17_isApplied() {
+        Object applied = em.createNativeQuery(
+                        "SELECT success FROM flyway_schema_history WHERE version = '17'")
+                .getSingleResult();
+        assertThat(applied).isNotNull();
+        boolean success = (applied instanceof Boolean b) ? b : ((Number) applied).intValue() == 1;
+        assertThat(success).isTrue();
+    }
+
+    @Test
+    @DisplayName("커서 정렬용 인덱스와 추천 집계용 인덱스가 각각 남는다")
     void redundantHistoryIndexDropped() {
         // (user_id, recommended_at DESC)는 (user_id, id DESC)와 상호 배타적 선택지였다.
         // 남겨 두면 옵티마이저가 통계에 따라 이쪽을 골라 V3이 없앤 filesort가 되살아난다.
@@ -135,9 +146,10 @@ class PerformanceIndexMigrationTest extends AbstractIntegrationTest {
         assertThat(indexColumns("histories", "idx_histories_user_id"))
                 .containsExactly("user_id", "id");
 
-        // 이 테스트의 진짜 주장은 "둘 중 하나만 남는다"이므로, 이름을 하나씩 확인하는 것으로는
-        // 부족하다 — 나중에 세 번째 user_id 선두 인덱스가 추가되면 같은 문제가 그대로 재발한다.
-        assertThat(userIdLeadingIndexes("histories")).containsExactly("idx_histories_user_id");
+        assertThat(indexColumns("histories", "idx_histories_user_recommendation_signals"))
+                .containsExactly("user_id", "recommended_at", "menu_id", "recommendation_feedback");
+        assertThat(userIdLeadingIndexes("histories"))
+                .containsExactly("idx_histories_user_id", "idx_histories_user_recommendation_signals");
     }
 
     @Test

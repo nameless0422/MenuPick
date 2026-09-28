@@ -2,8 +2,8 @@ package com.nameless0422.MenuPick.domain.pick;
 
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
 import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
-import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.menu.MenuRepositoryCustom.PickCandidate;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 class PickCandidateEvaluator {
     static final int RECENT_RECOMMENDATION_DAYS = 3;
     static final int FEEDBACK_WINDOW_DAYS = 30;
+    private static final int RESTAURANT_BATCH_SIZE = 500;
 
     private final MenuRepository menuRepository;
     private final HistoryRepository historyRepository;
@@ -32,17 +33,36 @@ class PickCandidateEvaluator {
 
     Evaluation evaluate(Long userId, PickRequestNormalizer.NormalizedPickRequest normalized) {
         PickRequest request = normalized.request();
-        List<Menu> candidates = request == null
-                ? menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId)
-                : menuRepository.findAll(PickCandidates.of(userId, normalized.categories(),
-                        request.tagIds(), request.excludeTagIds(), request.latitude(),
-                        request.longitude(), request.maxDistance()));
+        List<PickCandidate> candidates = menuRepository.findPickCandidates(PickCandidates.of(userId,
+                normalized.categories(), request == null ? null : request.tagIds(),
+                request == null ? null : request.excludeTagIds(),
+                request == null ? null : request.latitude(),
+                request == null ? null : request.longitude(),
+                request == null ? null : request.maxDistance()));
         LocalDateTime now = LocalDateTime.now(clock);
         List<HistoryRepository.MenuRecommendationSignals> signals =
                 historyRepository.findMenuRecommendationSignalsSince(userId,
                         now.minusDays(FEEDBACK_WINDOW_DAYS), RecommendationFeedback.ACCEPTED,
                         RecommendationFeedback.REJECTED);
-        return finish(PickDistance.filter(candidates, request), signals, now);
+        return finish(filterByDistance(candidates, request), signals, now);
+    }
+
+    private List<PickCandidate> filterByDistance(List<PickCandidate> candidates, PickRequest request) {
+        if (request == null || request.latitude() == null || request.longitude() == null
+                || request.maxDistance() == null || candidates.isEmpty()) return candidates;
+        Set<Long> inRange = new java.util.HashSet<>();
+        for (int start = 0; start < candidates.size(); start += RESTAURANT_BATCH_SIZE) {
+            List<Long> ids = candidates.subList(start,
+                    Math.min(start + RESTAURANT_BATCH_SIZE, candidates.size()))
+                    .stream().map(PickCandidate::id).toList();
+            for (MenuRepository.PickCandidateRestaurant restaurant
+                    : menuRepository.findPickCandidateRestaurants(ids)) {
+                if (PickDistance.meters(request.latitude().doubleValue(), request.longitude().doubleValue(),
+                        restaurant.getLatitude().doubleValue(), restaurant.getLongitude().doubleValue())
+                        <= request.maxDistance()) inRange.add(restaurant.getMenuId());
+            }
+        }
+        return candidates.stream().filter(menu -> inRange.contains(menu.id())).toList();
     }
 
     Universe loadUniverse(Long userId, Set<String> originalCategories) {
@@ -90,14 +110,14 @@ class PickCandidateEvaluator {
         return finishFacts(filtered, universe.signals(), universe.now());
     }
 
-    private Evaluation finish(List<Menu> candidates,
+    private Evaluation finish(List<PickCandidate> candidates,
             List<HistoryRepository.MenuRecommendationSignals> signals, LocalDateTime now) {
         Set<Long> recentIds = signals.stream()
                 .filter(signal -> !signal.getLatestRecommendedAt()
                         .isBefore(now.minusDays(RECENT_RECOMMENDATION_DAYS)))
                 .map(HistoryRepository.MenuRecommendationSignals::getMenuId)
                 .collect(Collectors.toSet());
-        List<Menu> fresh = candidates.stream().filter(menu -> !recentIds.contains(menu.getId())).toList();
+        List<PickCandidate> fresh = candidates.stream().filter(menu -> !recentIds.contains(menu.id())).toList();
         return new Evaluation(fresh.isEmpty() ? candidates : fresh, signals, !fresh.isEmpty());
     }
 
@@ -157,11 +177,11 @@ class PickCandidateEvaluator {
         }
     }
 
-    record Evaluation(List<Menu> candidates,
+    record Evaluation(List<PickCandidate> candidates,
                       List<HistoryRepository.MenuRecommendationSignals> signals,
                       boolean avoidedRecentRecommendation) {
         int distinctCandidateCount() {
-            return (int) candidates.stream().map(Menu::getId).distinct().count();
+            return (int) candidates.stream().map(PickCandidate::id).distinct().count();
         }
     }
 }
