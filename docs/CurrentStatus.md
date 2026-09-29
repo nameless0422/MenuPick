@@ -1,12 +1,26 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-29 / 기준 브랜치: `main`**
+**최종 갱신: 2026-09-30 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-09-30 모임방 조회 비용 개선 — 운영 배포 완료
+
+- 방을 만들 때 활성 메뉴를 전부 읽지 않고 카테고리 조건과 정렬을 DB에서 적용해 최대 100개의
+  ID·이름·가중치만 가져온다. 방 상태 조회에서는 메뉴별 제외 수, 내 제외 여부, 참여자 수를
+  한 번에 집계한다. 화면의 5초 갱신 주기는 그대로다.
+- 로컬 `./gradlew check`와 PR #309 및 `main`의 frontend·test·docker-build CI가 통과했다.
+  통합 테스트에서 100개 상한, 참가자 중복 집계 방지, 방 상태 조회의 JDBC 구문 3개 이내를
+  확인했다. DB 마이그레이션은 없다.
+- `main` SHA `0718255d81de925b9f85a33410f8838865f3ab8c`로 운영 배포했다. 배포 전 백업
+  `menupick-20260929-161001Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후
+  다섯 컨테이너 healthy, readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 메뉴 API
+  401을 확인했다.
+- 검증 후 요청에 따라 app·web·mysql·redis·mailpit을 모두 중지했다.
 
 ### 2026-09-29 픽 조회 비용 개선 — 운영 배포 완료
 
