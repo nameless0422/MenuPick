@@ -61,6 +61,25 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void bulkPreview_comparesExactNamesWithinActiveUserMenus() {
+        User user = userRepository.save(
+                User.builder().email("bulk-preview@test.com").nickname("미리보기유저").build());
+        User other = userRepository.save(
+                User.builder().email("bulk-preview-other@test.com").nickname("다른미리보기유저").build());
+        menuRepository.save(Menu.builder().user(user).name("Soup").build());
+        Menu deleted = menuRepository.save(Menu.builder().user(user).name("파스타").build());
+        deleted.softDelete(java.time.LocalDateTime.now());
+        menuRepository.save(deleted);
+        menuRepository.save(Menu.builder().user(other).name("라멘").build());
+
+        var preview = menuService.previewBulkCreate(user.getId(), new MenuRequest.BulkCreate(
+                java.util.List.of("Soup", "soup", "파스타", "라멘")));
+
+        assertThat(preview.entries()).extracting(MenuResponse.BulkEntry::status)
+                .containsExactly("EXISTING", "ADD", "ADD", "ADD");
+    }
+
+    @Test
     @DisplayName("메뉴 목록 조회 결과의 categories는 트랜잭션 종료 후에도 접근 가능하다")
     void getMenus_categoriesAccessibleAfterTransaction() {
         User user = userRepository.save(

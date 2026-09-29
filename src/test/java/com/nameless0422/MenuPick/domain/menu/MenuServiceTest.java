@@ -67,7 +67,7 @@ class MenuServiceTest {
 
     @Test
     void bulkCreate_skipsBlankDuplicateAndExistingNames() {
-        given(menuRepository.findAllByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of(menu));
+        given(menuRepository.findExistingNamesForBulkCreate(eq(1L), any())).willReturn(List.of("김치찌개"));
         given(userRepository.getReferenceById(1L)).willReturn(user);
 
         var result = menuService.bulkCreate(1L,
@@ -85,7 +85,7 @@ class MenuServiceTest {
 
     @Test
     void bulkCreate_rejectsAllRowsWhenOneNameIsTooLong() {
-        given(menuRepository.findAllByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of());
+        given(menuRepository.findExistingNamesForBulkCreate(eq(1L), any())).willReturn(List.of());
 
         assertThatThrownBy(() -> menuService.bulkCreate(1L,
                 new MenuRequest.BulkCreate(List.of("순대국", "가".repeat(101)))))

@@ -92,8 +92,13 @@ public class MenuService {
     }
 
     private MenuResponse.BulkPreview planBulkCreate(Long userId, MenuRequest.BulkCreate request) {
-        Set<String> existing = menuRepository.findAllByUserIdAndDeletedAtIsNull(userId).stream()
-                .map(Menu::getName).collect(Collectors.toSet());
+        Set<String> candidateNames = request.names().stream()
+                .filter(name -> name != null)
+                .map(String::trim)
+                .filter(name -> !name.isEmpty() && name.length() <= 100)
+                .collect(Collectors.toSet());
+        Set<String> existing = candidateNames.isEmpty() ? Set.of()
+                : new HashSet<>(menuRepository.findExistingNamesForBulkCreate(userId, candidateNames));
         Set<String> seen = new HashSet<>();
         List<MenuResponse.BulkEntry> entries = new ArrayList<>();
         int addCount = 0;

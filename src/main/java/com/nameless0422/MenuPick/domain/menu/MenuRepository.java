@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -93,6 +94,15 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
     }
 
     List<Menu> findAllByUserIdAndDeletedAtIsNull(Long userId);
+
+    /** Java의 이름 중복 판정과 같도록 DB collation을 거치지 않고 정확히 비교한다. */
+    @Query(value = """
+            SELECT m.name FROM menus m
+             WHERE m.user_id = :userId AND m.deleted_at IS NULL
+               AND BINARY m.name IN (:names)
+            """, nativeQuery = true)
+    List<String> findExistingNamesForBulkCreate(
+            @Param("userId") Long userId, @Param("names") Collection<String> names);
 
     /**
      * 기본 메뉴를 두 번 넣지 않기 위한 확인({@code DefaultMenuProvisioner}).
