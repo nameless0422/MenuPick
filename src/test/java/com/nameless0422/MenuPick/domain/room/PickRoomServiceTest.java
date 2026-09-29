@@ -17,6 +17,8 @@ import com.nameless0422.MenuPick.domain.room.dto.PickRoomResponse;
 import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
+import jakarta.persistence.EntityManager;
+import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -60,6 +62,7 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
     @Autowired private RestaurantRepository restaurantRepository;
     @Autowired private MenuRestaurantRepository menuRestaurantRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private EntityManager entityManager;
 
     private PickRoomService service;
     private User host;
@@ -135,6 +138,21 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("조건에 맞는 메뉴가 100개를 넘어도 이름순으로 100개만 담는다")
+    void limitsRoomCandidatesInQuery() {
+        for (int i = 0; i < PickRoom.MAX_MENUS + 10; i++) {
+            menu("메뉴%03d".formatted(i), "한식", 1);
+        }
+        menu("더 빠른 다른 분류", "양식", 1);
+
+        PickRoomResponse room = service.create(host.getId(), new PickRoomRequest.Create(Set.of("한식")));
+
+        assertThat(room.menus()).hasSize(PickRoom.MAX_MENUS);
+        assertThat(room.menus().get(0).name()).isEqualTo("메뉴000");
+        assertThat(room.menus().get(PickRoom.MAX_MENUS - 1).name()).isEqualTo("메뉴099");
+    }
+
+    @Test
     @DisplayName("담을 메뉴가 없으면 픽과 같은 이유로 거절한다")
     void rejectsEmptyCandidates() {
         assertThatThrownBy(this::createRoom)
@@ -178,8 +196,9 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
         menu("파스타", "양식", 1);
         PickRoomResponse room = createRoom();
         Long kimchi = menuIdNamed(room, "김치찌개");
+        Long pasta = menuIdNamed(room, "파스타");
 
-        veto(room.code(), "p-1", List.of(kimchi));
+        veto(room.code(), "p-1", List.of(kimchi, pasta));
         veto(room.code(), "p-2", List.of(kimchi));
         // 같은 사람이 다시 제출해도 사람 수는 그대로다.
         veto(room.code(), "p-2", List.of(kimchi));
@@ -192,11 +211,38 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
                     assertThat(m.vetoedBy()).isEqualTo(2);
                     assertThat(m.vetoedByMe()).isTrue();
                 });
+        assertThat(seenByP1.menus()).filteredOn(m -> m.id().equals(pasta))
+                .singleElement()
+                .satisfies(m -> {
+                    assertThat(m.vetoedBy()).isEqualTo(1);
+                    assertThat(m.vetoedByMe()).isTrue();
+                });
         // 남이 뺀 것은 숫자로만 보인다.
         assertThat(service.get(room.code(), "p-3").menus())
                 .filteredOn(m -> m.id().equals(kimchi))
                 .singleElement()
                 .satisfies(m -> assertThat(m.vetoedByMe()).isFalse());
+    }
+
+    @Test
+    @DisplayName("방 상태 조회는 제외가 있어도 세 JDBC 구문 이내로 끝난다")
+    void roomReadQueryBudget() {
+        menu("김치찌개", "한식", 1);
+        menu("파스타", "양식", 1);
+        PickRoomResponse room = createRoom();
+        veto(room.code(), "p-1", List.of(menuIdNamed(room, "김치찌개")));
+        entityManager.flush();
+        entityManager.clear();
+
+        var statistics = entityManager.getEntityManagerFactory()
+                .unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+
+        PickRoomResponse result = service.get(room.code(), "p-1");
+
+        assertThat(result.participantCount()).isEqualTo(1);
+        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(3);
     }
 
     /** 제출은 전체 교체다. 빈 목록은 "다 풀었다"는 뜻이지 "변경 없음"이 아니다. */

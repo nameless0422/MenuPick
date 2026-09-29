@@ -13,6 +13,28 @@ import java.util.Set;
 
 public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificationExecutor<Menu>, MenuRepositoryCustom {
 
+    /** 방에 복사할 최대 100개만 읽는다. 바이너리 정렬은 기존 Java 이름 정렬과 대소문자를 맞춘다. */
+    @Query(value = """
+            SELECT m.id AS id, m.name AS name, m.weight AS weight
+              FROM menus m
+             WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND (:filterCategories = FALSE OR EXISTS (
+                    SELECT 1 FROM menu_categories mc
+                     WHERE mc.menu_id = m.id AND BINARY mc.category IN (:categories)))
+             ORDER BY BINARY m.name, m.id
+            """, nativeQuery = true)
+    List<PickRoomCandidate> findPickRoomCandidates(
+            @Param("userId") Long userId,
+            @Param("filterCategories") boolean filterCategories,
+            @Param("categories") Set<String> categories,
+            Pageable pageable);
+
+    interface PickRoomCandidate {
+        Long getId();
+        String getName();
+        Integer getWeight();
+    }
+
     @Query("select mr.menu.id as menuId, r.latitude as latitude, r.longitude as longitude " +
             "from MenuRestaurant mr join mr.restaurant r " +
             "where mr.menu.id in :menuIds and r.deletedAt is null")
