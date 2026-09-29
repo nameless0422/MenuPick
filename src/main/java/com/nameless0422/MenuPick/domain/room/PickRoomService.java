@@ -80,19 +80,14 @@ public class PickRoomService {
             throw new BusinessException(ErrorCode.PICK_ROOM_LIMIT_EXCEEDED);
         }
 
-        List<Menu> candidates = pickableMenus(userId, request.categories());
+        List<MenuRepository.PickRoomCandidate> candidates = pickableMenus(userId, request.categories());
         if (candidates.isEmpty()) {
             // 픽과 같은 코드로 답한다 — 사용자가 할 일("메뉴를 추가하거나 제외를 풀어라")이 같다.
             throw new BusinessException(ErrorCode.NO_PICKABLE_MENUS);
         }
 
         PickRoom room = new PickRoom(newCode(), userRepository.getReferenceById(userId), now);
-        candidates.stream()
-                // 상한을 넘으면 앞에서 자른다. 무엇이 잘렸는지 알 수 있게 이름순으로 고정한다 —
-                // 무작위로 자르면 같은 조건으로 방을 두 번 만들 때 목록이 달라진다.
-                .sorted(Comparator.comparing(Menu::getName).thenComparing(Menu::getId))
-                .limit(PickRoom.MAX_MENUS)
-                .forEach(menu -> room.addMenu(menu.getId(), menu.getName(), menu.getWeight()));
+        candidates.forEach(menu -> room.addMenu(menu.getId(), menu.getName(), menu.getWeight()));
 
         roomRepository.save(room);
         return toResponse(room, null, userId);
@@ -251,15 +246,12 @@ public class PickRoomService {
         return room;
     }
 
-    private List<Menu> pickableMenus(Long userId, Set<String> categories) {
-        List<Menu> menus = menuRepository.findAllByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId);
-        if (categories == null || categories.isEmpty()) {
-            return menus;
-        }
-        Set<String> wanted = categories.stream().map(String::trim).collect(java.util.stream.Collectors.toSet());
-        return menus.stream()
-                .filter(menu -> menu.getCategories().stream().anyMatch(wanted::contains))
-                .toList();
+    private List<MenuRepository.PickRoomCandidate> pickableMenus(Long userId, Set<String> categories) {
+        Set<String> wanted = categories == null ? Set.of() : categories.stream()
+                .map(String::trim).collect(java.util.stream.Collectors.toSet());
+        // 빈 IN 바인딩은 DB마다 해석이 달라 비어 있지 않은 값으로 전달한다.
+        return menuRepository.findPickRoomCandidates(userId, !wanted.isEmpty(),
+                wanted.isEmpty() ? Set.of("") : wanted, Pageable.ofSize(PickRoom.MAX_MENUS));
     }
 
     private Map<Long, Long> vetoCounts(PickRoom room) {
@@ -275,10 +267,18 @@ public class PickRoomService {
     }
 
     private PickRoomResponse toResponse(PickRoom room, String participant, Long viewerId) {
-        Map<Long, Long> counts = vetoCounts(room);
-        Set<Long> mine = participant == null || participant.isBlank()
-                ? Set.of()
-                : new HashSet<>(vetoRepository.findMyVetoedMenuIds(room.getId(), participant));
+        Map<Long, Long> counts = new HashMap<>();
+        Set<Long> mine = new HashSet<>();
+        long participants = 0;
+        for (PickRoomVetoRepository.RoomSummaryRow row : vetoRepository.summarizeRoom(
+                room.getId(), participant == null ? "" : participant)) {
+            if (row.getRoomMenuId() == null) {
+                participants = row.getParticipants();
+            } else {
+                counts.put(row.getRoomMenuId(), row.getPeople());
+                if (row.getMine() != null && row.getMine() > 0) mine.add(row.getRoomMenuId());
+            }
+        }
 
         List<PickRoomResponse.Menu> menus = new ArrayList<>();
         room.getMenus().stream()
@@ -301,7 +301,7 @@ public class PickRoomService {
                 && viewerId != null && room.getHost().getId().equals(viewerId);
 
         return new PickRoomResponse(room.getCode(), room.getExpiresAt(), menus,
-                vetoRepository.countParticipants(room.getId()), decision, canChoosePlace);
+                participants, decision, canChoosePlace);
     }
 
     private String newCode() {

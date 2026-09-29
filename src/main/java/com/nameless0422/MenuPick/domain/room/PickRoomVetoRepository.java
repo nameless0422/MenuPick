@@ -9,6 +9,26 @@ import java.util.List;
 
 public interface PickRoomVetoRepository extends JpaRepository<PickRoomVeto, Long> {
 
+    /** 메뉴별 제외, 내 제외, 방 전체 참가자 수를 ROLLUP의 합계 행까지 한 번에 읽는다. */
+    @Query(value = """
+            SELECT v.room_menu_id AS roomMenuId, COUNT(*) AS people,
+                   MAX(CASE WHEN v.participant = :participant THEN 1 ELSE 0 END) AS mine,
+                   COUNT(DISTINCT v.participant) AS participants
+              FROM pick_room_vetoes v
+              JOIN pick_room_menus m ON m.id = v.room_menu_id
+             WHERE m.room_id = :roomId
+             GROUP BY v.room_menu_id WITH ROLLUP
+            """, nativeQuery = true)
+    List<RoomSummaryRow> summarizeRoom(@Param("roomId") Long roomId,
+                                       @Param("participant") String participant);
+
+    interface RoomSummaryRow {
+        Long getRoomMenuId();
+        Long getPeople();
+        Long getMine();
+        Long getParticipants();
+    }
+
     /** 방의 제외를 메뉴별로 센다. 세는 단위는 <b>사람 수</b>다 — 유니크 제약이 그것을 보장한다. */
     @Query("select v.roomMenu.id as roomMenuId, count(v) as people " +
             "from PickRoomVeto v where v.roomMenu.room.id = :roomId group by v.roomMenu.id")
