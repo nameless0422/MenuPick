@@ -10,7 +10,10 @@ import java.util.Optional;
 
 public interface MenuRestaurantRepository extends JpaRepository<MenuRestaurant, Long> {
 
-    List<MenuRestaurant> findAllByMenuId(Long menuId);
+    /** 목록 응답에 쓰는 식당을 함께 읽고, 삭제된 식당의 링크는 DB에서 제외한다. */
+    @Query("select mr from MenuRestaurant mr join fetch mr.restaurant r " +
+            "where mr.menu.id = :menuId and r.deletedAt is null")
+    List<MenuRestaurant> findActiveByMenuIdWithRestaurant(@Param("menuId") Long menuId);
 
     Optional<MenuRestaurant> findByMenuIdAndRestaurantId(Long menuId, Long restaurantId);
 

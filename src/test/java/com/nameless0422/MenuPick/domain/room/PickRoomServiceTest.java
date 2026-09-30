@@ -381,7 +381,8 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
         History history = historyRepository.findRoomHistory(host.getId(), room.code(),
                 Pageable.ofSize(1)).get(0);
         assertThat(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(host.getId())).hasSize(1);
-        assertThat(menuRestaurantRepository.findAllByMenuId(history.getMenu().getId())).hasSize(1);
+        assertThat(menuRestaurantRepository.findActiveByMenuIdWithRestaurant(history.getMenu().getId()))
+                .hasSize(1);
         assertThat(history.getRestaurant().getName()).isEqualTo("할매김치찌개");
         assertThat(history.isVisited()).isFalse();
     }
