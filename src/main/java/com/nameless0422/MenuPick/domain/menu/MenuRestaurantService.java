@@ -26,9 +26,9 @@ public class MenuRestaurantService {
     public MenuRestaurantResponse.MenuRestaurantListResponse getMenuRestaurants(Long userId, Long menuId) {
         findMenuOrThrow(userId, menuId);
 
-        List<MenuRestaurantResponse.MenuRestaurantDetail> details = menuRestaurantRepository.findAllByMenuId(menuId)
+        List<MenuRestaurantResponse.MenuRestaurantDetail> details = menuRestaurantRepository
+                .findActiveByMenuIdWithRestaurant(menuId)
                 .stream()
-                .filter(mr -> !mr.getRestaurant().isDeleted())
                 .map(this::toDetail)
                 .toList();
 

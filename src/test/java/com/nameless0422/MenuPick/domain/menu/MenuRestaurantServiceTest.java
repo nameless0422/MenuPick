@@ -138,18 +138,10 @@ class MenuRestaurantServiceTest {
     // --- 조회 ---
 
     @Test
-    @DisplayName("메뉴-식당 목록 조회 - soft-delete된 식당의 링크는 제외된다")
-    void getMenuRestaurants_excludesDeletedRestaurants() {
-        Restaurant deleted = Restaurant.builder()
-                .user(user).name("폐업식당").address("서울")
-                .latitude(new BigDecimal("37.5")).longitude(new BigDecimal("127.0"))
-                .build();
-        ReflectionTestUtils.setField(deleted, "id", 9L);
-        deleted.softDelete(LocalDateTime.now());
-        MenuRestaurant deletedLink = MenuRestaurant.builder().menu(menu).restaurant(deleted).build();
-
+    @DisplayName("메뉴-식당 목록 조회 - 조회된 활성 링크를 응답으로 변환한다")
+    void getMenuRestaurants_mapsActiveLinks() {
         given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L)).willReturn(Optional.of(menu));
-        given(menuRestaurantRepository.findAllByMenuId(1L)).willReturn(List.of(link, deletedLink));
+        given(menuRestaurantRepository.findActiveByMenuIdWithRestaurant(1L)).willReturn(List.of(link));
 
         var result = menuRestaurantService.getMenuRestaurants(1L, 1L);
 
