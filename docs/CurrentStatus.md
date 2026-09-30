@@ -1,12 +1,25 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-09-30 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-01 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-01 메뉴별 연결 식당 조회 개선 — 운영 배포 완료
+
+- 메뉴에 연결된 식당 목록을 읽을 때 식당을 함께 조회하고 삭제된 식당은 DB에서 제외한다.
+  MySQL 통합 테스트에서 활성 식당 5곳과 삭제된 식당 1곳을 넣어 목록 조회의 JDBC 구문이
+  2개로 끝나는 것을 확인했다. DB 마이그레이션과 화면 변경은 없다.
+- 로컬 `./gradlew check`와 PR #313 및 `main`의 frontend·test·docker-build CI가 통과했다.
+  별도 부하 테스트는 실행하지 않아 응답 시간 개선 수치는 없다.
+- `main` SHA `22f75cfc6bef31c97b91012707d847b6d8253d85`로 운영 배포했다. 배포 전 백업
+  `menupick-20260930-160837Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후
+  다섯 컨테이너 healthy, readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 메뉴 API
+  401을 확인했다.
+- 검증 후 요청에 따라 app·web·mysql·redis·mailpit을 모두 중지했다.
 
 ### 2026-09-30 여러 메뉴 추가 중복 조회 개선 — 운영 배포 완료
 
