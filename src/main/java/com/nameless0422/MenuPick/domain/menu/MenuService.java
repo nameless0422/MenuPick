@@ -33,10 +33,23 @@ public class MenuService {
     private final Clock clock;
 
     public MenuResponse.MenuListResponse getMenus(Long userId, Long cursor, int size) {
+        return getMenus(userId, cursor, size, null);
+    }
+
+    public MenuResponse.MenuListResponse getMenus(Long userId, Long cursor, int size, String keyword) {
         var pageable = PageRequest.of(0, size + 1);
-        List<Menu> menus = (cursor == null)
-                ? menuRepository.findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(userId, pageable)
-                : menuRepository.findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(userId, cursor, pageable);
+        String search = keyword == null ? "" : keyword.trim();
+        List<Menu> menus;
+        if (search.isEmpty()) {
+            menus = (cursor == null)
+                    ? menuRepository.findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(userId, pageable)
+                    : menuRepository.findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(userId, cursor, pageable);
+        } else {
+            // LIKE의 특수문자는 이름에 들어간 글자 그대로 찾는다.
+            String pattern = "%" + search.replace("!", "!!").replace("%", "!%")
+                    .replace("_", "!_") + "%";
+            menus = menuRepository.searchActiveByName(userId, cursor, pattern, pageable);
+        }
 
         boolean hasNext = menus.size() > size;
         List<Menu> result = hasNext ? menus.subList(0, size) : menus;

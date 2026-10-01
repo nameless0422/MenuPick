@@ -138,6 +138,16 @@ class MenuServiceTest {
         assertThat(result.nextCursor()).isNotNull();
     }
 
+    @Test
+    void getMenus_searchUsesCursorAndEscapesLikeCharacters() {
+        given(menuRepository.searchActiveByName(eq(1L), eq(10L), eq("%국!%수!_%"),
+                any(Pageable.class))).willReturn(List.of(menu));
+
+        var result = menuService.getMenus(1L, 10L, 20, " 국%수_ ");
+
+        assertThat(result.menus()).hasSize(1);
+    }
+
     // --- 상세 조회 ---
 
     @Test

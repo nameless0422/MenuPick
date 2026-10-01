@@ -32,6 +32,9 @@ type Editing = "new" | "bulk" | number;
 export default function MenusPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const searchId = useId();
 
   // 폼을 닫을 때 초점을 돌려줄 곳. 수정 폼은 카드를 통째로 대체하므로, 폼이 닫히면
   // "수정" 버튼이 새로 마운트된다 — 닫기 전에 잡아 둔 DOM 참조로는 돌아갈 수 없어
@@ -70,8 +73,8 @@ export default function MenusPage() {
   const focusAfterDelete = () => (menus.length <= 1 ? headingRef : listRef).current?.focus();
 
   const menusQuery = useInfiniteQuery({
-    queryKey: ["menus"],
-    queryFn: ({ pageParam }) => fetchMenus(pageParam),
+    queryKey: ["menus", keyword],
+    queryFn: ({ pageParam }) => fetchMenus(pageParam, 20, keyword || undefined),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => (last.hasNext && last.nextCursor != null ? last.nextCursor : undefined),
   });
@@ -108,7 +111,7 @@ export default function MenusPage() {
     ? "메뉴를 더 불러오는 중…"
     : deleteMutation.isSuccess
       ? `'${deleteMutation.variables.name}' 메뉴를 삭제했습니다. 메뉴 ${menus.length}개.`
-      : `메뉴 ${menus.length}개`;
+      : `${keyword ? "검색 결과 " : ""}메뉴 ${menus.length}개`;
 
   return (
     <div className="page">
@@ -127,6 +130,32 @@ export default function MenusPage() {
           여러 개 한 번에 추가
         </button>
       </header>
+
+      <form
+        className="menu-search"
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setEditing(null);
+          setKeyword(searchInput.trim());
+        }}
+      >
+        <label htmlFor={searchId}>내 메뉴 검색</label>
+        <input
+          id={searchId}
+          type="search"
+          value={searchInput}
+          maxLength={100}
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="이름에 들어간 단어"
+        />
+        <button type="submit">검색</button>
+        {(keyword || searchInput) && (
+          <button type="button" onClick={() => { setSearchInput(""); setKeyword(""); }}>
+            초기화
+          </button>
+        )}
+      </form>
 
       {editing === "new" && (
         <MenuForm onClose={closeForm} onSaved={() => { closeForm(); invalidate(); }} />
@@ -154,7 +183,9 @@ export default function MenusPage() {
       <div role="status">
         {menusQuery.isPending && <p>불러오는 중…</p>}
         {menusQuery.isSuccess && menus.length === 0 && (
-          <p>등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요.</p>
+          <p>{keyword
+            ? "검색 결과가 없습니다. 다른 이름으로 검색해보세요."
+            : "등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요."}</p>
         )}
         {menusQuery.isSuccess && menus.length > 0 && (
           <p className="sr-only">{listAnnouncement}</p>

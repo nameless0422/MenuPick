@@ -35,7 +35,7 @@ class MenuControllerTest extends AbstractControllerTest {
     void getMenus_success() throws Exception {
         var summary = new MenuResponse.MenuSummary(1L, "김치찌개", 3, false, Set.of("한식"), List.of());
         var response = new MenuResponse.MenuListResponse(List.of(summary), null, false);
-        given(menuService.getMenus(1L, null, 20)).willReturn(response);
+        given(menuService.getMenus(1L, null, 20, null)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/menus")
                         .with(authentication(AUTH)))
@@ -43,6 +43,29 @@ class MenuControllerTest extends AbstractControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.menus[0].name").value("김치찌개"))
                 .andExpect(jsonPath("$.data.hasNext").value(false));
+    }
+
+    @Test
+    void getMenus_forwardsSearchAndCursor() throws Exception {
+        given(menuService.getMenus(1L, 10L, 5, "국수"))
+                .willReturn(new MenuResponse.MenuListResponse(List.of(), null, false));
+
+        mockMvc.perform(get("/api/v1/menus")
+                        .with(authentication(AUTH))
+                        .param("cursor", "10")
+                        .param("size", "5")
+                        .param("keyword", "국수"))
+                .andExpect(status().isOk());
+        verify(menuService).getMenus(1L, 10L, 5, "국수");
+    }
+
+    @Test
+    void getMenus_rejectsTooLongSearch() throws Exception {
+        mockMvc.perform(get("/api/v1/menus")
+                        .with(authentication(AUTH))
+                        .param("keyword", "가".repeat(101)))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(menuService);
     }
 
     @Test
