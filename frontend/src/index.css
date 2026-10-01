@@ -455,6 +455,19 @@ nav a:hover:not([aria-current='page']) {
   border-bottom: 2px solid var(--text-h);
 }
 
+.menu-search {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.menu-search input {
+  flex: 1 1 180px;
+  max-width: 360px;
+}
+
 button {
   font: inherit;
   font-size: var(--fs-md);

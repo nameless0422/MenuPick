@@ -104,6 +104,49 @@ beforeEach(() => {
 const editButton = () => screen.getByRole("button", { name: "김치찌개 수정" });
 const newMenuButton = () => screen.getByRole("button", { name: "+ 새 메뉴" });
 
+describe("메뉴 이름 검색", () => {
+  it("검색어를 다음 페이지에도 유지하고 초기화하면 전체 목록을 보여준다", async () => {
+    const user = userEvent.setup();
+    const noodle = { ...KIMCHI, id: 3, name: "비빔국수" };
+    fetchMenusMock.mockImplementation(async (cursor, _size, keyword) => {
+      if (keyword === "국수") {
+        return cursor === 3
+          ? { menus: [{ ...KIMCHI, id: 2, name: "잔치국수" }], nextCursor: null, hasNext: false }
+          : { menus: [noodle], nextCursor: 3, hasNext: true };
+      }
+      return { menus: [KIMCHI], nextCursor: null, hasNext: false };
+    });
+    renderWithProviders(<MenusPage />);
+
+    await user.type(screen.getByRole("searchbox", { name: "메뉴 이름 검색" }), "  국수  ");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+    await screen.findByText("비빔국수");
+    expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, "국수");
+
+    await user.click(screen.getByRole("button", { name: "더 보기" }));
+    await screen.findByText("잔치국수");
+    expect(fetchMenusMock).toHaveBeenCalledWith(3, 20, "국수");
+
+    await user.click(screen.getByRole("button", { name: "초기화" }));
+    await screen.findByText("김치찌개");
+    expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, undefined);
+  });
+
+  it("검색 결과가 없으면 전체 메뉴가 비었다는 안내 대신 검색 안내를 보여준다", async () => {
+    const user = userEvent.setup();
+    fetchMenusMock.mockImplementation(async (_cursor, _size, keyword) =>
+      keyword ? { menus: [], nextCursor: null, hasNext: false }
+        : { menus: [KIMCHI], nextCursor: null, hasNext: false });
+    renderWithProviders(<MenusPage />);
+
+    await user.type(screen.getByRole("searchbox", { name: "메뉴 이름 검색" }), "없는메뉴");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+
+    expect(await screen.findByText(/검색 결과가 없습니다/)).toBeInTheDocument();
+    expect(screen.queryByText(/등록된 메뉴가 없습니다/)).not.toBeInTheDocument();
+  });
+});
+
 describe("메뉴 여러 개 추가", () => {
   it("미리보기 뒤 한 번의 요청으로 저장하고 결과에 초점을 둔다", async () => {
     const user = userEvent.setup();

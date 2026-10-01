@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.domain.menu.dto.MenuResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,8 +28,9 @@ public class MenuController {
     public ResponseEntity<ApiResponse<MenuResponse.MenuListResponse>> getMenus(
             @AuthenticationPrincipal Long userId,
             @RequestParam(required = false) Long cursor,
+            @RequestParam(required = false) @Size(max = 100) String keyword,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return ResponseEntity.ok(ApiResponse.ok(menuService.getMenus(userId, cursor, size)));
+        return ResponseEntity.ok(ApiResponse.ok(menuService.getMenus(userId, cursor, size, keyword)));
     }
 
     @PostMapping

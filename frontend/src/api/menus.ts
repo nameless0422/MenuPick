@@ -75,9 +75,9 @@ export async function batchUpdateExclusions(entries: MenuExclusionEntry[]) {
   await http.patch<ApiResponse<null>>("/api/v1/menus/exclusions", { entries });
 }
 
-export async function fetchMenus(cursor?: number, size = 20) {
+export async function fetchMenus(cursor?: number, size = 20, keyword?: string) {
   const res = await http.get<ApiResponse<MenuListResponse>>("/api/v1/menus", {
-    params: { cursor, size },
+    params: { cursor, size, keyword },
   });
   return unwrap(res);
 }

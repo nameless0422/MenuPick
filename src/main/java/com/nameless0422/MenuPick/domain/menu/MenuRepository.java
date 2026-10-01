@@ -140,6 +140,14 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
     List<Menu> findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(
             Long userId, Long cursor, Pageable pageable);
 
+    @Query("select m from Menu m where m.user.id = :userId and m.deletedAt is null " +
+            "and (:cursor is null or m.id < :cursor) " +
+            "and lower(m.name) like lower(:pattern) escape '!' order by m.id desc")
+    List<Menu> searchActiveByName(@Param("userId") Long userId,
+                                  @Param("cursor") Long cursor,
+                                  @Param("pattern") String pattern,
+                                  Pageable pageable);
+
     List<Menu> findAllByUserIdAndIsExcludedTrueAndDeletedAtIsNullOrderByIdDesc(Long userId);
 
     List<Menu> findAllByIdInAndUserIdAndDeletedAtIsNull(List<Long> ids, Long userId);

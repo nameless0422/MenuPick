@@ -97,6 +97,35 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void menuSearchKeepsCursorAndTreatsLikeCharactersAsText() {
+        User user = userRepository.save(
+                User.builder().email("menu-search@test.com").nickname("메뉴검색실험유저").build());
+        User other = userRepository.save(
+                User.builder().email("menu-search-other@test.com").nickname("다른검색유저").build());
+        menuRepository.save(Menu.builder().user(user).name("국수").build());
+        menuRepository.save(Menu.builder().user(user).name("비빔국수").build());
+        menuRepository.save(Menu.builder().user(user).name("100% 국수").build());
+        menuRepository.save(Menu.builder().user(user).name("국_수").build());
+        Menu deleted = menuRepository.save(Menu.builder().user(user).name("잔치국수").build());
+        deleted.softDelete(java.time.LocalDateTime.now());
+        menuRepository.save(deleted);
+        menuRepository.save(Menu.builder().user(other).name("냉국수").build());
+
+        var first = menuService.getMenus(user.getId(), null, 2, " 국수 ");
+        var second = menuService.getMenus(user.getId(), first.nextCursor(), 2, "국수");
+
+        assertThat(first.hasNext()).isTrue();
+        assertThat(first.menus()).extracting(MenuResponse.MenuSummary::name)
+                .containsExactly("100% 국수", "비빔국수");
+        assertThat(second.menus()).extracting(MenuResponse.MenuSummary::name)
+                .containsExactly("국수");
+        assertThat(menuService.getMenus(user.getId(), null, 20, "%").menus())
+                .extracting(MenuResponse.MenuSummary::name).containsExactly("100% 국수");
+        assertThat(menuService.getMenus(user.getId(), null, 20, "_").menus())
+                .extracting(MenuResponse.MenuSummary::name).containsExactly("국_수");
+    }
+
+    @Test
     @DisplayName("메뉴 단건 조회 결과의 categories는 트랜잭션 종료 후에도 접근 가능하다")
     void getMenu_categoriesAccessibleAfterTransaction() {
         User user = userRepository.save(
