@@ -118,7 +118,7 @@ describe("메뉴 이름 검색", () => {
     });
     renderWithProviders(<MenusPage />);
 
-    await user.type(screen.getByRole("searchbox", { name: "메뉴 이름 검색" }), "  국수  ");
+    await user.type(screen.getByRole("searchbox", { name: "내 메뉴 검색" }), "  국수  ");
     await user.click(screen.getByRole("button", { name: "검색" }));
     await screen.findByText("비빔국수");
     expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, "국수");
@@ -139,7 +139,7 @@ describe("메뉴 이름 검색", () => {
         : { menus: [KIMCHI], nextCursor: null, hasNext: false });
     renderWithProviders(<MenusPage />);
 
-    await user.type(screen.getByRole("searchbox", { name: "메뉴 이름 검색" }), "없는메뉴");
+    await user.type(screen.getByRole("searchbox", { name: "내 메뉴 검색" }), "없는메뉴");
     await user.click(screen.getByRole("button", { name: "검색" }));
 
     expect(await screen.findByText(/검색 결과가 없습니다/)).toBeInTheDocument();

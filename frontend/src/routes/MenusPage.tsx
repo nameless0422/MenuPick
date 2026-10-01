@@ -140,7 +140,7 @@ export default function MenusPage() {
           setKeyword(searchInput.trim());
         }}
       >
-        <label htmlFor={searchId}>메뉴 이름 검색</label>
+        <label htmlFor={searchId}>내 메뉴 검색</label>
         <input
           id={searchId}
           type="search"
