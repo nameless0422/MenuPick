@@ -1,12 +1,25 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-10-01 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-02 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-02 내 메뉴 이름 검색 — 운영 배포 완료
+
+- 내 메뉴 화면에서 이름에 들어간 단어를 검색하고, 결과가 없으면 검색 결과 안내를 보여준다.
+  검색 중에도 다음 페이지를 불러올 수 있고 초기화하면 전체 목록으로 돌아간다. API는 활성 메뉴와
+  소유자 범위를 유지하며 `%`와 `_`를 글자 그대로 검색한다. DB 마이그레이션은 없다.
+- 로컬 백엔드 `./gradlew check`, 프론트 lint·build·Vitest 454개, Playwright 4개가 통과했다.
+  PR #315와 `main`의 frontend·test·docker-build CI도 통과했다.
+- `main` SHA `d8b99b32dc325b20f3bee6410fe2a485d26d0c62`로 운영 배포했다. 배포 전 백업
+  `menupick-20261001-161142Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후
+  다섯 컨테이너 healthy, readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 메뉴 API
+  401, 새 web 번들 포함을 확인했다. 인증 계정으로 운영 검색은 실행하지 않았다.
+- 검증 후 요청에 따라 app·web·mysql·redis·mailpit을 모두 중지했다.
 
 ### 2026-10-01 메뉴별 연결 식당 조회 개선 — 운영 배포 완료
 
