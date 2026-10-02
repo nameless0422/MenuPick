@@ -16,6 +16,12 @@ services:
       # 웹 UI는 외부에 열지 않는다. 확인은 SSH 터널로 한다.
       - "127.0.0.1:8025:8025"
     mem_limit: 128m
+    # prod의 x-logging 앵커는 파일을 넘지 못한다(YAML 앵커는 문서 단위다). 여기서 다시 적지
+    # 않으면 이 컨테이너만 json-file로 남아, 메일 발송 흔적이 컨테이너 재생성과 함께 사라진다.
+    logging:
+      driver: journald
+      options:
+        tag: menupick-mailpit
 
   web:
     # 자체 서명 인증서로 HTTPS를 붙인다. 브라우저가 보안 컨텍스트에서만
