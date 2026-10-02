@@ -56,7 +56,25 @@ CI가 `main`의 백엔드·프론트 이미지를 같은 커밋 SHA로 GHCR에 �
 cd ~/menupick
 docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml --env-file .env pull app web
 docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml --env-file .env up -d app web
+
+# 검증이 끝난 뒤, 쓰지 않는 이미지를 정리한다. 이 줄이 없으면 배포마다 SHA 태그가 하나씩
+# 쌓인다 — 2026-10-03에 72개(앱 36 + web 36, 5주치)가 쌓여 9.2GB를 먹고 있었고 루트가 77%였다.
+docker image prune -a -f
 ```
+
+**정리에 대해 알아 둘 것:**
+
+- **검증 전에 돌리지 않는다.** `prune -a`는 컨테이너가 참조하지 않는 이미지를 전부 지우므로,
+  롤백하려던 직전 버전도 함께 사라진다. 되돌릴 수는 있다 — GHCR에 그대로 있어 태그를 알면
+  다시 받으면 된다(`docker compose pull`은 `.env`의 `APP_VERSION`을 본다).
+- **볼륨은 건드리지 않는다.** `docker system prune --volumes`나 `docker volume prune`은 쓰지
+  말 것 — MySQL 데이터가 named volume에 있다. 이미지만 지우는 `image prune`을 쓴다.
+- 컨테이너를 정지해 둔 상태에서도 안전하다. 정지된 컨테이너도 자기 이미지를 참조하므로
+  현재 버전은 지워지지 않는다.
+- `flyway/flyway` 같은 일회성 복구용 이미지도 함께 지워진다. 필요한 순간에 다시 받으면 된다
+  (`flyway repair`가 필요한 상황은 이미 비상이고, 그때 30초 pull은 비용이 아니다).
+- 디스크가 모자라면 `sudo dnf clean all`(1GB 안팎)과 `journalctl --vacuum-size=500M`도 있다.
+  현재 상한은 journal 1GB다.
 
 배포 후에는 "컨테이너가 떠 있다"에서 끝내지 않고 아래 계약을 확인한다.
 
