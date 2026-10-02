@@ -239,6 +239,10 @@ docker logs menupick-app --tail 50         # journald 드라이버에서도 그�
 
 ```bash
 sudo cp deploy/oci/journald-menupick.conf /etc/systemd/journald.conf.d/menupick.conf
+# 손으로 만들어 둔 옛 드롭인이 있으면 치운다. 드롭인은 **알파벳 순으로 읽혀 뒤가 이긴다** —
+# persistent.conf(SystemMaxUse=200M)가 menupick.conf(1G) 뒤에 읽혀 상한이 되돌아갔다.
+sudo mv /etc/systemd/journald.conf.d/persistent.conf \
+        /etc/systemd/journald.conf.d/persistent.conf.superseded-by-menupick 2>/dev/null || true
 sudo systemctl restart systemd-journald
 sudo journalctl --flush                    # 런타임 → 영구로 옮기고 마커를 만든다
 ls -la /run/systemd/journal/flushed        # 있어야 한다
