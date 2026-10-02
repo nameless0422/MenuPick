@@ -1,0 +1,17 @@
+[Unit]
+Description=MenuPick 앱 ERROR 로그 감시
+# 도커가 없으면 journal에 컨테이너 로그도 없다.
+Requires=docker.service
+After=docker.service
+# 감시 자체가 실패하면(알림 전송 실패 등) 그것도 알린다.
+OnFailure=menupick-alert@%n.service
+
+[Service]
+Type=oneshot
+
+# journalctl로 컨테이너 로그를 읽고 /etc/menupick/alert.env를 쓰므로 root로 돈다.
+# 리포의 scripts/check-app-errors.sh가 원본이고 이건 사본이다 — 고치면 다시 설치한다.
+ExecStart=/usr/local/bin/menupick-error-watch
+
+StandardOutput=journal
+StandardError=journal
