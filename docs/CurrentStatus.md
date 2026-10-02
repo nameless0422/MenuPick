@@ -1,12 +1,31 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-10-02 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-03 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-03 최근에 뽑은 메뉴 빼고 뽑기 — 운영 배포 완료
+
+- 픽 조건에 "최근에 뽑은 메뉴 빼기"(끄기·3·7·14일, 서버는 1~30일)를 추가했다. 기본은 끄기이고,
+  켜면 그 기간 안에 뽑힌 메뉴를 후보에서 뺀다. 사용자가 켠 조건은 폴백하지 않고
+  `NO_RECENT_FREE_MENUS`로 응답하며, 조건 조정 제안은 "최근 제외 끄기"를 가장 먼저 준다.
+  히스토리에는 `EXCLUDE_RECENT_DAYS`로 기록된다. 판정은 픽이 이미 읽는 최근 30일 집계를
+  재사용해 조회가 늘지 않는다(조건 기록 INSERT 1건만 는다). DB 마이그레이션은 없다.
+- 로컬 백엔드 `./gradlew check` 870개, 프론트 lint·build·Vitest 463개, Playwright 4개가
+  통과했다. PR #317과 `main`의 frontend·test·docker-build CI도 통과했다.
+- `main` SHA `f982cbfcc6f800a4e481eba63647728aa8a975f4`로 운영 배포했다. 배포 전 백업
+  `menupick-20261002-161045Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후
+  다섯 컨테이너 healthy, readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 픽 API 401,
+  Flyway 17건(최대 V9 접두 기준) 성공, app ERROR 로그 0건, 새 web 번들에 조건 UI 문구 포함을
+  확인했다. 인증 계정으로 운영 픽은 실행하지 않았다.
+- 검증 후 요청에 따라 app·web·mysql·redis·mailpit을 모두 중지했다.
+- **배포 중 확인된 운영 공백**: 컨테이너를 내려 둔 9/30·10/1 두 번의 백업 타이머 실행이
+  `menupick-mysql 가 healthy가 아니다`로 실패했고, 그 실패는 `journalctl`에만 남아 아무도
+  모르는 상태였다. 마지막 성공 백업은 10/1 16:11Z였다. 이번에 수동 실행해 10/2 백업을 만들었다.
 
 ### 2026-10-02 내 메뉴 이름 검색 — 운영 배포 완료
 
