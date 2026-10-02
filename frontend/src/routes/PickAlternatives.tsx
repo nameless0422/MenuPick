@@ -10,6 +10,8 @@ function labelOf(alternative: PickAlternative) {
       return "카테고리 조건을 모두 풀고 다시 뽑기";
     case "CLEAR_CATEGORIES_AND_EXPAND_DISTANCE":
       return `카테고리를 모두 풀고 거리를 ${distance}m까지 넓혀 다시 뽑기`;
+    case "DROP_RECENT_EXCLUSION":
+      return "최근에 뽑은 메뉴도 포함해 다시 뽑기";
   }
 }
 

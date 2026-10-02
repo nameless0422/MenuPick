@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.pick.dto.PickResponse;
 import com.nameless0422.MenuPick.support.AbstractControllerTest;
 import org.junit.jupiter.api.DisplayName;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -20,6 +21,7 @@ import java.util.Set;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -97,6 +99,54 @@ class PickControllerTest extends AbstractControllerTest {
                         .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.menu.name").value("돈까스"));
+    }
+
+
+    // --- 최근에 뽑은 메뉴 빼기 ---
+
+    @Test
+    @DisplayName("POST /api/v1/pick - excludeRecentDays를 그대로 서비스에 넘긴다")
+    void pick_passesExcludeRecentDays() throws Exception {
+        var menuDetail = new MenuResponse.MenuDetail(
+                1L, "초밥", null, 3, false, Set.of("일식"),
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+        given(pickService.pick(eq(1L), any(PickRequest.class)))
+                .willReturn(new PickResponse.PickResult(1L, menuDetail, List.of()));
+
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"excludeRecentDays\": 7}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<PickRequest> captured = ArgumentCaptor.forClass(PickRequest.class);
+        verify(pickService).pick(eq(1L), captured.capture());
+        org.assertj.core.api.Assertions.assertThat(captured.getValue().excludeRecentDays())
+                .isEqualTo(7);
+    }
+
+    /**
+     * 상한이 30일인 것은 판정에 쓰는 집계 창(최근 30일)과 같아야 하기 때문이다. 31일을 받으면
+     * 그 밖에서 뽑힌 메뉴가 "최근 아님"으로 조용히 통과한다 — 지킬 수 없는 약속은 받지 않는다.
+     */
+    @Test
+    @DisplayName("POST /api/v1/pick - excludeRecentDays가 범위를 벗어나면 400")
+    void pick_excludeRecentDaysOutOfRange_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"excludeRecentDays\": 0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("excludeRecentDays"));
+
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"excludeRecentDays\": 31}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("excludeRecentDays"));
+
+        verifyNoInteractions(pickService);
     }
 
     // --- 요청 검증 (이슈 #6) ---

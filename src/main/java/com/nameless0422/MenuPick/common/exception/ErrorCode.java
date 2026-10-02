@@ -101,6 +101,13 @@ public enum ErrorCode {
     NO_PICKABLE_MENUS(HttpStatus.NOT_FOUND, "추천할 수 있는 메뉴가 없습니다."),
     /** 거리 필터를 켰는데 식당이 연결된 메뉴가 하나도 없다 — 반경을 늘려도 달라지지 않는다. */
     NO_LINKED_RESTAURANTS(HttpStatus.NOT_FOUND, "식당이 연결된 메뉴가 없습니다."),
+    /**
+     * 사용자가 켠 "최근에 뽑은 메뉴 빼기"가 후보를 전부 걷어냈다.
+     *
+     * <p>{@link #NO_PICK_CANDIDATES}와 가르는 이유는 할 일이 다르기 때문이다. 카테고리나
+     * 거리를 풀어 봐도 이 경우에는 아무 변화가 없다 — 줄여야 하는 것은 기간이다.
+     */
+    NO_RECENT_FREE_MENUS(HttpStatus.NOT_FOUND, "최근에 뽑은 메뉴를 빼면 남는 메뉴가 없습니다."),
 
     // --- Pick: 상황별 빠른 픽 프리셋 (docs/PickPresetDesign.md) ---
     PICK_PRESET_NOT_FOUND(HttpStatus.NOT_FOUND, "빠른 픽을 찾을 수 없습니다."),

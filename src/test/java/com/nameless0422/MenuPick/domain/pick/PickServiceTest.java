@@ -640,4 +640,90 @@ class PickServiceTest {
                 .containsExactly("KOREAN");
     }
 
+    // --- 최근에 뽑은 메뉴 빼기 (사용자가 켜는 조건) ---
+
+    @Test
+    @DisplayName("최근 제외를 켜면 그 기간 안에 뽑힌 메뉴는 후보에서 빠진다")
+    void pick_excludeRecentDays_dropsRecentlyPicked() {
+        givenCandidates(List.of(koreanMenu, japaneseMenu));
+        givenRecommendationSignals(List.of(
+                signal(1L, LocalDateTime.of(2026, 1, 14, 12, 0), 0L),
+                signal(2L, LocalDateTime.of(2025, 12, 20, 12, 0), 0L)));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L,
+                new PickRequest(null, null, null, null, null, null, 7));
+
+        assertThat(result.menu().name()).isEqualTo("초밥");
+        assertThat(result.reasons()).contains("최근 7일 안에 뽑은 메뉴는 빼고 골랐어요");
+    }
+
+    /**
+     * 기본 휴리스틱({@code RECENT_RECOMMENDATION_DAYS})은 전부 걸러지면 폴백한다. 사용자가 켠
+     * 조건은 폴백하면 안 된다 — 방금 빼라고 한 메뉴를 돌려주면서 성공한 척하는 셈이다.
+     */
+    @Test
+    @DisplayName("켠 기간 안에 전부 들어가면 폴백하지 않고 전용 오류를 던진다")
+    void pick_excludeRecentDays_doesNotFallBack() {
+        givenCandidates(List.of(koreanMenu, japaneseMenu));
+        givenRecommendationSignals(List.of(
+                signal(1L, LocalDateTime.of(2026, 1, 14, 12, 0), 0L),
+                signal(2L, LocalDateTime.of(2026, 1, 13, 12, 0), 0L)));
+
+        assertThatThrownBy(() -> pickService.pick(1L,
+                new PickRequest(null, null, null, null, null, null, 7)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NO_RECENT_FREE_MENUS);
+
+        // 원인을 이미 알고 있으므로 진단 조회를 더 하지 않는다.
+        verify(menuRepository, never()).existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(any());
+        verify(historyRepository, never()).save(any(History.class));
+    }
+
+    /** 경계는 "그 시각 포함"이다 — 7일 전 정각에 뽑힌 것은 아직 최근으로 본다. */
+    @Test
+    @DisplayName("경계 시각은 제외하고, 1초만 더 오래되면 남긴다")
+    void pick_excludeRecentDays_boundary() {
+        givenCandidates(List.of(koreanMenu, japaneseMenu));
+        givenRecommendationSignals(List.of(
+                signal(1L, LocalDateTime.of(2026, 1, 8, 0, 30), 0L),
+                signal(2L, LocalDateTime.of(2026, 1, 8, 0, 29, 59), 0L)));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L,
+                new PickRequest(null, null, null, null, null, null, 7));
+
+        assertThat(result.menu().name()).isEqualTo("초밥");
+    }
+
+    @Test
+    @DisplayName("히스토리에 최근 제외 기간도 기록된다")
+    void pick_recordsExcludeRecentDaysInHistory() {
+        givenCandidates(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        ArgumentCaptor<History> saved = ArgumentCaptor.forClass(History.class);
+        given(historyRepository.save(saved.capture())).willAnswer(inv -> inv.getArgument(0));
+
+        pickService.pick(1L, new PickRequest(null, null, null, null, null, null, 3));
+
+        assertThat(saved.getValue().getFilterConditions())
+                .extracting("filterType", "filterValue")
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("EXCLUDE_RECENT_DAYS", "3"));
+    }
+
+    /** 조건을 켜지 않았으면 이유 문구도 붙지 않는다 — 안 켠 조건을 반영했다고 말하면 거짓이다. */
+    @Test
+    @DisplayName("켜지 않으면 최근 제외 이유 문구가 붙지 않는다")
+    void pick_withoutExcludeRecentDays_hasNoReason() {
+        givenCandidates(List.of(koreanMenu));
+        given(userRepository.getReferenceById(1L)).willReturn(user);
+        given(historyRepository.save(any(History.class))).willAnswer(inv -> inv.getArgument(0));
+
+        PickResponse.PickResult result = pickService.pick(1L, null);
+
+        assertThat(result.reasons()).noneMatch(reason -> reason.contains("안에 뽑은 메뉴는"));
+    }
+
 }

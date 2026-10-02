@@ -26,8 +26,31 @@ describe("requestPickAlternatives", () => {
     expect(sent?.signal).toBe(controller.signal);
   });
 
+  it("최근 제외 끄기 대안을 그대로 돌려준다", async () => {
+    respond({ alternatives: [
+      { type: "DROP_RECENT_EXCLUSION", candidateCount: 5, changes: { clearRecentExclusion: true } },
+      { type: "EXPAND_DISTANCE", candidateCount: 2, changes: { maxDistance: 1000 } },
+    ] });
+    await expect(requestPickAlternatives({ excludeRecentDays: 7 })).resolves.toEqual({
+      alternatives: [
+        { type: "DROP_RECENT_EXCLUSION", candidateCount: 5, changes: { clearRecentExclusion: true } },
+        { type: "EXPAND_DISTANCE", candidateCount: 2, changes: { maxDistance: 1000 } },
+      ],
+    });
+  });
+
   it.each([
     { alternatives: [{ type: "UNKNOWN", candidateCount: 1, changes: {} }] },
+    // 종류와 맞지 않는 변경 키는 거부한다. 화면은 받은 키를 그대로 조건에 반영하므로,
+    // 섞여 들어온 키 하나가 사용자가 켜 둔 조건을 조용히 바꿔 버린다.
+    { alternatives: [{ type: "DROP_RECENT_EXCLUSION", candidateCount: 1, changes: { maxDistance: 1000 } }] },
+    { alternatives: [{ type: "DROP_RECENT_EXCLUSION", candidateCount: 1, changes: {} }] },
+    { alternatives: [{ type: "EXPAND_DISTANCE", candidateCount: 1, changes: { maxDistance: 1000, clearRecentExclusion: true } }] },
+    // 순서도 계약이다 — 최근 제외가 범인일 때 거리를 먼저 권하면 한 번 더 헛걸음한다.
+    { alternatives: [
+      { type: "EXPAND_DISTANCE", candidateCount: 2, changes: { maxDistance: 1000 } },
+      { type: "DROP_RECENT_EXCLUSION", candidateCount: 5, changes: { clearRecentExclusion: true } },
+    ] },
     { alternatives: [{ type: "CLEAR_CATEGORIES", candidateCount: 0, changes: { categories: [] } }] },
     { alternatives: [{ type: "EXPAND_DISTANCE", candidateCount: 1, changes: { maxDistance: 9000 } }] },
     { alternatives: [

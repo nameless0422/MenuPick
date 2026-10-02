@@ -47,6 +47,8 @@ function filterLabel(condition: HistoryFilterCondition): string {
       return `제외 #${condition.filterValue}`;
     case "MAX_DISTANCE":
       return `거리 ${condition.filterValue}m`;
+    case "EXCLUDE_RECENT_DAYS":
+      return `최근 ${condition.filterValue}일 제외`;
     default:
       return `${condition.filterType} ${condition.filterValue}`;
   }

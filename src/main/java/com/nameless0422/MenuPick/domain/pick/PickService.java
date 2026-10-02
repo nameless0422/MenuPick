@@ -85,7 +85,10 @@ public class PickService {
         List<PickCandidate> candidates = evaluation.candidates();
 
         if (candidates.isEmpty()) {
-            throw new BusinessException(diagnoseEmpty(userId, request));
+            // 최근 제외가 범인이면 조회를 더 할 필요가 없다 — 평가가 이미 알고 있다.
+            throw new BusinessException(evaluation.emptiedByRecentExclusion()
+                    ? ErrorCode.NO_RECENT_FREE_MENUS
+                    : diagnoseEmpty(userId, request));
         }
 
         boolean avoidedRecentRecommendation = evaluation.avoidedRecentRecommendation();
@@ -123,6 +126,9 @@ public class PickService {
         }
         if (request != null && request.maxDistance() != null) {
             reasons.add("설정한 거리 안에서 찾았어요");
+        }
+        if (request != null && request.excludeRecentDays() != null) {
+            reasons.add("최근 " + request.excludeRecentDays() + "일 안에 뽑은 메뉴는 빼고 골랐어요");
         }
         if (avoidedRecentRecommendation) {
             reasons.add("최근 " + RECENT_RECOMMENDATION_DAYS + "일간 추천되지 않았어요");
@@ -327,6 +333,10 @@ public class PickService {
             }
             if (request.maxDistance() != null) {
                 history.addFilterCondition("MAX_DISTANCE", String.valueOf(request.maxDistance()));
+            }
+            if (request.excludeRecentDays() != null) {
+                history.addFilterCondition("EXCLUDE_RECENT_DAYS",
+                        String.valueOf(request.excludeRecentDays()));
             }
         }
 
