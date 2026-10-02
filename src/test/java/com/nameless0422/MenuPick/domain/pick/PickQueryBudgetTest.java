@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurant;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
+import com.nameless0422.MenuPick.domain.pick.dto.PickAlternativesResponse;
 import com.nameless0422.MenuPick.domain.pick.dto.PickRequest;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
@@ -223,6 +224,54 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
         assertThat(statements)
                 .as("빠른 픽 실행 한 번의 JDBC 구문 수")
                 .isEqualTo(PRESET_EXECUTION_BUDGET);
+    }
+
+    /**
+     * 최근 제외는 <b>조회</b>를 더 쓰지 않는다 — 이 기능의 설계 전제다.
+     *
+     * <p>판정에 쓰는 "메뉴별 마지막 추천 시각"은 픽이 어차피 읽는 최근 30일 집계를 그대로
+     * 재사용한다. 그래서 늘어나는 구문은 조건을 기록하는 {@code history_filter_conditions}
+     * INSERT 한 건뿐이고, 이것은 카테고리·거리 조건도 똑같이 내는 쓰기다. 이 숫자가 더
+     * 올라갔다면 누군가 메뉴마다 히스토리를 다시 묻기 시작한 것이고, 그건 후보 수에 비례해
+     * 늘어난다 — 메뉴를 3배로 늘려도 같은 수인지 함께 본다.
+     */
+    @Test
+    @DisplayName("최근 제외가 더 쓰는 구문은 조건 기록 INSERT 한 건뿐이다")
+    void excludeRecentDaysAddsNoQuery() {
+        seedMenus(30);
+        PickRequest withRecentExclusion = new PickRequest(null, null, null, null, null, null, 7);
+
+        long statements = countStatements(() -> pickService.pick(me.getId(), withRecentExclusion));
+
+        assertThat(statements)
+                .as("최근 제외를 켠 픽 한 번의 JDBC 구문 수 (= 조건 없는 픽 + 조건 INSERT 1)")
+                .isEqualTo(PLAIN_PICK_BUDGET + 1);
+
+        seedMenus(60);
+        assertThat(countStatements(() -> pickService.pick(me.getId(), withRecentExclusion)))
+                .as("메뉴가 3배로 늘어도 같다 — 후보마다 묻지 않는다")
+                .isEqualTo(PLAIN_PICK_BUDGET + 1);
+    }
+
+    /**
+     * 최근 제외가 범인이면 그것을 먼저 제안한다. 거리를 넓히라는 조언은 이 경우 사용자를
+     * 한 번 더 헛걸음시킨다 — 넓혀도 최근에 뽑힌 메뉴는 그대로 빠져 있다.
+     */
+    @Test
+    @DisplayName("최근 제외로 후보가 비면 대안은 최근 제외 끄기를 먼저 준다")
+    void alternativesOfferDroppingRecentExclusion() {
+        Menu only = menu("김치찌개", "한식");
+        historyRepository.save(History.builder().user(me).menu(only)
+                .recommendedAt(LocalDateTime.of(2026, 1, 14, 12, 0)).build());
+
+        var alternatives = pickAlternativesService.find(me.getId(),
+                new PickRequest(Set.of("한식"), null, Set.of(), null, null, null, 7));
+
+        assertThat(alternatives.alternatives()).hasSize(1);
+        assertThat(alternatives.alternatives().get(0).type())
+                .isEqualTo(PickAlternativesResponse.Type.DROP_RECENT_EXCLUSION);
+        assertThat(alternatives.alternatives().get(0).candidateCount()).isEqualTo(1);
+        assertThat(alternatives.alternatives().get(0).changes().clearRecentExclusion()).isTrue();
     }
 
     @Test

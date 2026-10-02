@@ -757,7 +757,9 @@ describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
   it("선택지가 라디오로 노출되고 지금 선택된 하나만 checked다", async () => {
     await readyWithDistance();
 
-    const radios = screen.getAllByRole("radio");
+    // 화면에는 라디오 그룹이 둘이다(거리·최근 제외). 전체에서 세면 다른 그룹의 선택까지
+    // 함께 잡혀, "하나만 켜져 있다"가 그룹 단위 약속인데도 늘 깨진 것처럼 보인다.
+    const radios = within(screen.getByRole("radiogroup", { name: "거리" })).getAllByRole("radio");
     expect(radios).toHaveLength(5);
     expect(screen.getByRole("radio", { name: "500m 이내" })).toBeChecked();
     expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
@@ -776,7 +778,7 @@ describe("PickPage 거리 선택 — 단일 선택 그룹", () => {
     // 선택지가 넷인데 Tab을 넷 눌러야 한다면, 그룹이 늘어날수록 키보드 사용자만 비용을 문다.
     await readyWithDistance();
 
-    const radios = screen.getAllByRole("radio");
+    const radios = within(screen.getByRole("radiogroup", { name: "거리" })).getAllByRole("radio");
     expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
     expect(screen.getByRole("radio", { name: "500m 이내" })).toHaveAttribute("tabindex", "0");
   });
@@ -1024,5 +1026,87 @@ describe("PickPage 후보가 없을 때의 안내", () => {
     // 빈 결과 안내를 아무 실패에나 붙이면 서버 장애가 "메뉴가 없다"로 둔갑한다.
     expect(await screen.findByRole("alert", {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.queryByText(/관리하러 가기/)).toBeNull();
+  });
+});
+
+
+describe("최근에 뽑은 메뉴 빼기", () => {
+  /** 백엔드 에러 코드를 실은 axios 형태의 거절. apiErrorCode가 읽는 자리와 같아야 한다. */
+  const apiError = (errorCode: string) =>
+    Object.assign(new Error("Request failed"), {
+      isAxiosError: true,
+      response: { status: 404, data: { success: false, errorCode, message: "없음" } },
+    });
+
+  /** 켜지 않은 조건을 서버에 실어 보내면 안 된다 — 기본은 "빼지 않기"다. */
+  it("기본값에서는 요청에 기간이 실리지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
+    expect(requestPickMock.mock.calls[0][0]).not.toHaveProperty("excludeRecentDays");
+  });
+
+  it("기간을 고르면 그 값이 픽 요청에 실린다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(screen.getByRole("radio", { name: "7일 안에 뽑은 건 빼기" }));
+    await user.click(spinButton());
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
+    expect(requestPickMock.mock.calls[0][0]).toMatchObject({ excludeRecentDays: 7 });
+  });
+
+  /**
+   * 할 일은 바로 위 조건에 있다. 여기서 "메뉴를 추가하라"고 하면 틀린 조언이다 —
+   * 메뉴는 있고 전부 최근에 뽑혔을 뿐이다.
+   */
+  it("남는 메뉴가 없으면 기간을 줄이라고 안내하고 메뉴 추가 링크는 걸지 않는다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValue(apiError("NO_RECENT_FREE_MENUS"));
+    requestPickAlternativesMock.mockResolvedValue({ alternatives: [] });
+    renderWithProviders(<PickPage />);
+
+    await user.click(screen.getByRole("radio", { name: "3일 안에 뽑은 건 빼기" }));
+    await user.click(spinButton());
+
+    expect(
+      await screen.findByText(/제외 기간을 줄이거나 끄고/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/관리하러 가기/)).toBeNull();
+  });
+
+  it("대안을 누르면 조건이 꺼지고 기간 없이 다시 뽑는다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValueOnce(apiError("NO_RECENT_FREE_MENUS"));
+    requestPickAlternativesMock.mockResolvedValue({
+      alternatives: [{
+        type: "DROP_RECENT_EXCLUSION",
+        candidateCount: 5,
+        changes: { clearRecentExclusion: true },
+      }],
+    });
+    renderWithProviders(<PickPage />);
+
+    await user.click(screen.getByRole("radio", { name: "3일 안에 뽑은 건 빼기" }));
+    await user.click(spinButton());
+
+    const apply = await screen.findByRole(
+      "button",
+      { name: /최근에 뽑은 메뉴도 포함해 다시 뽑기/ },
+      { timeout: 3000 },
+    );
+    await user.click(apply);
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalledTimes(2));
+    expect(requestPickMock.mock.calls[1][0]).not.toHaveProperty("excludeRecentDays");
+    // 조건 칩도 함께 꺼져야 한다. 화면에 켜진 채로 남으면 다음 픽에서 또 되살아난다.
+    expect(screen.getByRole("radio", { name: "빼지 않기" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 });

@@ -29,6 +29,18 @@ public class PickAlternativesService {
         }
 
         List<PickAlternativesResponse.Alternative> alternatives = new ArrayList<>(2);
+
+        // 최근 제외가 범인이면 이것을 먼저 제안한다. 목록은 두 개까지만 나가므로 순서가
+        // 곧 우선순위이고, 거리를 넓히라는 조언은 이 경우 사용자를 한 번 더 헛걸음시킨다.
+        if (base.request() != null && base.request().excludeRecentDays() != null) {
+            int withRecent = count(universe, base.withoutRecentExclusion());
+            if (withRecent > 0) {
+                alternatives.add(new PickAlternativesResponse.Alternative(
+                        PickAlternativesResponse.Type.DROP_RECENT_EXCLUSION, withRecent,
+                        PickAlternativesResponse.Changes.dropRecentExclusion()));
+            }
+        }
+
         Integer expandedDistance = firstSuccessfulDistance(universe, base, base.categories());
         if (expandedDistance != null) {
             int count = count(universe, base.with(base.categories(), expandedDistance));

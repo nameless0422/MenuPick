@@ -44,7 +44,8 @@ class PickCandidateEvaluator {
                 historyRepository.findMenuRecommendationSignalsSince(userId,
                         now.minusDays(FEEDBACK_WINDOW_DAYS), RecommendationFeedback.ACCEPTED,
                         RecommendationFeedback.REJECTED);
-        return finish(filterByDistance(candidates, request), signals, now);
+        return finish(filterByDistance(candidates, request), signals, now,
+                requestedRecentExclusion(request));
     }
 
     private List<PickCandidate> filterByDistance(List<PickCandidate> candidates, PickRequest request) {
@@ -107,33 +108,66 @@ class PickCandidateEvaluator {
                 .filter(menu -> menu.tagIds().stream().noneMatch(excludes::contains))
                 .filter(menu -> withinDistance(menu, request))
                 .toList();
-        return finishFacts(filtered, universe.signals(), universe.now());
+        return finishFacts(filtered, universe.signals(), universe.now(),
+                requestedRecentExclusion(request));
     }
 
+    /**
+     * 후보를 좁히고, 왜 비었는지까지 함께 돌려준다.
+     *
+     * <h2>두 가지 "최근 제외"는 성격이 다르다</h2>
+     *
+     * <p>{@link #RECENT_RECOMMENDATION_DAYS}는 아무도 요청하지 않은 <b>기본 휴리스틱</b>이라
+     * 전부 걸러지면 폴백한다 — 사흘 내내 같은 메뉴만 떠도 아무것도 안 주는 것보다는 낫다.
+     * 반면 {@code excludeRecentDays}는 <b>사용자가 직접 켠 조건</b>이다. 여기서 폴백하면
+     * 방금 빼라고 한 메뉴를 그대로 돌려주면서 성공한 척하는 셈이라, 비면 비었다고 말한다
+     * ({@code emptiedByRecentExclusion} → {@code NO_RECENT_FREE_MENUS}).
+     */
     private Evaluation finish(List<PickCandidate> candidates,
-            List<HistoryRepository.MenuRecommendationSignals> signals, LocalDateTime now) {
-        Set<Long> recentIds = signals.stream()
-                .filter(signal -> !signal.getLatestRecommendedAt()
-                        .isBefore(now.minusDays(RECENT_RECOMMENDATION_DAYS)))
-                .map(HistoryRepository.MenuRecommendationSignals::getMenuId)
-                .collect(Collectors.toSet());
+            List<HistoryRepository.MenuRecommendationSignals> signals, LocalDateTime now,
+            Integer excludeRecentDays) {
+        if (excludeRecentDays != null) {
+            Set<Long> excluded = recentIds(signals, now, excludeRecentDays);
+            List<PickCandidate> kept = candidates.stream()
+                    .filter(menu -> !excluded.contains(menu.id())).toList();
+            return new Evaluation(kept, signals, false, kept.isEmpty() && !candidates.isEmpty());
+        }
+        Set<Long> recentIds = recentIds(signals, now, RECENT_RECOMMENDATION_DAYS);
         List<PickCandidate> fresh = candidates.stream().filter(menu -> !recentIds.contains(menu.id())).toList();
-        return new Evaluation(fresh.isEmpty() ? candidates : fresh, signals, !fresh.isEmpty());
+        return new Evaluation(fresh.isEmpty() ? candidates : fresh, signals, !fresh.isEmpty(), false);
     }
 
     private FactEvaluation finishFacts(List<CandidateFact> candidates,
-            List<HistoryRepository.MenuRecommendationSignals> signals, LocalDateTime now) {
-        Set<Long> recentIds = recentIds(signals, now);
+            List<HistoryRepository.MenuRecommendationSignals> signals, LocalDateTime now,
+            Integer excludeRecentDays) {
+        if (excludeRecentDays != null) {
+            Set<Long> excluded = recentIds(signals, now, excludeRecentDays);
+            return new FactEvaluation(candidates.stream()
+                    .filter(candidate -> !excluded.contains(candidate.menuId())).toList());
+        }
+        Set<Long> recentIds = recentIds(signals, now, RECENT_RECOMMENDATION_DAYS);
         List<CandidateFact> fresh = candidates.stream()
                 .filter(candidate -> !recentIds.contains(candidate.menuId())).toList();
         return new FactEvaluation(fresh.isEmpty() ? candidates : fresh);
     }
 
+    /**
+     * 최근 {@code days}일 안에 뽑힌 메뉴.
+     *
+     * <p>기준은 "먹은 것"이 아니라 <b>뽑힌 것</b>이다. 방문 처리는 사용자가 따로 눌러야 하는
+     * 선택이라 안 눌린 기록이 대부분인데, 그걸 기준으로 삼으면 어제 뽑아 먹은 메뉴가 오늘
+     * 그대로 다시 나온다 — 조건을 켠 사람이 보기엔 그냥 안 듣는 기능이다.
+     */
     private static Set<Long> recentIds(List<HistoryRepository.MenuRecommendationSignals> signals,
-            LocalDateTime now) {
+            LocalDateTime now, int days) {
         return signals.stream().filter(signal -> !signal.getLatestRecommendedAt()
-                        .isBefore(now.minusDays(RECENT_RECOMMENDATION_DAYS)))
+                        .isBefore(now.minusDays(days)))
                 .map(HistoryRepository.MenuRecommendationSignals::getMenuId).collect(Collectors.toSet());
+    }
+
+    /** 요청이 켠 최근 제외 기간. 없으면 null이고, 그때는 기본 휴리스틱만 돈다. */
+    private static Integer requestedRecentExclusion(PickRequest request) {
+        return request == null ? null : request.excludeRecentDays();
     }
 
     private static boolean withinDistance(CandidateFact menu, PickRequest request) {
@@ -179,7 +213,9 @@ class PickCandidateEvaluator {
 
     record Evaluation(List<PickCandidate> candidates,
                       List<HistoryRepository.MenuRecommendationSignals> signals,
-                      boolean avoidedRecentRecommendation) {
+                      boolean avoidedRecentRecommendation,
+                      /** 다른 조건으로는 후보가 있었는데 최근 제외가 전부 걷어냈다. */
+                      boolean emptiedByRecentExclusion) {
         int distinctCandidateCount() {
             return (int) candidates.stream().map(PickCandidate::id).distinct().count();
         }

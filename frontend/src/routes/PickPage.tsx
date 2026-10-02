@@ -43,6 +43,18 @@ type GeoState =
   | { status: "ready"; latitude: number; longitude: number }
   | { status: "error" };
 
+/**
+ * "최근에 뽑은 메뉴 빼기" 기간 후보. null은 끄기다.
+ *
+ * 서버는 1..30일을 받지만 화면은 넷만 준다 — 이 조건에서 사용자가 알고 싶은 것은
+ * "어제 뽑힌 것"(3일), "이번 주에 뽑힌 것"(7일), "2주 안에 뽑힌 것"(14일) 정도이고,
+ * 1일 단위 숫자 입력은 고를 거리를 늘리기만 한다.
+ */
+const RECENT_EXCLUSION_OPTIONS: (number | null)[] = [null, 3, 7, 14];
+
+/** 후보가 빈 이유 중 대안("조건을 이렇게 바꿔볼까요?")을 물어볼 값. */
+const ALTERNATIVE_CODES = new Set(["NO_PICK_CANDIDATES", "NO_RECENT_FREE_MENUS"]);
+
 /** Set 의미인 필드는 선택 순서가 달라도 같은 조건으로 비교한다. */
 function pickRequestFingerprint(request: PickRequest) {
   return JSON.stringify({
@@ -56,6 +68,9 @@ function pickRequestFingerprint(request: PickRequest) {
     ...(request.latitude !== undefined && { latitude: request.latitude }),
     ...(request.longitude !== undefined && { longitude: request.longitude }),
     ...(request.maxDistance !== undefined && { maxDistance: request.maxDistance }),
+    ...(request.excludeRecentDays !== undefined && {
+      excludeRecentDays: request.excludeRecentDays,
+    }),
   });
 }
 
@@ -68,7 +83,7 @@ function pickRequestFingerprint(request: PickRequest) {
  */
 const EMPTY_REASONS: Record<
   string,
-  { message: string; cta: string; to: string } | undefined
+  { message: string; cta?: string; to?: string } | undefined
 > = {
   NO_PICKABLE_MENUS: {
     message:
@@ -88,6 +103,12 @@ const EMPTY_REASONS: Record<
       "조건에 맞는 메뉴가 없어요. 필터를 풀거나, 거리로 뽑는 중이라면 반경을 넓혀 보세요.",
     cta: "내 메뉴 관리하러 가기",
     to: "/menus",
+  },
+  NO_RECENT_FREE_MENUS: {
+    // 링크를 걸지 않는다. 할 일은 바로 위 조건에 있고(기간을 줄이거나 끄기), 메뉴를 더
+    // 추가하라는 조언은 이 경우 틀렸다 — 메뉴는 있고 전부 최근에 뽑혔을 뿐이다.
+    message:
+      "최근에 뽑은 메뉴를 빼니 남는 게 없어요. 제외 기간을 줄이거나 끄고 다시 뽑아 주세요.",
   },
 };
 
@@ -121,10 +142,17 @@ export default function PickPage() {
   const [presetSelectionResetKey, setPresetSelectionResetKey] = useState(0);
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
+  const [excludeRecentDays, setExcludeRecentDays] = useState<number | null>(null);
   // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
   // 별도 요소라 legend가 자동으로 붙지 않는다.
   const distanceLabelId = useId();
   const distanceGroup = useRadioGroup(DISTANCE_OPTIONS, maxDistance, setMaxDistance);
+  const recentLabelId = useId();
+  const recentGroup = useRadioGroup(
+    RECENT_EXCLUSION_OPTIONS,
+    excludeRecentDays,
+    setExcludeRecentDays,
+  );
 
   // ---- 슬롯머신 연출 상태 ----
   const [spinning, setSpinning] = useState(false);
@@ -186,6 +214,7 @@ export default function PickPage() {
       longitude: geo.longitude,
       maxDistance,
     }),
+    ...(excludeRecentDays != null && { excludeRecentDays }),
   });
 
   const requestFingerprint = pickRequestFingerprint(buildRequest());
@@ -293,7 +322,7 @@ export default function PickPage() {
 
   const failedRequest = pickMutation.variables;
   useEffect(() => {
-    if (!revealed || !error || apiErrorCode(error) !== "NO_PICK_CANDIDATES") return;
+    if (!revealed || !error || !ALTERNATIVE_CODES.has(apiErrorCode(error) ?? "")) return;
     // 픽이 진행되는 동안 필터를 편집할 수 있다. A 조건으로 보낸 픽이 실패한 뒤 화면이 이미
     // B 조건이면, B를 진단해 A의 실패에 붙이는 것은 서로 다른 요청을 섞는 일이다.
     if (!failedRequest || pickRequestFingerprint(failedRequest) !== requestFingerprint) {
@@ -324,6 +353,10 @@ export default function PickPage() {
     if (alternative.changes.maxDistance != null) {
       setMaxDistance(alternative.changes.maxDistance);
       nextRequest.maxDistance = alternative.changes.maxDistance;
+    }
+    if (alternative.changes.clearRecentExclusion) {
+      setExcludeRecentDays(null);
+      delete nextRequest.excludeRecentDays;
     }
     pickButton.current?.focus();
     spinStartRef.current = Date.now();
@@ -424,6 +457,24 @@ export default function PickPage() {
             </div>
           )}
         </fieldset>
+
+        {/* 거리와 같은 단일 선택 그룹이다 — 항상 정확히 하나가 켜져 있고(끄기도 하나의 값),
+            해제할 수단이 없다. 근거는 위 거리 칩의 주석과 같다. */}
+        <fieldset>
+          <legend id={recentLabelId}>최근에 뽑은 메뉴 빼기</legend>
+          <div className="chip-row" {...recentGroup.groupProps} aria-labelledby={recentLabelId}>
+            {RECENT_EXCLUSION_OPTIONS.map((days, index) => (
+              <button
+                key={days ?? "off"}
+                type="button"
+                className={chipClass(excludeRecentDays === days)}
+                {...recentGroup.radioProps(days, index)}
+              >
+                {days == null ? "빼지 않기" : `${days}일 안에 뽑은 건 빼기`}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </section>
 
       <div className="pick-stage">
@@ -490,11 +541,13 @@ export default function PickPage() {
         {emptyReason && (
           <div className="card pick-empty">
             <p>{emptyReason.message}</p>
-            <Link to={emptyReason.to}>{emptyReason.cta} →</Link>
+            {emptyReason.to && emptyReason.cta && (
+              <Link to={emptyReason.to}>{emptyReason.cta} →</Link>
+            )}
           </div>
         )}
       </div>
-      {apiErrorCode(error) === "NO_PICK_CANDIDATES" && (
+      {ALTERNATIVE_CODES.has(apiErrorCode(error) ?? "") && (
         <PickAlternatives
           ref={alternativesPanel}
           alternatives={alternatives}

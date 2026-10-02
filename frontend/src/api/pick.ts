@@ -10,6 +10,13 @@ export interface PickRequest {
   latitude?: number;
   longitude?: number;
   maxDistance?: number;
+  /**
+   * 최근 이 기간(일) 안에 뽑힌 메뉴를 뺀다. 1..30이며, 생략하면 빼지 않는다.
+   *
+   * 기준은 "먹은 것"이 아니라 뽑힌 것이다 — 방문 처리는 따로 눌러야 하는 선택이라
+   * 안 눌린 기록이 대부분이고, 그걸 기준으로 삼으면 이 조건이 거의 아무것도 걸러내지 않는다.
+   */
+  excludeRecentDays?: number;
 }
 
 // PickResponse.RestaurantWithDistance — distance는 요청에 위치가 없으면 null이지만
