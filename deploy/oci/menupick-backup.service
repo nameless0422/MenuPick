@@ -4,6 +4,11 @@ Description=MenuPick DB 백업 (mysqldump)
 Requires=docker.service
 After=docker.service
 
+# 실패를 사람에게 알린다. 2026-09-30·10-01 백업이 두 번 연속 실패했는데(컨테이너가 꺼져
+# 있었다) journal에만 남아 10-02에 사람이 열어 볼 때까지 아무도 몰랐다. 백업에서 가장
+# 무서운 것은 실패가 아니라 아무도 모르는 실패다.
+OnFailure=menupick-alert@%n.service
+
 [Service]
 Type=oneshot
 User=opc

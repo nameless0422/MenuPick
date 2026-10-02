@@ -23,10 +23,16 @@
 | `nginx-tls.conf` | `~/menupick/nginx-tls.conf` (컨테이너의 `/etc/nginx/conf.d/default.conf`로 마운트) | 자체 서명 TLS + `:80 → https` 리다이렉트 |
 | `menupick-backup.service` | `/etc/systemd/system/` | `scripts/backup-db.sh` 실행 |
 | `menupick-backup.timer` | `/etc/systemd/system/` | 매일 KST 04:00 백업 |
+| `menupick-alert@.service` | `/etc/systemd/system/` | 유닛 실패를 웹훅으로 알린다(`OnFailure=`) |
+| `menupick-error-watch.service` | `/etc/systemd/system/` | `scripts/check-app-errors.sh` 실행 |
+| `menupick-error-watch.timer` | `/etc/systemd/system/` | 15분마다 앱 ERROR 로그 감시 |
+| `journald-menupick.conf` | `/etc/systemd/journald.conf.d/menupick.conf` | 영구 보관 + 상한(컨테이너 로그가 여기로 온다) |
 
 **여기 없는 것**(서버에만 있고 앞으로도 커밋하지 않는다):
 - `.env` — 자격증명. 형식은 리포 루트의 `.env.prod.example` 참고.
 - `certs/` — 자체 서명 인증서와 개인키. `.gitignore`가 `*.key`/`*.pem`을 막는다.
+- `/etc/menupick/alert.env` — 웹훅 URL. **URL 자체가 자격증명이다**(그것만 있으면 누구나 그
+  채널에 글을 쓴다). 0600 root 소유로 두고 커밋하지 않는다.
 
 ## 배포
 
@@ -144,6 +150,104 @@ sudo ss -lntp | grep :111 || echo "111 닫힘"
 ```
 
 NFS를 쓰게 되면 되살려야 한다.
+
+## 실패 알림 (웹훅)
+
+**왜**: 2026-09-30·10-01 백업이 두 번 연속 실패했는데(검증 후 컨테이너를 내려 둔 상태라
+`menupick-mysql 가 healthy가 아니다`), 그 사실은 `journalctl`에만 남아 10-02에 사람이 열어
+볼 때까지 아무도 몰랐다. 백업에서 가장 무서운 것은 실패가 아니라 **아무도 모르는 실패**다.
+
+알림을 보내는 경로는 셋이다.
+
+| 언제 | 보내는 것 |
+| --- | --- |
+| `menupick-backup.service` 실패 | `OnFailure=menupick-alert@%n.service` → 유닛 이름·결과·journal 꼬리 12줄 |
+| 앱 컨테이너에 ERROR 로그 발생 | `menupick-error-watch.timer`(15분) → 건수와 샘플 5줄 |
+| ERROR 감시 자체가 실패 | 감시 유닛에도 `OnFailure=`가 걸려 있다 |
+
+앱 안에서 도는 스케줄러 세 개(집단 통계 04:10, 방 정리 04:20, 탈퇴 정리)는 실패를 잡아서
+로그만 남기고 다음 회차를 유지한다 — 유닛이 실패하지 않으므로 `OnFailure`가 걸릴 자리가 없다.
+그래서 ERROR 감시가 따로 필요하다.
+
+```bash
+# 설치 (최초 1회)
+sudo install -m 0755 scripts/notify-failure.sh   /usr/local/bin/menupick-alert
+sudo install -m 0755 scripts/check-app-errors.sh /usr/local/bin/menupick-error-watch
+sudo cp deploy/oci/menupick-alert@.service /etc/systemd/system/
+sudo cp deploy/oci/menupick-error-watch.{service,timer} /etc/systemd/system/
+sudo cp deploy/oci/menupick-backup.service /etc/systemd/system/   # OnFailure= 추가됨
+sudo systemctl daemon-reload
+sudo systemctl enable --now menupick-error-watch.timer
+
+# 웹훅 URL 넣기 (사용자 작업 — 디스코드/슬랙에서 발급)
+sudo install -d -m 0700 /etc/menupick
+sudo install -m 0600 /dev/null /etc/menupick/alert.env
+sudo tee /etc/menupick/alert.env >/dev/null <<'EOF'
+ALERT_WEBHOOK_URL=https://discord.com/api/webhooks/...
+ALERT_WEBHOOK_FORMAT=discord
+EOF
+
+# 점검 — 채널에 한 줄이 떠야 한다
+sudo /usr/local/bin/menupick-alert --test
+```
+
+`scripts/`가 원본이고 `/usr/local/bin`의 것은 사본이다(백업 스크립트와 같은 이유 — SELinux
+때문에 홈에서 직접 실행할 수 없다). **고치면 다시 설치해야 한다.**
+
+알아 둘 것:
+
+- **URL이 없으면 실패가 아니다.** `/etc/menupick/alert.env`가 없거나 URL이 비어 있으면 경고
+  한 줄만 남기고 정상 종료한다. 알림 미설정과 진짜 실패가 구분되어야 하기 때문이다.
+- **같은 ERROR는 1시간에 한 번만 보낸다**(`ERROR_WATCH_COOLDOWN`). 같은 장애가 계속 나는 동안
+  15분마다 알리면 채널이 막히고, 그러면 알림 자체를 끄게 된다. journal에는 매번 남는다.
+- **컨테이너가 꺼져 있으면 조용하다.** ERROR 로그가 없으므로 아무것도 보내지 않는다 —
+  검증 후 컨테이너를 내려 두는 운영 방식에서 "꺼짐"을 장애로 알리면 쓸 수 없는 알림이 된다.
+  대신 **그 상태에서 백업 타이머는 매일 실패하고, 그 실패는 이제 알림으로 온다.**
+- 알림 스크립트는 **URL을 어디에도 출력하지 않는다.** 전송 결과는 HTTP 코드로만 남는다.
+
+```bash
+# 상태 확인
+systemctl list-timers menupick-error-watch.timer
+journalctl -u menupick-error-watch -n 20
+systemctl --failed
+```
+
+## 로그
+
+컨테이너 로그는 **호스트 journal로 보낸다**(`docker-compose.prod.yml`의 `x-logging`).
+json-file은 로그를 컨테이너에 붙여 두므로 배포로 app·web을 재생성하면 사고 당시의 로그가
+함께 사라진다 — 2026-09-11 보안 점검에서 실제로 "언제부터"를 답할 수 없었다.
+
+```bash
+journalctl CONTAINER_NAME=menupick-app --since -1h
+journalctl CONTAINER_NAME=menupick-app --since -1h | grep ERROR
+journalctl -t menupick-app -p err          # tag로도 찾을 수 있다
+docker logs menupick-app --tail 50         # journald 드라이버에서도 그대로 동작한다
+```
+
+### 영구 journal — 실제로 켜져 있는지 반드시 확인한다
+
+`Storage=persistent`를 적어 두는 것만으로는 부족하다. **journald는 그 부팅에서
+`systemd-journal-flush`가 한 번 돈 뒤에야 `/var/log/journal`을 쓴다**(`/run/systemd/journal/flushed`
+마커가 그 표식이다). 2026-10-02에 이 서버가 정확히 그 상태였다:
+
+- `/var/log/journal`은 9-11에 만들어졌지만 **0바이트**였고,
+- 450MB 전부가 `/run/log/journal`(tmpfs)에 있었다. 재부팅하면 그대로 사라진다.
+- 원인: 마지막 부팅이 9-01이라 그 부팅의 flush는 `/var/log/journal`이 없던 시점에 끝났고,
+  9-11에 디렉터리를 만들고 journald를 재시작한 뒤로는 flush가 다시 돈 적이 없었다.
+  SELinux 라벨(`var_log_t`)과 쓰기 권한은 정상이었다 — 그래서 더 찾기 어렵다.
+
+```bash
+sudo cp deploy/oci/journald-menupick.conf /etc/systemd/journald.conf.d/menupick.conf
+sudo systemctl restart systemd-journald
+sudo journalctl --flush                    # 런타임 → 영구로 옮기고 마커를 만든다
+ls -la /run/systemd/journal/flushed        # 있어야 한다
+journalctl --disk-usage                    # /var/log/journal 아래여야 한다
+sudo du -sh /var/log/journal /run/log/journal
+```
+
+상한은 1GB(`SystemMaxUse`)에 여유 2GB 확보(`SystemKeepFree`)다. 컨테이너 로그가 들어오면서
+양이 늘기 때문이고, 루트 디스크가 이미 74% 차 있어(30G 중 22G) 가득 차면 MySQL이 먼저 죽는다.
 
 ## 백업
 
