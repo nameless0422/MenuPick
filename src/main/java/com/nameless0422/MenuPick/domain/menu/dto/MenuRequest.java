@@ -111,4 +111,18 @@ public class MenuRequest {
             @Min(1) @Max(5)
             int weight
     ) {}
+
+    /**
+     * 메뉴를 잠시 쉬게 한다.
+     *
+     * <p>상한 90일은 "쉬기"와 "제외"를 가르는 선이다. 더 길게 두고 싶다면 그건 잠시가 아니라
+     * 그만 먹겠다는 뜻이고, 그 자리에는 이미 {@code PATCH /menus/{id}/exclude}가 있다.
+     * 하한 1일은 분 단위 쉬기가 의미를 갖지 않기 때문이다 — 화면도 날짜로만 보여 준다.
+     */
+    public record Pause(
+            @NotNull(message = "쉬는 기간을 지정해주세요.")
+            @Min(value = 1, message = "쉬는 기간은 1일 이상이어야 합니다.")
+            @Max(value = 90, message = "쉬는 기간은 90일 이하여야 합니다.")
+            Integer days
+    ) {}
 }

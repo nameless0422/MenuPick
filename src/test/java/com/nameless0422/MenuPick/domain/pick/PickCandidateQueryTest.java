@@ -296,12 +296,41 @@ class PickCandidateQueryTest extends AbstractIntegrationTest {
                 .doesNotContain(wrongCategory.getName(), excludedByTag.getName(), tooFar.getName());
     }
 
+    /**
+     * 쉬기는 상태가 아니라 만료 시각이다 — 그래서 되돌리는 쓰기가 없고, 깨우는 스케줄러도 없다.
+     * 그 약속이 지켜지는지는 "같은 행을 다른 시각으로 두 번 조회"해서만 확인할 수 있다.
+     */
+    @Test
+    @DisplayName("쉬는 중인 메뉴는 후보에서 빠지고, 시각이 지나면 다시 들어온다")
+    void pausedMenuIsExcludedUntilItExpires() {
+        Menu resting = menu(me, "김치찌개", "한식");
+        Menu awake = menu(me, "초밥", "일식");
+        resting.pause(java.time.LocalDateTime.of(2026, 1, 20, 12, 0));
+        menuRepository.flush();
+
+        assertThat(names(findAt(java.time.LocalDateTime.of(2026, 1, 15, 12, 0))))
+                .containsExactly(awake.getName());
+
+        // 아무것도 고치지 않고 시각만 지나게 한다.
+        assertThat(names(findAt(java.time.LocalDateTime.of(2026, 1, 20, 12, 0))))
+                .contains(resting.getName(), awake.getName());
+    }
+
     // ------------------------------------------------------------------ 헬퍼
+
+    private List<Menu> findAt(java.time.LocalDateTime now) {
+        return menuRepository.findAll(PickCandidates.of(
+                me.getId(), Set.of(), Set.of(), Set.of(), null, null, null, now));
+    }
+
+
+    /** 쉬기 판정 기준 시각. 이 테스트의 메뉴는 아무도 쉬지 않으므로 값 자체는 상관없다. */
+    private static final java.time.LocalDateTime NOW = java.time.LocalDateTime.of(2026, 1, 15, 12, 0);
 
     private List<Menu> find(Set<String> categories, Set<Long> includeTagIds, Set<Long> excludeTagIds,
                             BigDecimal lat, BigDecimal lng, Integer maxDistance) {
         return menuRepository.findAll(PickCandidates.of(
-                me.getId(), categories, includeTagIds, excludeTagIds, lat, lng, maxDistance));
+                me.getId(), categories, includeTagIds, excludeTagIds, lat, lng, maxDistance, NOW));
     }
 
     private static List<String> names(List<Menu> menus) {

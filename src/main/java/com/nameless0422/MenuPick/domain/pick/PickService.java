@@ -155,12 +155,17 @@ public class PickService {
         if (!menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(userId)) {
             return ErrorCode.NO_PICKABLE_MENUS;
         }
-        // 2. 거리로 걸렀는데 애초에 식당이 연결된 메뉴가 하나도 없다.
+        // 2. 메뉴는 있는데 전부 쉬는 중이다. 할 일이 다르다 — 추가하는 것도, 필터를 푸는 것도
+        //    아니고, 기다리거나 깨우는 것이다.
+        if (!menuRepository.existsPickableAt(userId, LocalDateTime.now(clock))) {
+            return ErrorCode.ALL_MENUS_PAUSED;
+        }
+        // 3. 거리로 걸렀는데 애초에 식당이 연결된 메뉴가 하나도 없다.
         if (distanceRequested(request)
                 && !menuRestaurantRepository.existsLinkedRestaurantForUser(userId)) {
             return ErrorCode.NO_LINKED_RESTAURANTS;
         }
-        // 3. 그 밖 — 조건이 좁다. 거리를 켰지만 연결은 있는 경우(전부 반경 밖)도 여기다.
+        // 4. 그 밖 — 조건이 좁다. 거리를 켰지만 연결은 있는 경우(전부 반경 밖)도 여기다.
         return ErrorCode.NO_PICK_CANDIDATES;
     }
 
@@ -368,6 +373,7 @@ public class PickService {
                 // 넘기면 필터 없는 픽(카테고리를 한 번도 건드리지 않는 경로)에서 세션이 닫힌 뒤
                 // 초기화를 시도해 LazyInitializationException으로 500이 난다.
                 Set.copyOf(menu.getCategories()), tags,
-                menu.getCreatedAt(), menu.getUpdatedAt(), menu.getVersion());
+                menu.getCreatedAt(), menu.getUpdatedAt(), menu.getVersion(),
+                menu.getPausedUntil());
     }
 }

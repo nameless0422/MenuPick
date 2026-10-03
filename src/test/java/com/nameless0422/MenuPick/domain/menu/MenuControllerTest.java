@@ -19,6 +19,8 @@ import java.util.stream.Collectors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -418,4 +420,65 @@ class MenuControllerTest extends AbstractControllerTest {
         verifyNoInteractions(menuService);
     }
 
+
+    // --- 잠시 쉬기 ---
+
+    @Test
+    @DisplayName("PATCH /menus/{id}/pause - 쉬는 기간을 넘기면 바뀐 메뉴를 돌려준다")
+    void pause() throws Exception {
+        given(menuService.pauseMenu(1L, 5L, 7)).willReturn(detailPausedUntil(
+                LocalDateTime.of(2026, 1, 22, 12, 0)));
+
+        mockMvc.perform(patch("/api/v1/menus/5/pause")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"days\": 7}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pausedUntil").value("2026-01-22T12:00:00"));
+    }
+
+    /**
+     * 90일을 넘기면 그건 "잠시"가 아니라 그만 먹겠다는 뜻이고, 그 자리에는 이미 영구 제외가 있다.
+     * 경계를 서비스까지 내려보내지 않는다.
+     */
+    @Test
+    @DisplayName("PATCH /menus/{id}/pause - 기간이 범위를 벗어나면 400")
+    void pause_outOfRange() throws Exception {
+        for (String body : new String[]{"{\"days\": 0}", "{\"days\": 91}", "{}"}) {
+            mockMvc.perform(patch("/api/v1/menus/5/pause")
+                            .with(authentication(AUTH))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        verify(menuService, never()).pauseMenu(any(), any(), anyInt());
+    }
+
+    @Test
+    @DisplayName("DELETE /menus/{id}/pause - 지금 깨운다")
+    void resume() throws Exception {
+        given(menuService.resumeMenu(1L, 5L)).willReturn(detailPausedUntil(null));
+
+        mockMvc.perform(delete("/api/v1/menus/5/pause").with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pausedUntil").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("쉬기·깨우기는 로그인해야 한다")
+    void pauseRequiresLogin() throws Exception {
+        mockMvc.perform(patch("/api/v1/menus/5/pause")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"days\": 7}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/api/v1/menus/5/pause"))
+                .andExpect(status().isUnauthorized());
+        verify(menuService, never()).pauseMenu(any(), any(), anyInt());
+        verify(menuService, never()).resumeMenu(any(), any());
+    }
+
+    private static MenuResponse.MenuDetail detailPausedUntil(LocalDateTime pausedUntil) {
+        return new MenuResponse.MenuDetail(5L, "김치찌개", null, 3, false, Set.of("한식"),
+                List.of(), LocalDateTime.of(2026, 1, 1, 0, 0), LocalDateTime.of(2026, 1, 1, 0, 0),
+                0L, pausedUntil);
+    }
 }

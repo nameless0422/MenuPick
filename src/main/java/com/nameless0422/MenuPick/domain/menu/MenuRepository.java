@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,7 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
             SELECT m.id AS id, m.name AS name, m.weight AS weight
               FROM menus m
              WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND (m.paused_until IS NULL OR m.paused_until <= :now)
                AND (:filterCategories = FALSE OR EXISTS (
                     SELECT 1 FROM menu_categories mc
                      WHERE mc.menu_id = m.id AND BINARY mc.category IN (:categories)))
@@ -28,6 +30,7 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
             @Param("userId") Long userId,
             @Param("filterCategories") boolean filterCategories,
             @Param("categories") Set<String> categories,
+            @Param("now") LocalDateTime now,
             Pageable pageable);
 
     interface PickRoomCandidate {
@@ -53,21 +56,25 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
                    FALSE AS categoryMatched
               FROM menus m
              WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND (m.paused_until IS NULL OR m.paused_until <= :now)
             UNION ALL
             SELECT mc.menu_id, 'CATEGORY', mc.category, NULL,
                    CASE WHEN :filterCategories = FALSE THEN FALSE
                         ELSE mc.category IN (:categories) END
               FROM menu_categories mc JOIN menus m ON m.id = mc.menu_id
              WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND (m.paused_until IS NULL OR m.paused_until <= :now)
             UNION ALL
             SELECT mt.menu_id, 'TAG', NULL, mt.tag_id, FALSE
               FROM menu_tags mt JOIN menus m ON m.id = mt.menu_id
              WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND (m.paused_until IS NULL OR m.paused_until <= :now)
             """, nativeQuery = true)
     List<PickAlternativeFact> findPickAlternativeFacts(
             @Param("userId") Long userId,
             @Param("filterCategories") boolean filterCategories,
-            @Param("categories") Set<String> categories);
+            @Param("categories") Set<String> categories,
+            @Param("now") LocalDateTime now);
 
     @Query(value = """
             SELECT mr.menu_id AS menuId, r.latitude AS latitude, r.longitude AS longitude
@@ -75,9 +82,11 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
               JOIN menus m ON m.id = mr.menu_id
               JOIN restaurants r ON r.id = mr.restaurant_id
              WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
+               AND (m.paused_until IS NULL OR m.paused_until <= :now)
                AND r.deleted_at IS NULL
             """, nativeQuery = true)
-    List<PickAlternativeRestaurant> findPickAlternativeRestaurants(@Param("userId") Long userId);
+    List<PickAlternativeRestaurant> findPickAlternativeRestaurants(
+            @Param("userId") Long userId, @Param("now") LocalDateTime now);
 
     interface PickAlternativeFact {
         Long getMenuId();
@@ -134,6 +143,20 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
      * 여기서는 "없음"이다(할 일이 "제외를 풀어라"로 같기 때문에 따로 가르지 않는다).
      */
     boolean existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(Long userId);
+
+    /**
+     * 지금 이 순간 뽑을 수 있는 메뉴가 하나라도 있는가.
+     *
+     * <p>위 {@code existsBy...}와 가르는 이유는 <b>사용자가 해야 할 일이 다르기 때문</b>이다.
+     * 메뉴가 아예 없으면 추가해야 하고, 전부 쉬는 중이면 기다리거나 깨우면 된다.
+     * 후보가 빈 경로에서만 도는 조회라 정상 픽에는 붙지 않는다.
+     */
+    @Query("""
+            select case when count(m) > 0 then true else false end from Menu m
+             where m.user.id = :userId and m.isExcluded = false and m.deletedAt is null
+               and (m.pausedUntil is null or m.pausedUntil <= :now)
+            """)
+    boolean existsPickableAt(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 
     List<Menu> findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(Long userId, Pageable pageable);
 

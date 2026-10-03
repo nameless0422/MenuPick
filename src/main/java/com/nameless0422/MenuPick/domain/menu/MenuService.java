@@ -247,6 +247,30 @@ public class MenuService {
     }
 
     /**
+     * 메뉴를 {@code days}일 동안 추천에서 쉬게 한다.
+     *
+     * <p><b>자정 기준이 아니라 지금부터 N일이다.</b> 날짜 경계로 끊으면 밤 11시에 "3일 쉬기"를
+     * 누른 사람은 실제로 2일 하고 한 시간을 쉬게 된다 — 누른 사람이 셈한 것과 다르다.
+     *
+     * <p>이미 쉬는 중인 메뉴도 그냥 덮어쓴다. 남은 기간에 더하지 않는 이유는 두 번 누르면
+     * 기간이 두 배가 되는 동작을 아무도 기대하지 않기 때문이다(그리고 줄이는 수단이 없어진다).
+     */
+    @Transactional
+    public MenuResponse.MenuDetail pauseMenu(Long userId, Long menuId, int days) {
+        Menu menu = findMenuOrThrow(userId, menuId);
+        menu.pause(LocalDateTime.now(clock).plusDays(days));
+        return toDetail(menu);
+    }
+
+    /** 쉬는 중인 메뉴를 지금 깨운다. 쉬지 않던 메뉴에 불러도 그대로 성공한다(멱등). */
+    @Transactional
+    public MenuResponse.MenuDetail resumeMenu(Long userId, Long menuId) {
+        Menu menu = findMenuOrThrow(userId, menuId);
+        menu.resume();
+        return toDetail(menu);
+    }
+
+    /**
      * 소유자 범위로 한정해 조회한다. 타인의 메뉴·삭제된 메뉴 모두 MENU_NOT_FOUND(404)로
      * 동일하게 응답해 리소스 존재 여부가 노출되지 않게 한다.
      */
@@ -283,7 +307,8 @@ public class MenuService {
                 // LAZY 컬렉션을 트랜잭션 안에서 복사해 초기화한다 — 참조를 그대로 넘기면
                 // open-in-view=false라 직렬화 시점에 LazyInitializationException이 발생한다.
                 Set.copyOf(menu.getCategories()),
-                toTagSummaries(menu));
+                toTagSummaries(menu),
+                menu.getPausedUntil());
     }
 
     private MenuResponse.MenuDetail toDetail(Menu menu) {
@@ -297,7 +322,8 @@ public class MenuService {
                 toTagSummaries(menu),
                 menu.getCreatedAt(),
                 menu.getUpdatedAt(),
-                menu.getVersion());
+                menu.getVersion(),
+                menu.getPausedUntil());
     }
 
     private List<MenuResponse.TagSummary> toTagSummaries(Menu menu) {

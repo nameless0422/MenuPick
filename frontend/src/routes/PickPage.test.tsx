@@ -1016,6 +1016,25 @@ describe("PickPage 후보가 없을 때의 안내", () => {
     },
   );
 
+  /** 메뉴는 있고 전부 쉬는 중일 뿐이다 — "메뉴를 추가하세요"는 이 경우 틀린 조언이다. */
+  it("전부 쉬는 중이면 깨우러 가라고 안내한다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockRejectedValue(apiError("ALL_MENUS_PAUSED"));
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    expect(
+      await screen.findByText(/모든 메뉴가 쉬는 중이에요/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /쉬는 메뉴 깨우러 가기/ })).toHaveAttribute(
+      "href",
+      "/menus",
+    );
+    // 이 경우 조건을 바꿔 봐야 소용없다 — 대안을 묻지 않는다.
+    expect(requestPickAlternativesMock).not.toHaveBeenCalled();
+  });
+
   it("모르는 에러는 안내 카드가 아니라 일반 에러로 띄운다", async () => {
     const user = userEvent.setup();
     requestPickMock.mockRejectedValue(apiError("SERVER_ERROR"));
