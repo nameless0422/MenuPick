@@ -89,6 +89,12 @@ class PickServiceTest {
 
         tag2 = Tag.builder().user(user).name("매운").build();
         setId(tag2, 2L);
+
+        // 쉬는 메뉴가 없는 상태가 기본이다. 이 스텁이 없으면 Mockito 기본값(false) 때문에
+        // 모든 빈 후보 진단이 "전부 쉬는 중"으로 떨어져, 거리·필터 진단 테스트가 통째로 틀린
+        // 코드를 검증하게 된다. 쉬기를 보는 테스트는 이 스텁을 직접 덮어쓴다.
+        lenient().when(menuRepository.existsPickableAt(ArgumentMatchers.anyLong(), any()))
+                .thenReturn(true);
     }
 
     @Test
@@ -726,4 +732,35 @@ class PickServiceTest {
         assertThat(result.reasons()).noneMatch(reason -> reason.contains("안에 뽑은 메뉴는"));
     }
 
+
+    /**
+     * 메뉴가 없는 것과 전부 쉬는 중인 것은 <b>사용자가 해야 할 일이 다르다.</b> 전자는 추가해야
+     * 하고 후자는 기다리거나 깨우면 된다 — 하나로 뭉치면 화면이 "메뉴를 추가하세요"라고 한다.
+     */
+    @Test
+    @DisplayName("후보가 비고 전부 쉬는 중이면 ALL_MENUS_PAUSED를 던진다")
+    void pick_allMenusPaused() {
+        givenCandidates(List.of());
+        given(menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L)).willReturn(true);
+        given(menuRepository.existsPickableAt(1L, LocalDateTime.of(2026, 1, 15, 0, 30)))
+                .willReturn(false);
+
+        assertThatThrownBy(() -> pickService.pick(1L, null))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.ALL_MENUS_PAUSED);
+    }
+
+    @Test
+    @DisplayName("쉬지 않는 메뉴가 있으면 조건이 좁다는 쪽으로 진단한다")
+    void pick_narrowFilterStillReported() {
+        givenCandidates(List.of());
+        given(menuRepository.existsByUserIdAndIsExcludedFalseAndDeletedAtIsNull(1L)).willReturn(true);
+        given(menuRepository.existsPickableAt(1L, LocalDateTime.of(2026, 1, 15, 0, 30)))
+                .willReturn(true);
+
+        assertThatThrownBy(() -> pickService.pick(1L, new PickRequest(Set.of("한식"), null, null,
+                null, null, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NO_PICK_CANDIDATES);
+    }
 }

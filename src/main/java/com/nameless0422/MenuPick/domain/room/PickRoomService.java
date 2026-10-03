@@ -250,8 +250,11 @@ public class PickRoomService {
         Set<String> wanted = categories == null ? Set.of() : categories.stream()
                 .map(String::trim).collect(java.util.stream.Collectors.toSet());
         // 빈 IN 바인딩은 DB마다 해석이 달라 비어 있지 않은 값으로 전달한다.
+        // 쉬는 중인 메뉴는 방에도 넣지 않는다. 방 메뉴는 만들 때 스냅샷으로 복사되므로,
+        // 여기서 넣으면 "이번 주는 빼 달라"고 한 메뉴가 방이 닫힐 때까지 남 앞에 떠 있는다.
         return menuRepository.findPickRoomCandidates(userId, !wanted.isEmpty(),
-                wanted.isEmpty() ? Set.of("") : wanted, Pageable.ofSize(PickRoom.MAX_MENUS));
+                wanted.isEmpty() ? Set.of("") : wanted, LocalDateTime.now(clock),
+                Pageable.ofSize(PickRoom.MAX_MENUS));
     }
 
     private Map<Long, Long> vetoCounts(PickRoom room) {

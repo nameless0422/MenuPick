@@ -99,6 +99,13 @@ public enum ErrorCode {
     NO_PICK_CANDIDATES(HttpStatus.NOT_FOUND, "필터 조건에 맞는 메뉴가 없습니다."),
     /** 뽑을 메뉴 자체가 없다 — 한 개도 없거나, 있는 것이 전부 추천 제외 상태다. */
     NO_PICKABLE_MENUS(HttpStatus.NOT_FOUND, "추천할 수 있는 메뉴가 없습니다."),
+    /**
+     * 뽑을 메뉴는 있는데 지금은 전부 쉬는 중이다({@code menus.paused_until}).
+     *
+     * <p>{@link #NO_PICKABLE_MENUS}와 가르는 이유는 할 일이 다르기 때문이다. 메뉴를 더 추가할
+     * 일도, 필터를 풀 일도 아니다 — 기다리거나, 쉬는 메뉴를 깨우면 된다.
+     */
+    ALL_MENUS_PAUSED(HttpStatus.NOT_FOUND, "지금은 모든 메뉴가 쉬는 중입니다."),
     /** 거리 필터를 켰는데 식당이 연결된 메뉴가 하나도 없다 — 반경을 늘려도 달라지지 않는다. */
     NO_LINKED_RESTAURANTS(HttpStatus.NOT_FOUND, "식당이 연결된 메뉴가 없습니다."),
     /**

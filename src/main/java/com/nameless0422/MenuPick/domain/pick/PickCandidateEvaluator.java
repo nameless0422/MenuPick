@@ -33,13 +33,13 @@ class PickCandidateEvaluator {
 
     Evaluation evaluate(Long userId, PickRequestNormalizer.NormalizedPickRequest normalized) {
         PickRequest request = normalized.request();
+        LocalDateTime now = LocalDateTime.now(clock);
         List<PickCandidate> candidates = menuRepository.findPickCandidates(PickCandidates.of(userId,
                 normalized.categories(), request == null ? null : request.tagIds(),
                 request == null ? null : request.excludeTagIds(),
                 request == null ? null : request.latitude(),
                 request == null ? null : request.longitude(),
-                request == null ? null : request.maxDistance()));
-        LocalDateTime now = LocalDateTime.now(clock);
+                request == null ? null : request.maxDistance(), now));
         List<HistoryRepository.MenuRecommendationSignals> signals =
                 historyRepository.findMenuRecommendationSignalsSince(userId,
                         now.minusDays(FEEDBACK_WINDOW_DAYS), RecommendationFeedback.ACCEPTED,
@@ -78,7 +78,7 @@ class PickCandidateEvaluator {
         Set<String> queryCategories = filterCategories ? originalCategories : Set.of("");
         Map<Long, CandidateFactBuilder> builders = new HashMap<>();
         for (MenuRepository.PickAlternativeFact row
-                : menuRepository.findPickAlternativeFacts(userId, filterCategories, queryCategories)) {
+                : menuRepository.findPickAlternativeFacts(userId, filterCategories, queryCategories, now)) {
             CandidateFactBuilder builder = builders.computeIfAbsent(row.getMenuId(), CandidateFactBuilder::new);
             if ("CATEGORY".equals(row.getKind()) && Long.valueOf(1L).equals(row.getCategoryMatched())) {
                 builder.categoryMatched = true;
@@ -87,7 +87,7 @@ class PickCandidateEvaluator {
             }
         }
         for (MenuRepository.PickAlternativeRestaurant row
-                : menuRepository.findPickAlternativeRestaurants(userId)) {
+                : menuRepository.findPickAlternativeRestaurants(userId, now)) {
             CandidateFactBuilder builder = builders.get(row.getMenuId());
             if (builder != null) builder.restaurants.add(new Coordinates(row.getLatitude(), row.getLongitude()));
         }

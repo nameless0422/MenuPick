@@ -11,6 +11,7 @@ import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -65,12 +66,17 @@ final class PickCandidates {
                                   Set<Long> excludeTagIds,
                                   BigDecimal latitude,
                                   BigDecimal longitude,
-                                  Integer maxDistance) {
+                                  Integer maxDistance,
+                                  LocalDateTime now) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("user").get("id"), userId));
             predicates.add(cb.isFalse(root.get("isExcluded")));
             predicates.add(cb.isNull(root.get("deletedAt")));
+            // 쉬는 중인 메뉴는 뺀다. 만료 시각 비교가 곧 "깨우기"라서 되돌리는 쓰기가 없다 —
+            // 지난 시각은 여기서 그냥 통과한다(Menu.pausedUntil 주석 참고).
+            predicates.add(cb.or(cb.isNull(root.get("pausedUntil")),
+                    cb.lessThanOrEqualTo(root.get("pausedUntil"), now)));
 
             if (categories != null && !categories.isEmpty()) {
                 Subquery<Integer> sub = query.subquery(Integer.class);

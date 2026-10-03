@@ -1,3 +1,9 @@
+import {
+  PAUSE_DAY_OPTIONS,
+  isPaused,
+  pauseLabel,
+  pauseOptionLabel,
+} from "./menuPause";
 import { useDeferredValue, useId, useRef, useState } from "react";
 import {
   useInfiniteQuery,
@@ -12,6 +18,8 @@ import {
   fetchMenu,
   fetchMenus,
   previewBulkMenus,
+  pauseMenu,
+  resumeMenu,
   toggleExclude,
   updateMenu,
   type TagSummary,
@@ -91,6 +99,24 @@ export default function MenusPage() {
       toggleExclude(menuId, exclude),
     onSettled: invalidate,
   });
+
+  // 어느 메뉴의 기간 선택이 열려 있는가. 한 번에 하나만 열린다 — 목록이 길어지면 열린 것이
+  // 여러 개일 때 "지금 누르는 3일이 어느 메뉴의 것인가"가 화면에서 사라진다.
+  const [pauseTarget, setPauseTarget] = useState<number | null>(null);
+  const pauseMutation = useMutation({
+    mutationFn: ({ menuId, days }: { menuId: number; days: number; name: string }) =>
+      pauseMenu(menuId, days),
+    onSuccess: () => setPauseTarget(null),
+    onSettled: invalidate,
+  });
+  const resumeMutation = useMutation({
+    mutationFn: ({ menuId }: { menuId: number; name: string }) => resumeMenu(menuId),
+    onSettled: invalidate,
+  });
+
+  // 렌더 중에 Date.now()를 부르면 같은 렌더가 두 번 다른 값을 본다(oxlint react(purity)).
+  // 목록을 그리는 동안의 기준 시각은 하나여야 하고, 분 단위 정확도도 필요하지 않다.
+  const [nowMs] = useState(() => Date.now());
 
   // 삭제가 끝나면 그 메뉴는 목록에서 사라진다 — 성공 안내에 이름을 넣으려면 변이 인자에
   // 이름을 함께 실어 두는 수밖에 없다.
@@ -222,6 +248,11 @@ export default function MenusPage() {
                 </span>
                 <span className="sr-only">{`선호도 5점 만점에 ${menu.weight}점`}</span>
                 {menu.isExcluded && <span className="chip chip-warn">추천 제외</span>}
+                {/* 추천 제외와 함께 떠도 모순이 아니다 — 제외가 더 센 조건이고, 쉬기는 기간이
+                    지나면 저절로 풀린다는 것을 사용자가 알고 있어야 한다. */}
+                {pauseLabel(menu.pausedUntil, nowMs) !== null && (
+                  <span className="chip chip-warn">{pauseLabel(menu.pausedUntil, nowMs)}</span>
+                )}
               </div>
               {(menu.categories.length > 0 || menu.tags.length > 0) && (
                 <div className="chip-row">
@@ -253,11 +284,34 @@ export default function MenusPage() {
                 >
                   {menu.isExcluded ? "추천에 포함" : "추천에서 제외"}
                 </button>
+                {isPaused(menu.pausedUntil, nowMs) ? (
+                  <button
+                    disabled={resumeMutation.isPending}
+                    aria-label={`${menu.name} 지금 깨우기`}
+                    onClick={() => resumeMutation.mutate({ menuId: menu.id, name: menu.name })}
+                  >
+                    지금 깨우기
+                  </button>
+                ) : (
+                  /* 누르면 기간 선택이 열린다. 누르는 순간 바로 쉬게 하지 않는 이유는
+                     기간이 이 기능의 전부이기 때문이다 — 기본값으로 정해 주면 "며칠인지
+                     모르고 눌렀다"가 된다. aria-expanded로 열림 상태를 알린다. */
+                  <button
+                    aria-label={`${menu.name} 잠시 쉬기`}
+                    aria-expanded={pauseTarget === menu.id}
+                    onClick={() =>
+                      setPauseTarget((current) => (current === menu.id ? null : menu.id))
+                    }
+                  >
+                    잠시 쉬기
+                  </button>
+                )}
                 <button
                   disabled={deleteMutation.isPending}
                   aria-label={`${menu.name} 삭제`}
                   onClick={() => {
                     if (window.confirm(`'${menu.name}' 메뉴를 삭제할까요?`)) {
+                      setPauseTarget(null);
                       deleteMutation.mutate({ menuId: menu.id, name: menu.name });
                     }
                   }}
@@ -265,6 +319,23 @@ export default function MenusPage() {
                   삭제
                 </button>
               </div>
+              {pauseTarget === menu.id && !isPaused(menu.pausedUntil, nowMs) && (
+                <div className="chip-row" role="group" aria-label={`${menu.name} 쉬는 기간`}>
+                  {PAUSE_DAY_OPTIONS.map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      className="chip"
+                      disabled={pauseMutation.isPending}
+                      onClick={() =>
+                        pauseMutation.mutate({ menuId: menu.id, days, name: menu.name })
+                      }
+                    >
+                      {pauseOptionLabel(days)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </li>
           ),
         )}

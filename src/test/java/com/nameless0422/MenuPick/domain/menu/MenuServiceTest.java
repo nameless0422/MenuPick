@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.lang.reflect.Field;
 import java.time.Clock;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -532,4 +533,66 @@ class MenuServiceTest {
         assertThat(menu.getWeight()).isEqualTo(5);
     }
 
+
+    // --- 메뉴 잠시 쉬기 ---
+
+    /**
+     * 자정 기준으로 끊으면 밤 11시에 "3일 쉬기"를 누른 사람은 실제로 2일 하고 한 시간을 쉰다 —
+     * 누른 사람이 셈한 것과 다르다. 고정 시계는 2026-01-15 00:30 KST다.
+     */
+    @Test
+    @DisplayName("쉬는 기간은 자정이 아니라 지금부터 N일이다")
+    void pauseMenu_countsFromNow() {
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L))
+                .willReturn(Optional.of(menu));
+
+        MenuResponse.MenuDetail result = menuService.pauseMenu(1L, 1L, 3);
+
+        assertThat(result.pausedUntil()).isEqualTo(LocalDateTime.of(2026, 1, 18, 0, 30));
+        assertThat(menu.isPausedAt(LocalDateTime.of(2026, 1, 17, 23, 59))).isTrue();
+        // 경계는 깨어난 것으로 본다 — 후보 조회의 `paused_until <= now`와 같은 판정이어야 한다.
+        assertThat(menu.isPausedAt(LocalDateTime.of(2026, 1, 18, 0, 30))).isFalse();
+    }
+
+    /**
+     * 남은 기간에 더하지 않는다. 두 번 누르면 기간이 두 배가 되는 동작을 아무도 기대하지 않고,
+     * 그렇게 만들면 더 짧게 바꾸는 수단이 없어진다.
+     */
+    @Test
+    @DisplayName("이미 쉬는 중이어도 기간을 덮어쓴다 — 더하지 않는다")
+    void pauseMenu_overwrites() {
+        menu.pause(LocalDateTime.of(2026, 2, 1, 0, 0));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L))
+                .willReturn(Optional.of(menu));
+
+        MenuResponse.MenuDetail result = menuService.pauseMenu(1L, 1L, 1);
+
+        assertThat(result.pausedUntil()).isEqualTo(LocalDateTime.of(2026, 1, 16, 0, 30));
+    }
+
+    @Test
+    @DisplayName("깨우면 쉬는 기한이 사라지고, 쉬지 않던 메뉴에도 성공한다")
+    void resumeMenu() {
+        menu.pause(LocalDateTime.of(2026, 2, 1, 0, 0));
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 1L))
+                .willReturn(Optional.of(menu));
+
+        assertThat(menuService.resumeMenu(1L, 1L).pausedUntil()).isNull();
+        // 멱등 — 이미 깨어 있는 메뉴에 불러도 같은 결과다.
+        assertThat(menuService.resumeMenu(1L, 1L).pausedUntil()).isNull();
+    }
+
+    /** 남의 메뉴를 쉬게 하거나 깨울 수 없다. 존재 여부도 알려주지 않는다(둘 다 404). */
+    @Test
+    @DisplayName("남의 메뉴는 쉬게 할 수도 깨울 수도 없다")
+    void pauseMenu_otherUsersMenu() {
+        given(menuRepository.findByIdAndUserIdAndDeletedAtIsNull(1L, 2L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> menuService.pauseMenu(2L, 1L, 3))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.MENU_NOT_FOUND);
+        assertThatThrownBy(() -> menuService.resumeMenu(2L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.MENU_NOT_FOUND);
+    }
 }

@@ -40,6 +40,18 @@ public class Menu extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean isExcluded;
 
+    /**
+     * 이 시각까지는 추천 후보에서 뺀다. null이면 쉬지 않는다.
+     *
+     * <p>{@link #isExcluded}와 다른 점은 <b>되돌리는 일을 아무도 기억하지 않아도 된다는 것</b>이다.
+     * 상태 플래그가 아니라 만료 시각이라, 지나면 후보 조회의 WHERE 한 줄이 알아서 다시 포함시킨다
+     * — 깨우는 스케줄러가 필요 없고, 깨우는 것을 잊어 메뉴가 영영 사라지는 일도 없다.
+     *
+     * <p>지난 시각을 굳이 null로 지우지 않는다. 마지막으로 언제까지 쉬었는지가 남는 편이 낫고,
+     * 지우려면 읽기 경로에 쓰기가 끼어든다.
+     */
+    private LocalDateTime pausedUntil;
+
     @Column(nullable = false)
     private int weight = DEFAULT_WEIGHT;
 
@@ -101,6 +113,26 @@ public class Menu extends BaseTimeEntity {
 
     public void updateWeight(int weight) {
         this.weight = weight;
+    }
+
+    /**
+     * {@code until}까지 추천에서 뺀다.
+     *
+     * <p>이미 쉬는 중이어도 그냥 덮어쓴다 — 더 짧게 바꾸는 것도 사용자의 정당한 의사다
+     * ("2주 쉬게 했는데 내일부터 다시 보고 싶다"). 기간 상한은 서비스가 검증한다.
+     */
+    public void pause(LocalDateTime until) {
+        this.pausedUntil = until;
+    }
+
+    /** 지금 바로 깨운다. */
+    public void resume() {
+        this.pausedUntil = null;
+    }
+
+    /** {@code now} 시점에 쉬는 중인가. 경계(정확히 같은 시각)는 깨어난 것으로 본다. */
+    public boolean isPausedAt(LocalDateTime now) {
+        return pausedUntil != null && pausedUntil.isAfter(now);
     }
 
     public void exclude() {

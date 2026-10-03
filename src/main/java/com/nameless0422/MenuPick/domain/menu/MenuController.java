@@ -102,6 +102,30 @@ public class MenuController {
         return ResponseEntity.ok(ApiResponse.ok(menuService.getExcludedMenus(userId)));
     }
 
+    /**
+     * 메뉴를 잠시 쉬게 한다.
+     *
+     * <p>영구 제외({@code /exclude})와 다른 엔드포인트인 이유는 <b>되돌리는 방식이 다르기
+     * 때문</b>이다. 제외는 사람이 풀어야 하고, 쉬기는 시각이 지나면 저절로 풀린다.
+     * 응답으로 바뀐 메뉴를 돌려줘, 화면이 언제까지 쉬는지를 다시 묻지 않아도 되게 한다.
+     */
+    @PatchMapping("/{menuId}/pause")
+    public ResponseEntity<ApiResponse<MenuResponse.MenuDetail>> pause(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long menuId,
+            @RequestBody @Valid MenuRequest.Pause request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                menuService.pauseMenu(userId, menuId, request.days())));
+    }
+
+    /** 쉬는 중인 메뉴를 지금 깨운다. 쉬지 않던 메뉴여도 200이다(멱등). */
+    @DeleteMapping("/{menuId}/pause")
+    public ResponseEntity<ApiResponse<MenuResponse.MenuDetail>> resume(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long menuId) {
+        return ResponseEntity.ok(ApiResponse.ok(menuService.resumeMenu(userId, menuId)));
+    }
+
     @PatchMapping("/{menuId}/exclude")
     public ResponseEntity<ApiResponse<Void>> toggleExclude(
             @AuthenticationPrincipal Long userId,

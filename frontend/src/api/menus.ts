@@ -12,6 +12,16 @@ export interface MenuSummary {
   isExcluded: boolean;
   categories: string[];
   tags: TagSummary[];
+  /**
+   * 이 시각까지 추천에서 쉰다(KST LocalDateTime). 쉬지 않으면 null.
+   *
+   * **값이 있다고 쉬는 중인 것이 아니다.** 서버는 기간이 지나도 이 값을 지우지 않으므로,
+   * 판정은 지금과의 비교다 — `menuPause.ts`의 `isPaused`를 쓴다.
+   *
+   * 선택 필드로 둔 것은 서버가 안 보낸다는 뜻이 아니다(항상 보낸다). 이 키를 모르는 응답을
+   * 받아도 화면이 "쉬지 않음"으로 읽고 계속 돌게 하려는 것이다 — 배포 중 섞이는 순간이 있다.
+   */
+  pausedUntil?: string | null;
 }
 
 export interface MenuDetail extends MenuSummary {
@@ -105,4 +115,24 @@ export async function toggleExclude(menuId: number, exclude: boolean) {
   await http.patch<ApiResponse<null>>(`/api/v1/menus/${menuId}/exclude`, null, {
     params: { exclude },
   });
+}
+
+/**
+ * 메뉴를 `days`일 동안 추천에서 쉬게 한다(서버 상한 90일).
+ *
+ * 추천 제외(`toggleExclude`)와 다른 점은 **되돌리는 방식**이다. 제외는 사람이 풀어야 하고,
+ * 쉬기는 시각이 지나면 저절로 풀린다. 응답으로 바뀐 메뉴가 와서 언제까지인지 다시 묻지 않는다.
+ */
+export async function pauseMenu(menuId: number, days: number) {
+  const res = await http.patch<ApiResponse<MenuDetail>>(
+    `/api/v1/menus/${menuId}/pause`,
+    { days },
+  );
+  return unwrap(res);
+}
+
+/** 쉬는 중인 메뉴를 지금 깨운다. 쉬지 않던 메뉴에 불러도 성공한다. */
+export async function resumeMenu(menuId: number) {
+  const res = await http.delete<ApiResponse<MenuDetail>>(`/api/v1/menus/${menuId}/pause`);
+  return unwrap(res);
 }

@@ -11,6 +11,8 @@ import {
   fetchMenu,
   fetchMenus,
   previewBulkMenus,
+  pauseMenu,
+  resumeMenu,
   updateMenu,
   type MenuDetail,
 } from "../api/menus";
@@ -25,6 +27,8 @@ vi.mock("../api/menus", () => ({
   updateMenu: vi.fn(),
   deleteMenu: vi.fn(),
   toggleExclude: vi.fn(),
+  pauseMenu: vi.fn(),
+  resumeMenu: vi.fn(),
 }));
 // 메뉴 수정 폼이 "연결된 식당" 섹션을 함께 그린다. 목킹하지 않으면 실제 호출이 나가
 // 실패하고, 그 섹션이 자기 role="alert"를 띄워 이 파일의 알림 단언이 둘을 보게 된다.
@@ -48,6 +52,8 @@ const createMenuMock = vi.mocked(createMenu);
 const deleteMenuMock = vi.mocked(deleteMenu);
 const updateMenuMock = vi.mocked(updateMenu);
 const searchTagsMock = vi.mocked(searchTags);
+const pauseMenuMock = vi.mocked(pauseMenu);
+const resumeMenuMock = vi.mocked(resumeMenu);
 
 /** 끝나지 않는 요청. "요청이 나가 있는 동안"의 화면을 붙잡아 두려면 이게 필요하다. */
 function pendingForever<T>() {
@@ -92,6 +98,10 @@ beforeEach(() => {
   createMenuMock.mockReset();
   deleteMenuMock.mockReset();
   searchTagsMock.mockReset();
+  pauseMenuMock.mockReset();
+  resumeMenuMock.mockReset();
+  pauseMenuMock.mockResolvedValue(detail());
+  resumeMenuMock.mockResolvedValue(detail());
   fetchMenusMock.mockResolvedValue({ menus: [KIMCHI], nextCursor: null, hasNext: false });
   fetchMenuMock.mockResolvedValue(detail());
   createMenuMock.mockResolvedValue(detail());
@@ -772,5 +782,62 @@ describe("메뉴 수정 - 낙관적 락 버전", () => {
     // 그 안내가 거짓이 된다 — 다시 열어도 같은 낡은 버전이 나와 같은 409를 반복한다.
     // 그래서 화면에 문구를 띄우는 것만으로는 부족하고, 상세를 실제로 다시 불러와야 한다.
     await waitFor(() => expect(fetchMenuMock.mock.calls.length).toBeGreaterThan(callsBeforeSave));
+  });
+});
+
+describe("메뉴 잠시 쉬기", () => {
+  /** 기간이 이 기능의 전부다. 누르는 순간 기본값으로 쉬게 하면 "며칠인지 모르고 눌렀다"가 된다. */
+  it("쉬기를 누르면 기간을 먼저 고르게 하고, 고른 일수를 서버에 보낸다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MenusPage />);
+
+    const pauseButton = await screen.findByRole("button", { name: "김치찌개 잠시 쉬기" });
+    expect(pauseButton).toHaveAttribute("aria-expanded", "false");
+    expect(pauseMenuMock).not.toHaveBeenCalled();
+
+    await user.click(pauseButton);
+    expect(pauseButton).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("button", { name: "1주" }));
+
+    await waitFor(() => expect(pauseMenuMock).toHaveBeenCalledWith(1, 7));
+    // 고른 뒤에는 선택 줄이 닫힌다 — 열린 채로 남으면 방금 고른 것이 반영됐는지 알 수 없다.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "1주" })).toBeNull());
+  });
+
+  it("쉬는 중인 메뉴는 남은 기간을 보여주고 깨우기만 제공한다", async () => {
+    const user = userEvent.setup();
+    const until = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 60_000);
+    // 서버는 시간대 표시 없는 KST LocalDateTime을 준다.
+    const kstIso = new Date(until.getTime() + 9 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 19);
+    fetchMenusMock.mockResolvedValue({
+      menus: [{ ...KIMCHI, pausedUntil: kstIso }],
+      nextCursor: null,
+      hasNext: false,
+    });
+    renderWithProviders(<MenusPage />);
+
+    expect(await screen.findByText(/쉬는 중 · 3일 남음/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "김치찌개 잠시 쉬기" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "김치찌개 지금 깨우기" }));
+    await waitFor(() => expect(resumeMenuMock).toHaveBeenCalledWith(1));
+  });
+
+  /**
+   * 서버는 기간이 지나도 pausedUntil을 지우지 않는다. 값이 있다는 것만으로 배지를 붙이면
+   * 이미 깨어난 메뉴가 영구히 "쉬는 중"으로 보인다.
+   */
+  it("기간이 지난 메뉴는 쉬는 중으로 보이지 않는다", async () => {
+    fetchMenusMock.mockResolvedValue({
+      menus: [{ ...KIMCHI, pausedUntil: "2020-01-01T00:00:00" }],
+      nextCursor: null,
+      hasNext: false,
+    });
+    renderWithProviders(<MenusPage />);
+
+    expect(await screen.findByRole("button", { name: "김치찌개 잠시 쉬기" })).toBeInTheDocument();
+    expect(screen.queryByText(/쉬는 중/)).toBeNull();
   });
 });
