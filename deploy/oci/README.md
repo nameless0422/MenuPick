@@ -26,6 +26,8 @@
 | `menupick-alert@.service` | `/etc/systemd/system/` | 유닛 실패를 웹훅으로 알린다(`OnFailure=`) |
 | `menupick-error-watch.service` | `/etc/systemd/system/` | `scripts/check-app-errors.sh` 실행 |
 | `menupick-error-watch.timer` | `/etc/systemd/system/` | 15분마다 앱 ERROR 로그 감시 |
+| `menupick-heal.service` | `/etc/systemd/system/` | `scripts/heal-unhealthy.sh` 실행 |
+| `menupick-heal.timer` | `/etc/systemd/system/` | 2분마다 unhealthy 컨테이너 복구 |
 | `journald-menupick.conf` | `/etc/systemd/journald.conf.d/menupick.conf` | 영구 보관 + 상한(컨테이너 로그가 여기로 온다) |
 
 **여기 없는 것**(서버에만 있고 앞으로도 커밋하지 않는다):
@@ -229,6 +231,40 @@ systemctl list-timers menupick-error-watch.timer
 journalctl -u menupick-error-watch -n 20
 systemctl --failed
 ```
+
+## unhealthy 자동 복구
+
+**왜**: compose의 `restart: unless-stopped`는 **프로세스가 끝났을 때만** 반응한다. 살아는
+있는데 요청을 못 받는 상태(스레드 풀 고갈, 커넥션 누수, nginx worker 멈춤)는 `Up (unhealthy)`로
+그대로 머물고, 이 서버에는 그걸 보고 조치할 오케스트레이터가 없다. 2026-10-03 점검에서
+"헬스체크가 빨간불인데 아무도 아무것도 하지 않는 구간"으로 확인된 공백이다.
+
+```bash
+# 설치 (최초 1회)
+sudo install -m 0755 scripts/heal-unhealthy.sh /usr/local/bin/menupick-heal
+sudo cp deploy/oci/menupick-heal.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now menupick-heal.timer
+
+# 상태 확인
+systemctl list-timers menupick-heal.timer
+journalctl -u menupick-heal -n 20
+ls /var/lib/menupick/heal/            # 컨테이너별 카운터(복구되면 지워진다)
+```
+
+규칙은 네 줄이다.
+
+- **꺼진 컨테이너는 건드리지 않는다.** 판정에 쓰는 `docker ps --filter health=unhealthy`가
+  실행 중인 것만 내놓는다. 검증 후 컨테이너를 내려 두는 운영 방식에서 "꺼짐"을 고장으로 보면,
+  사람이 내린 것을 기계가 계속 되돌린다.
+- **연속 2회 관찰해야 손을 댄다**(2분 주기 → 실제 조치까지 최대 4분 남짓). 헬스체크가 한 번
+  튄 것으로 재시작하지 않는다 — 특히 mysql은 일시적인 ping 실패가 재시작보다 싸다.
+- **같은 컨테이너는 10분에 한 번만** 재시작한다(쿨다운).
+- **3회 실패하면 멈추고 사람을 부른다.** 재시작으로 안 되는 고장(예: DB가 죽어 앱이 unhealthy)을
+  무한히 되풀이하지 않는다. 포기 알림은 한 번만 가고, 복구되면 카운터가 풀린 뒤 다시 감시한다.
+
+조치·포기·복구는 모두 웹훅으로 알린다(`/etc/menupick/alert.env`의 URL이 비어 있으면 journal에만
+남는다). 재시작은 `docker restart`라 컨테이너가 바뀌지 않으므로 로그도 끊기지 않는다.
 
 ## 로그
 
