@@ -8,6 +8,26 @@
 
 ## 제품 완성도
 
+### 2026-10-04 메뉴 잠시 쉬기 — 운영 배포 완료
+
+- 메뉴를 기간을 정해(3일·1주·2주·1달, 서버는 1~90일) 추천에서 쉬게 하고, 언제든 바로 깨울 수 있다.
+  쉬는 메뉴는 픽·픽 대안·같이 뽑기 방 후보에서 모두 빠지고, 메뉴 목록에는 "쉬는 중 · N일 남음"
+  배지로 남는다(숨기면 깨울 방법이 없다). 전부 쉬는 중이면 `ALL_MENUS_PAUSED`로 "깨우러 가기"를
+  안내한다 — 이 경우 "메뉴를 추가하세요"는 틀린 조언이다.
+- **상태가 아니라 만료 시각(`menus.paused_until`)을 저장한다.** 후보 조회의
+  `paused_until IS NULL OR paused_until <= now` 한 줄이 곧 깨우기라, 되돌리는 쓰기도 그것을
+  수행할 스케줄러도 없다. 기간이 지나도 값을 지우지 않으므로 화면은 null이 아니라 지금과
+  비교해서 판단한다(`frontend/src/routes/menuPause.ts`).
+- DB 마이그레이션 V18(`ALGORITHM=INPLACE, LOCK=NONE`). 로컬 `./gradlew check`, 프런트
+  lint·build·Vitest 476개(TZ=UTC 포함), Playwright 4개가 통과했다. PR #325와 `main`의
+  frontend·test·docker-build CI도 통과했다.
+- `main` SHA `642c7026dbc3062f67234ddfa6dec3faab47ad1b`로 운영 배포했다. 배포 전 백업
+  `menupick-20261003-171532Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다. 배포 후 다섯
+  컨테이너 healthy, Flyway 18번 성공과 `menus.paused_until datetime(6) NULL` 생성, readiness UP,
+  HTTPS 200, HTTP 301, 미인증 쉬기 API 401, 새 web 번들에 쉬기 UI 포함, app ERROR 로그 0건을
+  확인했다. 인증 계정으로 운영 쉬기는 실행하지 않았다.
+- 검증 후 요청에 따라 app·web·mysql·redis·mailpit을 모두 중지했다.
+
 ### 2026-10-04 unhealthy 자동 복구 — 운영 적용 완료
 
 - `Up (unhealthy)`로 머무는 컨테이너를 2분마다 보고 되살린다. `restart: unless-stopped`는
