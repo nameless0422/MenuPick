@@ -70,27 +70,40 @@ for name in $CONTAINERS; do
   gaveup_file="$STATE_DIR/$name.gaveup"
 
   if ! printf '%s\n' "$unhealthy" | grep -qx "$name"; then
-    # 건강하거나, 꺼져 있거나, 아직 기동 중이다. 셋 다 우리가 할 일이 없다.
-    # 다만 **재시작했던 컨테이너가 돌아왔으면** 그 사실은 알린다 — 조치만 알리고 결과를
-    # 알리지 않으면, 채널을 보는 사람은 지금 괜찮은지를 알 수 없다.
-    if [ "$(read_num "$attempts_file")" -gt 0 ]; then
-      state="$(docker inspect -f '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}no-health{{end}}' "$name" 2>/dev/null || echo missing)"
-      case "$state" in
-        running/healthy)
+    # 지금 unhealthy가 아니다. 셋으로 갈린다 — **무엇을 지우는지가 중요하다.**
+    #
+    # 재시작 직후에는 반드시 `starting`을 거친다(헬스체크 start_period). 그때 누적 카운터를
+    # 지우면 재시작할 때마다 시도 횟수가 0으로 돌아가, 3회 제한과 쿨다운이 영구히 리셋된다.
+    # 고치지 않으면 재시작으로 안 되는 고장에서 영원히 4분마다 재시작만 반복하고 사람을
+    # 부르지 않는다(2026-10-04 검증에서 실제로 그렇게 동작했다).
+    state="$(docker inspect -f '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}no-health{{end}}' "$name" 2>/dev/null || echo missing)"
+    case "$state" in
+      running/starting)
+        # 아직 판정할 수 없다. 연속 관찰만 끊고 누적은 그대로 둔다.
+        log "$name 기동 중($state) — 지켜본다"
+        rm -f "$strikes_file"
+        ;;
+      running/healthy|running/no-health)
+        if [ "$(read_num "$attempts_file")" -gt 0 ]; then
+          # 조치만 알리고 결과를 알리지 않으면, 채널을 보는 사람은 지금 괜찮은지를 알 수 없다.
           log "$name 복구됨 — 카운터를 지운다"
-          notify "🟢 MenuPick $name 복구됨 (재시작 후 healthy)"
+          notify "🟢 MenuPick $name 복구됨 (재시작 후 $state)"
+        fi
+        rm -f "$strikes_file" "$attempts_file" "$last_file" "$gaveup_file"
+        ;;
+      *)
+        # 꺼졌거나 사라졌다. 사람이 내린 것일 수 있으므로 알리지 않고 카운터만 지운다 —
+        # 다음에 다시 떴을 때는 깨끗한 상태에서 센다.
+        #
+        # 지울 것이 있을 때만 한 줄 남긴다. 컨테이너를 내려 둔 기간에는 이 분기가 2분마다
+        # 도는데, 매번 적으면 하루 수백 줄이 쌓여 정작 조치 기록을 가린다.
+        if [ -f "$strikes_file" ] || [ -f "$attempts_file" ] \
+            || [ -f "$last_file" ] || [ -f "$gaveup_file" ]; then
+          log "$name 상태 $state — 대상이 아니므로 카운터를 지운다"
           rm -f "$strikes_file" "$attempts_file" "$last_file" "$gaveup_file"
-          ;;
-        *)
-          # 꺼졌다(사람이 내렸을 수 있다)거나 사라졌다. 조용히 카운터만 지운다 —
-          # 사람이 내린 것을 두고 알림을 보내면 그게 소음이다.
-          log "$name 상태 $state — unhealthy가 아니므로 카운터만 지운다"
-          rm -f "$strikes_file" "$attempts_file" "$last_file" "$gaveup_file"
-          ;;
-      esac
-    else
-      rm -f "$strikes_file"
-    fi
+        fi
+        ;;
+    esac
     continue
   fi
 
