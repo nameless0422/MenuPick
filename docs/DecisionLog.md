@@ -772,7 +772,7 @@
 
 ### D-054. unhealthy 자동 복구 — 꺼진 것은 건드리지 않고, 세 번이면 포기한다
 
-- **날짜/상태**: 2026-10-04 / 채택, 운영 적용 완료(PR_PLACEHOLDER)
+- **날짜/상태**: 2026-10-04 / 채택, 운영 적용 완료(PR #323·#324)
 - **배경**: 헬스체크는 세 겹으로 있는데(Docker HEALTHCHECK, compose healthcheck, actuator
   probes) **빨간불에 반응하는 주체가 없었다.** `restart: unless-stopped`는 프로세스 종료에만
   반응하므로, 살아는 있는데 요청을 못 받는 상태는 `Up (unhealthy)`로 머문다. 오케스트레이터가
