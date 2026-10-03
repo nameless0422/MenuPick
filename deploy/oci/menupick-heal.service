@@ -1,0 +1,16 @@
+[Unit]
+Description=MenuPick unhealthy 컨테이너 자동 복구
+Requires=docker.service
+After=docker.service
+# 복구 스크립트 자체가 실패하면 그것도 알린다.
+OnFailure=menupick-alert@%n.service
+
+[Service]
+Type=oneshot
+
+# docker 소켓과 /etc/menupick/alert.env를 쓰므로 root로 돈다.
+# 리포의 scripts/heal-unhealthy.sh가 원본이고 이건 사본이다 — 고치면 다시 설치한다.
+ExecStart=/usr/local/bin/menupick-heal
+
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,15 @@
+[Unit]
+Description=MenuPick 컨테이너 건강을 2분마다 본다
+
+[Timer]
+# 부팅 3분 뒤 첫 실행. 기동 중(starting)은 애초에 unhealthy로 집계되지 않지만,
+# 도커가 컨테이너를 다 세우기 전에 들여다볼 이유도 없다.
+OnBootSec=3min
+# 2분. 헬스체크 간격(30초)의 네 배다 — 연속 2회 관찰을 요구하므로 실제 조치까지는
+# 최대 4분 남짓이 걸린다. 더 짧게 하면 일시적인 블립에 손이 먼저 나간다.
+OnUnitActiveSec=2min
+# 꺼져 있던 구간을 따라잡지 않는다. 지난 unhealthy는 이미 지난 일이다.
+Persistent=false
+
+[Install]
+WantedBy=timers.target
