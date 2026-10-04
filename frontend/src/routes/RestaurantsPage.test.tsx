@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import RestaurantsPage from "./RestaurantsPage";
@@ -501,8 +501,7 @@ describe("식당 수정 폼 저장 버튼", () => {
  * 빠지면 왜 막혔는지 알 길이 영영 없다. <b>메뉴는 있는데 아직 안 고른 경우</b>는 지금
  * 여기서 풀 수 있으므로 무엇을 하라는 것인지가 닿아야 한다.
  *
- * <p>이 폼에는 텍스트 입력이 없어 Enter로 제출되는 경로가 지금은 없다 — 그래도 조기 반환은
- * form onSubmit에 둔다(입력 한 칸만 늘어도 클릭 핸들러의 방어는 뚫린다).
+ * <p>연결 요청을 막는 검증은 버튼 클릭뿐 아니라 form onSubmit에도 적용한다.
  */
 describe("메뉴 연결 버튼", () => {
   const KIMCHI = { id: 7, name: "김치찌개", weight: 3, isExcluded: false, categories: [], tags: [] };
@@ -602,13 +601,124 @@ describe("메뉴 연결 버튼", () => {
   });
 });
 
+describe("연결할 메뉴 찾기", () => {
+  const KIMCHI = { id: 27, name: "김치찌개", weight: 3, isExcluded: false, categories: [], tags: [] };
+  const OLD_MENU = { ...KIMCHI, id: 7, name: "된장찌개" };
+  const page = (menus: typeof KIMCHI[], nextCursor: number | null = null) => ({
+    menus, nextCursor, hasNext: nextCursor !== null,
+  });
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    fetchRestaurantsMock.mockResolvedValue([JINJU]);
+    fetchRestaurantMock.mockResolvedValue(jinjuDetail);
+  });
+
+  async function openPicker(user: ReturnType<typeof userEvent.setup>) {
+    renderWithProviders(<RestaurantsPage />);
+    await user.click(await screen.findByRole("button", { name: "진주회관 메뉴 연결" }));
+    return screen.findByRole("textbox", { name: "연결할 메뉴 검색" });
+  }
+
+  it("다음 페이지의 오래된 메뉴를 골라 별점과 메모를 함께 연결한다", async () => {
+    const firstPage = Array.from({ length: 20 }, (_, i) => ({ ...KIMCHI, id: 100 - i, name: `메뉴 ${i}` }));
+    fetchMenusMock.mockResolvedValueOnce(page(firstPage, 81)).mockResolvedValueOnce(page([OLD_MENU]));
+    const user = userEvent.setup();
+    await openPicker(user);
+    await user.click(await screen.findByRole("button", { name: "메뉴 더 보기" }));
+    await user.click(await screen.findByRole("button", { name: "된장찌개" }));
+    expect(fetchMenusMock).toHaveBeenLastCalledWith(81, 20, undefined);
+    expect(screen.getByRole("button", { name: "메뉴 0" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "메뉴 더 보기" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "별점 5" }));
+    await user.type(screen.getByRole("textbox", { name: "메모" }), "  다시 갈 집  ");
+    await user.click(screen.getByRole("button", { name: "연결" }));
+    await waitFor(() => expect(createMenuRestaurantMock).toHaveBeenCalledWith(7, {
+      restaurantId: 1, rating: 5, memo: "다시 갈 집",
+    }));
+  });
+
+  it("검색 결과의 다음 페이지에도 같은 검색어를 전달한다", async () => {
+    fetchMenusMock.mockImplementation(async (cursor, _size, keyword) => {
+      if (!keyword) return page([KIMCHI]);
+      return cursor == null ? page([KIMCHI], 27) : page([OLD_MENU]);
+    });
+    const user = userEvent.setup();
+    const input = await openPicker(user);
+    await user.type(input, "  찌개  ");
+    // 입력만으로 조회하지 않는다.
+    expect(fetchMenusMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "메뉴 검색" }));
+    await user.click(await screen.findByRole("button", { name: "메뉴 더 보기" }));
+    expect(await screen.findByRole("button", { name: "된장찌개" })).toBeInTheDocument();
+    expect(fetchMenusMock).toHaveBeenLastCalledWith(27, 20, "찌개");
+  });
+
+  it("검색창의 Enter는 검색만 하고 이전 선택을 해제한다", async () => {
+    fetchMenusMock.mockResolvedValue(page([KIMCHI]));
+    const user = userEvent.setup();
+    const input = await openPicker(user);
+    await user.click(await screen.findByRole("button", { name: "김치찌개" }));
+    await user.type(input, "찌개{Enter}");
+    await waitFor(() => expect(fetchMenusMock).toHaveBeenLastCalledWith(undefined, 20, "찌개"));
+    expect(createMenuRestaurantMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "연결" })).toHaveAttribute("aria-disabled", "true");
+    expect(await screen.findByRole("button", { name: "김치찌개" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("검색 결과 없음과 메뉴 미등록을 구분하고 초기화하면 전체 목록으로 돌아간다", async () => {
+    fetchMenusMock.mockImplementation(async (_cursor, _size, keyword) => page(keyword ? [] : [KIMCHI]));
+    const user = userEvent.setup();
+    const input = await openPicker(user);
+    await user.type(input, "없는메뉴{Enter}");
+    const empty = await screen.findByText(/검색 결과가 없습니다/);
+    expect(empty).toHaveAttribute("role", "status");
+    expect(empty).toHaveTextContent("검색 결과가 없습니다.");
+    expect(screen.queryByText(/먼저 메뉴를 등록/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "연결" })).toHaveAccessibleDescription(/검색을 초기화/);
+    await user.click(screen.getByRole("button", { name: "검색 초기화" }));
+    expect(input).toHaveValue("");
+    expect(await screen.findByRole("button", { name: "김치찌개" })).toBeInTheDocument();
+  });
+
+  it("늦게 끝난 이전 검색이 새 검색 결과를 덮지 않는다", async () => {
+    let finishOldSearch!: (value: ReturnType<typeof page>) => void;
+    fetchMenusMock.mockImplementation((_cursor, _size, keyword) => {
+      if (keyword === "김치") return new Promise((resolve) => { finishOldSearch = resolve; });
+      return Promise.resolve(page(keyword === "된장" ? [OLD_MENU] : [KIMCHI]));
+    });
+    const user = userEvent.setup();
+    const input = await openPicker(user);
+    await user.type(input, "김치{Enter}");
+    await waitFor(() => expect(finishOldSearch).toBeDefined());
+    await user.clear(input);
+    await user.type(input, "된장{Enter}");
+    await screen.findByRole("button", { name: "된장찌개" });
+    await act(async () => { finishOldSearch(page([KIMCHI])); });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "된장찌개" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "김치찌개" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("더 보기 실패 후에도 기존 선택을 유지하고 같은 커서로 재시도한다", async () => {
+    fetchMenusMock.mockResolvedValueOnce(page([KIMCHI], 27))
+      .mockRejectedValueOnce(new Error("잠시 후 다시 시도해주세요"))
+      .mockResolvedValueOnce(page([OLD_MENU]));
+    const user = userEvent.setup();
+    await openPicker(user);
+    await user.click(await screen.findByRole("button", { name: "김치찌개" }));
+    await user.click(screen.getByRole("button", { name: "메뉴 더 보기" }));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "김치찌개" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "메뉴 더 보기" }));
+    await screen.findByRole("button", { name: "된장찌개" });
+    expect(fetchMenusMock.mock.calls.slice(1)).toEqual([[27, 20, undefined], [27, 20, undefined]]);
+  });
+});
+
 /**
- * 카드 안에서 열리는 폼의 제목이 {@code <h2>}라, 그 카드들을 담은 목록의 제목
- * ({@code <h2>저장한 식당})과 형제 레벨이었다.
- *
- * <p>제목만 훑는 사람에게는 수정 폼이 목록 밖의 별도 섹션으로 읽혀, "무엇을 수정하는
- * 중인지"가 목록과 끊긴다. 레벨을 건너뛴 것은 아니라 자동 검사에는 걸리지 않지만,
- * 문서 개요가 실제 화면 구조와 다르게 그려지는 것은 그대로다.
+ * 카드 안의 폼 제목은 목록 제목보다 한 단계 아래여야 문서 개요에서도 소속이 드러난다.
  */
 describe("카드 안 폼의 제목 레벨", () => {
   beforeEach(() => {
