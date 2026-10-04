@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRestaurant,
   deleteRestaurant,
@@ -594,25 +594,34 @@ function MenuLinkForm({
   const [memo, setMemo] = useState("");
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
 
-  // 첫 페이지 20개면 충분 — MenusPage의 무한 스크롤 키(["menus"])와 겹치지 않게 별도 키 사용
-  const menusQuery = useQuery({
-    queryKey: ["menus", "picker"],
-    queryFn: () => fetchMenus(undefined, 20),
+  const [searchInput, setSearchInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const menuSearchId = useId();
+  // 단일 페이지 캐시와 데이터 모양이 다르므로 새 키를 쓴다. 메뉴 변경 시 공통 접두어로 무효화된다.
+  const menusQuery = useInfiniteQuery({
+    queryKey: ["menus", "picker", "pages", keyword],
+    queryFn: ({ pageParam }) => fetchMenus(pageParam, 20, keyword || undefined),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (last) => last.hasNext && last.nextCursor != null ? last.nextCursor : undefined,
   });
-  const menus = menusQuery.data?.menus ?? [];
+  const menus = menusQuery.data?.pages.flatMap((page) => page.menus) ?? [];
 
   const linkMutation = useMutation({
     mutationFn: () => createMenuRestaurant(menuId!, { restaurantId, rating, memo: memo.trim() || null }),
     onSuccess: onClose,
   });
 
-  // menuId == null 하나가 성격이 다른 두 상황을 덮고 있다. 목록을 받아 봐야 갈리므로
-  // 판단 기준은 "조회가 성공했는데 메뉴가 0개인가"다(아직 안 온 것과 정말 없는 것은 다르다).
-  // - 등록된 메뉴가 아예 없다: 이 폼에서 사용자가 할 수 있는 일이 없다. 다른 화면에서
-  //   메뉴를 먼저 만들어야 하므로 안내는 누르기 전부터 상시로 떠 있어야 하고, 옮길 초점도
-  //   없다. 이미 그리고 있던 "등록된 메뉴가 없습니다" 안내를 버튼에 묶기만 하면 된다.
-  // - 메뉴는 있는데 아직 고르지 않았다: 지금 여기서 풀 수 있는 조건이라, 눌렀을 때 이유를
-  //   알리고 고르는 자리(첫 칩)로 초점을 옮긴다.
+  const applySearch = (nextKeyword: string) => {
+    if (linkMutation.isPending) return;
+    if (nextKeyword !== keyword) {
+      setKeyword(nextKeyword);
+      // 검색 결과에 보이지 않는 메뉴가 연결되지 않도록 조건을 바꾸면 선택을 해제한다.
+      setMenuId(null);
+      setPickAttempted(false);
+    }
+  };
+
+  // 로딩과 빈 결과를 구분한다. 검색 중 빈 결과라면 등록 대신 검색 조건 변경을 안내한다.
   const noMenus = menusQuery.isSuccess && menus.length === 0;
   const selectionMissing = menuId == null;
   const submitBlocked = linkMutation.isPending || selectionMissing;
@@ -632,8 +641,6 @@ function MenuLinkForm({
   return (
     <form
       className="menu-form"
-      // 이 폼에는 텍스트 입력이 없어 Enter로 새어 나갈 경로가 지금은 없지만, 막는 자리는
-      // 그래도 여기다 — 나중에 입력 한 칸만 늘어도 클릭 핸들러의 방어는 그대로 뚫린다.
       onSubmit={(e) => {
         e.preventDefault();
         if (linkMutation.isPending) return;
@@ -652,10 +659,44 @@ function MenuLinkForm({
 
       <fieldset>
         <legend>메뉴 선택</legend>
+        <div className="menu-search restaurant-menu-search">
+          <label htmlFor={menuSearchId}>연결할 메뉴 검색</label>
+          <input
+            id={menuSearchId}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            maxLength={100}
+            placeholder="메뉴 이름"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (!e.nativeEvent.isComposing) applySearch(searchInput.trim());
+              }
+            }}
+          />
+          <button
+            type="button"
+            aria-disabled={linkMutation.isPending || undefined}
+            onClick={() => applySearch(searchInput.trim())}
+          >메뉴 검색</button>
+          {(keyword || searchInput) && (
+            <button
+              type="button"
+              aria-disabled={linkMutation.isPending || undefined}
+              onClick={() => {
+                if (linkMutation.isPending) return;
+                setSearchInput("");
+                applySearch("");
+              }}
+            >검색 초기화</button>
+          )}
+        </div>
         {menusQuery.isPending && <p>불러오는 중…</p>}
         {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
         {noMenus && (
-          <p id={noMenusNoteId}>등록된 메뉴가 없습니다. 먼저 메뉴를 등록해 주세요.</p>
+          <p id={noMenusNoteId} role="status">{keyword
+            ? "검색 결과가 없습니다. 다른 이름으로 검색하거나 검색을 초기화해 주세요."
+            : "등록된 메뉴가 없습니다. 먼저 메뉴를 등록해 주세요."}</p>
         )}
         <div className="chip-row">
           {menus.map((menu, index) => (
@@ -672,6 +713,16 @@ function MenuLinkForm({
             </button>
           ))}
         </div>
+        {menusQuery.hasNextPage && (
+          <button
+            type="button"
+            aria-busy={menusQuery.isFetchingNextPage}
+            aria-disabled={menusQuery.isFetching || undefined}
+            onClick={() => {
+              if (!menusQuery.isFetching) void menusQuery.fetchNextPage();
+            }}
+          >{menusQuery.isFetchingNextPage ? "메뉴 불러오는 중…" : "메뉴 더 보기"}</button>
+        )}
         {showPickError && (
           <p className="error" role="alert" id={pickErrorId}>연결할 메뉴를 먼저 선택해주세요.</p>
         )}
