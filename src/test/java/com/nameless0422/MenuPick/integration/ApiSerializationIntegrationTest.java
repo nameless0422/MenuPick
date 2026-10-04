@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -126,11 +127,13 @@ class ApiSerializationIntegrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("픽 실행 → 히스토리 조회에 방금 픽한 1건이 필터 조건과 함께 남는다")
     void pick_thenHistory_returnsSingleEntry() throws Exception {
-        mockMvc.perform(post("/api/v1/menus")
+        String created = mockMvc.perform(post("/api/v1/menus")
                         .with(asUser)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"돈까스\",\"weight\":1,\"categories\":[\"일식\"]}"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Number menuId = JsonPath.read(created, "$.data.id");
 
         mockMvc.perform(post("/api/v1/pick")
                         .with(asUser)
@@ -145,6 +148,7 @@ class ApiSerializationIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/v1/history").with(asUser))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.histories.length()").value(1))
+                .andExpect(jsonPath("$.data.histories[0].menuId").value(menuId.intValue()))
                 .andExpect(jsonPath("$.data.histories[0].menuName").value("돈까스"))
                 .andExpect(jsonPath("$.data.histories[0].isVisited").value(false))
                 // 아직 누르지 않은 피드백은 필드가 빠지지 않고 null로 온다. 픽 화면의 방문 확인
@@ -154,5 +158,12 @@ class ApiSerializationIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.histories[0].filterConditions[?(@.filterType == 'CATEGORY')].filterValue")
                         .value("일식"))
                 .andExpect(jsonPath("$.data.hasNext").value(false));
+
+        mockMvc.perform(delete("/api/v1/menus/{id}", menuId).with(asUser))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/history").with(asUser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.histories[0].menuId").isEmpty())
+                .andExpect(jsonPath("$.data.histories[0].menuName").value("돈까스"));
     }
 }

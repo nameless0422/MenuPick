@@ -174,6 +174,7 @@ async function installFakeApi(page: Page) {
       return api(route, {
         histories: picked ? [{
           id: 1,
+          menuId: menu.id,
           menuName: menu.name,
           restaurantName: restaurant.name,
           isVisited: visited,

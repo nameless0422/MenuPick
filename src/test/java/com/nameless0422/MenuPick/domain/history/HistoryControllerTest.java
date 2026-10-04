@@ -175,7 +175,7 @@ class HistoryControllerTest extends AbstractControllerTest {
     @DisplayName("GET /api/v1/history - 히스토리 목록 조회 성공")
     void getHistories_success() throws Exception {
         var summary = new HistoryResponse.HistorySummary(
-                1L, "김치찌개", "맛집A", false,
+                1L, 7L, "김치찌개", "맛집A", false,
                 LocalDateTime.of(2026, 6, 28, 12, 0), null, RecommendationFeedback.ACCEPTED,
                 List.of(new HistoryResponse.FilterCondition("CATEGORY", "한식")));
         var response = new HistoryResponse.HistoryListResponse(List.of(summary), null, false);
@@ -186,6 +186,7 @@ class HistoryControllerTest extends AbstractControllerTest {
                         .with(authentication(AUTH)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.histories[0].menuId").value(7))
                 .andExpect(jsonPath("$.data.histories[0].menuName").value("김치찌개"))
                 .andExpect(jsonPath("$.data.histories[0].recommendationFeedback").value("ACCEPTED"))
                 .andExpect(jsonPath("$.data.histories[0].filterConditions[0].filterType").value("CATEGORY"))

@@ -3,7 +3,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import HistoryPage from "./HistoryPage";
-import { fetchHistories, fetchMenuRestaurants, unmarkVisited } from "../api/history";
+import { fetchHistories, fetchMenuRestaurants, markVisited, unmarkVisited } from "../api/history";
+import { fetchMenus } from "../api/menus";
 
 vi.mock("../api/history", () => ({
   fetchHistories: vi.fn(),
@@ -20,15 +21,18 @@ vi.mock("../api/history", () => ({
   deleteHistory: vi.fn(),
 }));
 vi.mock("../api/menus", () => ({
-  fetchMenus: vi.fn().mockResolvedValue({ menus: [{ id: 1, name: "김치찌개" }] }),
+  fetchMenus: vi.fn().mockRejectedValue(new Error("방문 기록은 메뉴 목록에 의존하지 않는다")),
 }));
 
 const fetchHistoriesMock = vi.mocked(fetchHistories);
 const fetchMenuRestaurantsMock = vi.mocked(fetchMenuRestaurants);
 const unmarkVisitedMock = vi.mocked(unmarkVisited);
+const markVisitedMock = vi.mocked(markVisited);
+const fetchMenusMock = vi.mocked(fetchMenus);
 
 const KIMCHI_PICK = {
   id: 10,
+  menuId: 1,
   menuName: "김치찌개",
   restaurantName: "진주회관",
   isVisited: false,
@@ -42,12 +46,98 @@ beforeEach(() => {
   fetchHistoriesMock.mockReset();
   fetchMenuRestaurantsMock.mockReset();
   unmarkVisitedMock.mockReset();
+  markVisitedMock.mockReset();
+  markVisitedMock.mockResolvedValue(undefined);
+  fetchMenusMock.mockClear();
   unmarkVisitedMock.mockResolvedValue(undefined);
   fetchMenuRestaurantsMock.mockResolvedValue([]);
   fetchHistoriesMock.mockResolvedValue({
     histories: [KIMCHI_PICK],
     nextCursor: null,
     hasNext: false,
+  });
+});
+
+describe("이력의 메뉴 ID로 식당 선택", () => {
+  const RESTAURANTS = [
+    { menuId: 7, restaurantId: 21, restaurantName: "첫 번째 집", rating: 3, memo: null },
+    { menuId: 7, restaurantId: 22, restaurantName: "두 번째 집", rating: 4, memo: null },
+  ].map((r) => ({ ...r, restaurantAddress: null, createdAt: "2026-10-05T12:00:00",
+    updatedAt: "2026-10-05T12:00:00", version: 0 }));
+
+  it("목록에 없는 오래된 메뉴도 이력 ID로 식당을 골라 방문 처리한다", async () => {
+    fetchHistoriesMock.mockResolvedValue({
+      histories: [{ ...KIMCHI_PICK, menuId: 7 }], nextCursor: null, hasNext: false,
+    });
+    fetchMenuRestaurantsMock.mockResolvedValue(RESTAURANTS);
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await screen.findByText("김치찌개");
+    expect(fetchMenuRestaurantsMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "김치찌개 방문했어요" }));
+    const choice = await screen.findByRole("combobox", { name: "김치찌개 방문 식당 선택" });
+    await user.selectOptions(choice, "22");
+    await user.click(screen.getByRole("button", { name: "김치찌개 선택한 식당으로 방문 확정" }));
+    await waitFor(() => expect(markVisitedMock).toHaveBeenCalledWith(10, 22));
+    expect(fetchMenuRestaurantsMock).toHaveBeenCalledWith(7);
+    expect(fetchMenusMock).not.toHaveBeenCalled();
+  });
+
+  it("같은 이름의 두 메뉴도 각 이력의 ID로 다른 식당을 조회한다", async () => {
+    fetchHistoriesMock.mockResolvedValue({ histories: [
+      { ...KIMCHI_PICK, menuId: 7 }, { ...KIMCHI_PICK, id: 11, menuId: 8 },
+    ], nextCursor: null, hasNext: false });
+    fetchMenuRestaurantsMock.mockImplementation(async (id) => RESTAURANTS.map((r) => ({
+      ...r, menuId: id, restaurantName: `${id}번 메뉴 식당 ${r.restaurantId}`,
+    })));
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    const rows = await screen.findAllByRole("listitem");
+    await user.click(within(rows[0]).getByRole("button", { name: "김치찌개 방문했어요" }));
+    expect(await within(rows[0]).findByRole("option", { name: "7번 메뉴 식당 21" })).toBeInTheDocument();
+    await user.click(within(rows[1]).getByRole("button", { name: "김치찌개 방문했어요" }));
+    expect(await within(rows[1]).findByRole("option", { name: "8번 메뉴 식당 21" })).toBeInTheDocument();
+    expect(fetchMenuRestaurantsMock.mock.calls).toEqual([[7], [8]]);
+  });
+
+  it("다음 페이지의 기록에도 해당 메뉴 ID를 사용한다", async () => {
+    fetchHistoriesMock.mockResolvedValueOnce({ histories: [KIMCHI_PICK], nextCursor: 10, hasNext: true });
+    fetchHistoriesMock.mockResolvedValue({ histories: [
+      { ...KIMCHI_PICK, id: 9, menuId: 700, menuName: "예전 메뉴" },
+    ], nextCursor: null, hasNext: false });
+    fetchMenuRestaurantsMock.mockResolvedValue(RESTAURANTS);
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await user.click(await screen.findByRole("button", { name: "더 보기" }));
+    await user.click(await screen.findByRole("button", { name: "예전 메뉴 방문했어요" }));
+    await screen.findByRole("combobox", { name: "예전 메뉴 방문 식당 선택" });
+    expect(fetchMenuRestaurantsMock).toHaveBeenCalledWith(700);
+    expect(fetchMenusMock).not.toHaveBeenCalled();
+  });
+
+  it.each([null, undefined])("메뉴 ID가 %s이면 식당을 추측하지 않고 기본 방문 처리한다", async (menuId) => {
+    fetchHistoriesMock.mockResolvedValue({
+      histories: [{ ...KIMCHI_PICK, menuId }], nextCursor: null, hasNext: false,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await user.click(await screen.findByRole("button", { name: "김치찌개 방문했어요" }));
+    await waitFor(() => expect(markVisitedMock).toHaveBeenCalledWith(10, undefined));
+    expect(fetchMenuRestaurantsMock).not.toHaveBeenCalled();
+    expect(fetchMenusMock).not.toHaveBeenCalled();
+  });
+
+  it("식당 조회 실패 시 방문 처리하지 않고 재시도할 수 있다", async () => {
+    fetchMenuRestaurantsMock.mockRejectedValueOnce(new Error("식당을 불러오지 못했습니다"))
+      .mockResolvedValueOnce(RESTAURANTS);
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await user.click(await screen.findByRole("button", { name: "김치찌개 방문했어요" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("식당을 불러오지 못했습니다");
+    expect(markVisitedMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "김치찌개 방문했어요" }));
+    await screen.findByRole("combobox", { name: "김치찌개 방문 식당 선택" });
+    expect(fetchMenuRestaurantsMock.mock.calls).toEqual([[1], [1]]);
   });
 });
 
@@ -107,7 +197,7 @@ describe("히스토리 목록의 이름", () => {
 
   it("메뉴가 삭제된 기록도 이름 없는 버튼을 남기지 않는다", async () => {
     fetchHistoriesMock.mockResolvedValue({
-      histories: [{ ...KIMCHI_PICK, menuName: null }],
+      histories: [{ ...KIMCHI_PICK, menuId: null, menuName: null }],
       nextCursor: null,
       hasNext: false,
     });

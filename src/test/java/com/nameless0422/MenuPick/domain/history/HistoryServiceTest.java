@@ -128,6 +128,7 @@ class HistoryServiceTest {
         HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 20);
 
         assertThat(result.histories()).hasSize(1);
+        assertThat(result.histories().get(0).menuId()).isEqualTo(1L);
         assertThat(result.histories().get(0).menuName()).isEqualTo("김치찌개");
         assertThat(result.histories().get(0).restaurantName()).isEqualTo("맛집A");
         assertThat(result.hasNext()).isFalse();
@@ -152,8 +153,40 @@ class HistoryServiceTest {
         HistoryResponse.HistoryListResponse result = historyService.getHistories(1L, null, null, null, 20);
 
         // "그날 김치찌개를 먹었다"는 사실은 메뉴를 나중에 지웠다고 없던 일이 되지 않는다.
+        assertThat(result.histories().get(0).menuId()).isNull();
         assertThat(result.histories().get(0).menuName()).isEqualTo("김치찌개");
         assertThat(result.histories().get(0).restaurantName()).isEqualTo("맛집A");
+    }
+
+    @Test
+    @DisplayName("같은 이름의 메뉴도 이력에서 서로 다른 ID로 구분한다")
+    void getHistories_distinguishesSameNamesById() {
+        Menu otherMenu = Menu.builder().user(user).name("김치찌개").weight(1).build();
+        ReflectionTestUtils.setField(otherMenu, "id", 8L);
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of(createHistory(2L, otherMenu, null, false, NOW),
+                        createHistory(1L, menu, null, false, NOW.minusDays(1))));
+
+        var result = historyService.getHistories(1L, null, null, null, 20);
+
+        assertThat(result.histories()).extracting(HistoryResponse.HistorySummary::menuId)
+                .containsExactly(8L, 1L);
+        assertThat(result.histories()).extracting(HistoryResponse.HistorySummary::menuName)
+                .containsExactly("김치찌개", "김치찌개");
+    }
+
+    @Test
+    @DisplayName("메뉴 참조가 없어도 이력을 읽을 수 있고 메뉴 ID는 null이다")
+    void getHistories_withoutMenuReference() {
+        given(historyRepository.findByUserIdAndRecommendedAtAfterOrderByIdDesc(
+                eq(1L), any(LocalDateTime.class), any(PageRequest.class)))
+                .willReturn(List.of(createHistory(1L, null, null, false, NOW)));
+
+        var summary = historyService.getHistories(1L, null, null, null, 20).histories().get(0);
+
+        assertThat(summary.menuId()).isNull();
+        assertThat(summary.menuName()).isNull();
     }
 
     @Test

@@ -10,6 +10,8 @@ public class HistoryResponse {
 
     public record HistorySummary(
             Long id,
+            /** 연결 식당을 조회할 활성 메뉴 ID. 삭제된 메뉴이거나 참조가 없으면 null이다. */
+            Long menuId,
             String menuName,
             String restaurantName,
             boolean isVisited,
