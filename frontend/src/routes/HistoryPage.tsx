@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   deleteHistory,
   fetchHistories,
@@ -11,7 +11,6 @@ import {
   type HistorySummary,
   type MenuRestaurant,
 } from "../api/history";
-import { fetchMenus } from "../api/menus";
 import { apiErrorMessage as errorMessage } from "../api/http";
 import "./HistoryPage.css";
 import VisitCalendar from "./VisitCalendar";
@@ -71,20 +70,6 @@ export default function HistoryPage() {
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => (last.hasNext && last.nextCursor != null ? last.nextCursor : undefined),
   });
-
-  // 방문 식당 선택 UI를 위해 메뉴 이름 → 메뉴 ID를 미리 확보해둔다.
-  // HistorySummary에는 menuId가 내려오지 않으므로(메뉴 이름만 제공), 내 메뉴 목록에서 이름이
-  // 유일하게 일치하는 경우에만 연결 식당을 조회할 수 있게 한다 — 이름이 중복되면 어느 메뉴인지
-  // 확정할 수 없어 선택 UI를 생략하고 기본 방문 처리만 제공한다.
-  const menusQuery = useQuery({
-    queryKey: ["menus-for-history"],
-    queryFn: () => fetchMenus(undefined, 100),
-  });
-
-  const menuIdByName = new Map<string, number | null>();
-  for (const menu of menusQuery.data?.menus ?? []) {
-    menuIdByName.set(menu.name, menuIdByName.has(menu.name) ? null : menu.id);
-  }
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["history"] });
@@ -267,7 +252,7 @@ export default function HistoryPage() {
               ) : (
                 <VisitAction
                   history={history}
-                  menuId={history.menuName != null ? menuIdByName.get(history.menuName) ?? null : null}
+                  menuId={history.menuId ?? null}
                   onVisited={() => {
                     if (visited === false) {
                       (histories.length <= 1 ? headingRef : listRef).current?.focus();

@@ -20,7 +20,9 @@ export interface HistoryFilterCondition {
 
 export interface HistorySummary {
   id: number;
-  // 픽 당시 메뉴/식당이 이후 삭제됐으면 null로 내려온다.
+  /** 활성 메뉴 ID. 삭제된 메뉴는 null이며, 구버전 서버가 필드를 생략해도 기본 방문 처리는 가능하다. */
+  menuId?: number | null;
+  // 소프트 삭제된 메뉴·식당 이름은 기록에 남고, 참조 자체가 없으면 null이다.
   menuName: string | null;
   restaurantName: string | null;
   isVisited: boolean;

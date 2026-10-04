@@ -160,6 +160,7 @@ public class HistoryService {
 
         return new HistoryResponse.HistorySummary(
                 history.getId(),
+                history.getMenu() != null && !history.getMenu().isDeleted() ? history.getMenu().getId() : null,
                 history.getMenu() != null ? history.getMenu().getName() : null,
                 history.getRestaurant() != null ? history.getRestaurant().getName() : null,
                 history.isVisited(),
