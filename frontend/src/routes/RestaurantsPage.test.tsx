@@ -424,6 +424,42 @@ describe("저장한 식당 검색", () => {
     expect(await screen.findByText("‘중구’ 검색 결과 1곳")).toBeInTheDocument();
     expect(fetchRestaurantsMock).toHaveBeenLastCalledWith("중구");
   });
+
+  it("수정한 식당이 검색 결과에서 빠지면 검색창으로 초점을 옮긴다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantsMock.mockResolvedValueOnce([JINJU]).mockResolvedValueOnce([JINJU]).mockResolvedValue([]);
+    updateRestaurantMock.mockResolvedValue({ ...jinjuDetail, address: "서울 종로구", version: 1 });
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("진주회관");
+    const search = screen.getByRole("searchbox", { name: "저장한 식당 검색" });
+    await user.type(search, "중구{Enter}");
+    await screen.findByText("‘중구’ 검색 결과 1곳");
+    await user.click(screen.getByRole("button", { name: "진주회관 수정" }));
+    await user.clear(screen.getByLabelText("주소"));
+    await user.type(screen.getByLabelText("주소"), "서울 종로구");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await screen.findByText(/‘중구’ 검색 결과가 없습니다/);
+    await waitFor(() => expect(search).toHaveFocus());
+  });
+
+  it("수정 응답을 기다리며 사용자가 옮긴 초점은 유지한다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantsMock.mockResolvedValueOnce([JINJU]).mockResolvedValueOnce([JINJU]).mockResolvedValue([]);
+    let finishSave!: (detail: typeof jinjuDetail) => void;
+    const saving = new Promise<typeof jinjuDetail>((resolve) => { finishSave = resolve; });
+    updateRestaurantMock.mockReturnValue(saving);
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("진주회관");
+    await user.type(screen.getByRole("searchbox", { name: "저장한 식당 검색" }), "중구{Enter}");
+    await screen.findByText("‘중구’ 검색 결과 1곳");
+    await user.click(screen.getByRole("button", { name: "진주회관 수정" }));
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    const placeSearch = screen.getByRole("textbox", { name: "장소 검색어" });
+    await user.click(placeSearch);
+    await act(async () => { finishSave(jinjuDetail); await saving; });
+    await screen.findByText(/‘중구’ 검색 결과가 없습니다/);
+    expect(placeSearch).toHaveFocus();
+  });
 });
 
 /**
