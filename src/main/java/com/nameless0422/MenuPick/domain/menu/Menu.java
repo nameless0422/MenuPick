@@ -152,6 +152,10 @@ public class Menu extends BaseTimeEntity {
         return deletedAt != null;
     }
 
+    public void restore() {
+        this.deletedAt = null;
+    }
+
     public void addCategory(String category) {
         this.categories.add(category);
     }

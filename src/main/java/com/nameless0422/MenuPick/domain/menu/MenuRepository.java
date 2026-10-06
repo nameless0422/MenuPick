@@ -128,6 +128,18 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
      */
     Optional<Menu> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
 
+    Optional<Menu> findByIdAndUserId(Long id, Long userId);
+
+    @Query("""
+            select m from Menu m where m.user.id = :userId and m.deletedAt is not null
+              and (:deletedBefore is null or m.deletedAt < :deletedBefore
+                   or (m.deletedAt = :deletedBefore and m.id < :cursorId))
+            order by m.deletedAt desc, m.id desc
+            """)
+    List<Menu> findDeletedMenus(@Param("userId") Long userId,
+                               @Param("deletedBefore") LocalDateTime deletedBefore,
+                               @Param("cursorId") Long cursorId, Pageable pageable);
+
     /**
      * 필터 없는 픽의 후보. 조건이 붙은 픽은 {@code PickCandidates}가 만든 Specification으로
      * 조인까지 SQL에 내려 조회한다 — 여기서 전량을 올린 뒤 자바로 거르지 않는다.

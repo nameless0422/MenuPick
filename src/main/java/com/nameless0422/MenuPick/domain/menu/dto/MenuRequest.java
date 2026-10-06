@@ -21,6 +21,11 @@ import java.util.Set;
  */
 public class MenuRequest {
 
+    public record Restore(
+            @NotNull(message = "버전(version)은 필수입니다.")
+            @Min(value = 0, message = "버전은 0 이상이어야 합니다.") Long version
+    ) {}
+
     /** 빈 줄과 중복 이름은 건너뛴다. 원본 줄 번호를 유지하려고 문자열 배열로 받는다. */
     public record BulkCreate(
             @NotNull(message = "메뉴 목록은 필수입니다.")

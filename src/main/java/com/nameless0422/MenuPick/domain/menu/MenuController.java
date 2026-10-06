@@ -24,6 +24,22 @@ public class MenuController {
 
     private final MenuService menuService;
 
+    @GetMapping("/trash")
+    public ResponseEntity<ApiResponse<MenuResponse.DeletedMenuListResponse>> getDeletedMenus(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) @Size(max = 100) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ResponseEntity.ok(ApiResponse.ok(menuService.getDeletedMenus(userId, cursor, size)));
+    }
+
+    @PostMapping("/{menuId}/restore")
+    public ResponseEntity<ApiResponse<Void>> restoreMenu(
+            @AuthenticationPrincipal Long userId, @PathVariable Long menuId,
+            @RequestBody @Valid MenuRequest.Restore request) {
+        menuService.restoreMenu(userId, menuId, request);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<MenuResponse.MenuListResponse>> getMenus(
             @AuthenticationPrincipal Long userId,

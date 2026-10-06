@@ -6,6 +6,10 @@ import java.util.Set;
 
 public class MenuResponse {
 
+    public record DeletedMenuSummary(Long id, String name, LocalDateTime deletedAt, long version) {}
+
+    public record DeletedMenuListResponse(List<DeletedMenuSummary> menus, String nextCursor, boolean hasNext) {}
+
     public record BulkPreview(List<BulkEntry> entries, int addCount, boolean hasInvalid) {}
 
     public record BulkEntry(int line, String name, String status) {}

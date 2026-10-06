@@ -30,6 +30,7 @@ import { chipAction, chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import LinkedRestaurants from "./LinkedRestaurants";
+import MenuTrash from "./MenuTrash";
 import { CATEGORY_PRESETS } from "../constants";
 
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
@@ -92,6 +93,7 @@ export default function MenusPage() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["menus"] });
     queryClient.invalidateQueries({ queryKey: ["menu"] });
+    queryClient.invalidateQueries({ queryKey: ["deleted-menus"] });
   };
 
   const excludeMutation = useMutation({
@@ -350,6 +352,7 @@ export default function MenusPage() {
           {menusQuery.isFetchingNextPage ? "불러오는 중…" : "더 보기"}
         </button>
       )}
+      <MenuTrash />
     </div>
   );
 }
