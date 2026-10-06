@@ -51,8 +51,10 @@ export interface RestaurantCreateRequest extends Omit<RestaurantUpdateRequest, "
   kakaoPlaceId?: string | null;
 }
 
-export async function fetchRestaurants() {
-  const res = await http.get<ApiResponse<RestaurantSummary[]>>("/api/v1/restaurants");
+export async function fetchRestaurants(keyword?: string) {
+  const res = await http.get<ApiResponse<RestaurantSummary[]>>("/api/v1/restaurants", {
+    params: { keyword },
+  });
   return unwrap(res);
 }
 

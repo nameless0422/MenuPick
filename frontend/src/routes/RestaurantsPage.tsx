@@ -21,10 +21,14 @@ import { safeExternalUrl } from "../externalUrl";
 
 export default function RestaurantsPage() {
   const queryClient = useQueryClient();
+  const [searchInput, setSearchInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const searchId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const restaurantsQuery = useQuery({
-    queryKey: ["restaurants"],
-    queryFn: fetchRestaurants,
+    queryKey: ["restaurants", keyword],
+    queryFn: () => fetchRestaurants(keyword || undefined),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["restaurants"] });
@@ -57,17 +61,66 @@ export default function RestaurantsPage() {
       <PlaceSearch onSaved={invalidate} />
 
       <h2>저장한 식당</h2>
-      {restaurantsQuery.isError && <p className="error" role="alert">{errorMessage(restaurantsQuery.error)}</p>}
+      <form
+        className="menu-search saved-restaurant-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setKeyword(searchInput.trim());
+        }}
+      >
+        <label htmlFor={searchId}>저장한 식당 검색</label>
+        <input
+          id={searchId}
+          ref={searchRef}
+          type="search"
+          value={searchInput}
+          maxLength={100}
+          placeholder="식당 이름 또는 주소"
+          onChange={(event) => setSearchInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.nativeEvent.isComposing || event.keyCode === 229)) {
+              event.preventDefault();
+            }
+          }}
+        />
+        <button type="submit">식당 검색</button>
+        {(keyword || searchInput) && (
+          <button type="button" onClick={() => {
+            setSearchInput("");
+            setKeyword("");
+            searchRef.current?.focus();
+          }}>
+            검색 초기화
+          </button>
+        )}
+      </form>
+      {restaurantsQuery.isError && (
+        <div>
+          <p className="error" role="alert">{errorMessage(restaurantsQuery.error)}</p>
+          <button
+            type="button"
+            aria-disabled={restaurantsQuery.isFetching || undefined}
+            aria-busy={restaurantsQuery.isFetching}
+            onClick={() => {
+              if (!restaurantsQuery.isFetching) void restaurantsQuery.refetch();
+            }}
+          >식당 목록 다시 불러오기</button>
+        </div>
+      )}
 
       {/* 리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
           삽입되는 라이브 리전은 통지되지 않는다. */}
       <div role="status">
         {restaurantsQuery.isPending && <p>불러오는 중…</p>}
         {restaurantsQuery.isSuccess && restaurants.length === 0 && (
-          <p>저장한 식당이 없습니다. 위에서 장소를 검색해 자주 가는 식당을 저장해 보세요.</p>
+          <p>{keyword
+            ? `‘${keyword}’ 검색 결과가 없습니다. 다른 검색어를 입력하거나 검색을 초기화해 보세요.`
+            : "저장한 식당이 없습니다. 위에서 장소를 검색해 자주 가는 식당을 저장해 보세요."}</p>
         )}
         {restaurantsQuery.isSuccess && restaurants.length > 0 && (
-          <p className="sr-only">{`저장한 식당 ${restaurants.length}곳`}</p>
+          <p className={keyword ? undefined : "sr-only"}>{keyword
+            ? `‘${keyword}’ 검색 결과 ${restaurants.length}곳`
+            : `저장한 식당 ${restaurants.length}곳`}</p>
         )}
       </div>
 

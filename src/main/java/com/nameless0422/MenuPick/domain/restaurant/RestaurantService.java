@@ -27,7 +27,17 @@ public class RestaurantService {
     private final Clock clock;
 
     public List<RestaurantResponse.RestaurantSummary> getRestaurants(Long userId) {
-        return restaurantRepository.findAllByUserIdAndDeletedAtIsNull(userId).stream()
+        return getRestaurants(userId, null);
+    }
+
+    public List<RestaurantResponse.RestaurantSummary> getRestaurants(Long userId, String keyword) {
+        String search = keyword == null ? "" : keyword.trim();
+        // 사용자가 입력한 %, _도 상호나 주소의 글자로 검색한다.
+        String pattern = "%" + search.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        List<Restaurant> restaurants = search.isEmpty()
+                ? restaurantRepository.findAllByUserIdAndDeletedAtIsNull(userId)
+                : restaurantRepository.searchSavedRestaurants(userId, pattern);
+        return restaurants.stream()
                 .map(r -> new RestaurantResponse.RestaurantSummary(
                         r.getId(), r.getName(), r.getAddress(), r.getLatitude(), r.getLongitude()))
                 .toList();

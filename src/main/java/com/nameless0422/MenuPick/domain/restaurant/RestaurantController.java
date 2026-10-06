@@ -4,10 +4,12 @@ import com.nameless0422.MenuPick.common.dto.ApiResponse;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,14 +17,16 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/restaurants")
 @RequiredArgsConstructor
+@Validated
 public class RestaurantController {
 
     private final RestaurantService restaurantService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<RestaurantResponse.RestaurantSummary>>> getRestaurants(
-            @AuthenticationPrincipal Long userId) {
-        return ResponseEntity.ok(ApiResponse.ok(restaurantService.getRestaurants(userId)));
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) @Size(max = 100) String keyword) {
+        return ResponseEntity.ok(ApiResponse.ok(restaurantService.getRestaurants(userId, keyword)));
     }
 
     /**

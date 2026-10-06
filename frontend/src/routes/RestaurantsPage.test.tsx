@@ -346,6 +346,86 @@ const jinjuDetail = {
   version: 0,
 };
 
+describe("저장한 식당 검색", () => {
+  const gangnam = { ...JINJU, id: 2, name: "강남식당", address: "서울 강남구" };
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_KAKAO_JS_KEY", "");
+    fetchRestaurantMock.mockResolvedValue(jinjuDetail);
+    fetchRestaurantsMock.mockImplementation(async (keyword) => keyword ? [JINJU] : [JINJU, gangnam]);
+  });
+
+  it("입력 중에는 조회하지 않고 제출할 때 공백을 제거한 검색어로 조회한다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("강남식당");
+    const input = screen.getByRole("searchbox", { name: "저장한 식당 검색" });
+    expect(input).toHaveAttribute("maxlength", "100");
+    await user.type(input, "  중구  ");
+    expect(fetchRestaurantsMock).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("‘중구’ 검색 결과 1곳")).toBeInTheDocument();
+    expect(fetchRestaurantsMock).toHaveBeenLastCalledWith("중구");
+    expect(screen.queryByText("강남식당")).not.toBeInTheDocument();
+  });
+
+  it("초기화하면 전체 목록을 다시 표시하고 검색창으로 초점을 옮긴다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("강남식당");
+    const input = screen.getByRole("searchbox", { name: "저장한 식당 검색" });
+    await user.type(input, "중구{Enter}");
+    await screen.findByText("‘중구’ 검색 결과 1곳");
+    await user.click(screen.getByRole("button", { name: "검색 초기화" }));
+    expect(await screen.findByText("강남식당")).toBeInTheDocument();
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(fetchRestaurantsMock).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("검색 결과가 없을 때 식당 미등록 안내와 구분한다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantsMock.mockImplementation(async (keyword) => keyword ? [] : [JINJU]);
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("진주회관");
+    await user.type(screen.getByRole("searchbox", { name: "저장한 식당 검색" }), "없는가게{Enter}");
+    expect(await screen.findByText(/‘없는가게’ 검색 결과가 없습니다/)).toBeInTheDocument();
+    expect(screen.queryByText(/저장한 식당이 없습니다/)).not.toBeInTheDocument();
+    expect(screen.queryByText("진주회관")).not.toBeInTheDocument();
+  });
+
+  it("이전 검색 응답이 늦게 와도 새 검색 결과를 바꾸지 않는다", async () => {
+    const user = userEvent.setup();
+    let finishFirst!: (rows: typeof JINJU[]) => void;
+    const first = new Promise<typeof JINJU[]>((resolve) => { finishFirst = resolve; });
+    fetchRestaurantsMock.mockImplementation(async (keyword) => keyword === "중구" ? first : keyword ? [gangnam] : [JINJU, gangnam]);
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("진주회관");
+    const input = screen.getByRole("searchbox", { name: "저장한 식당 검색" });
+    await user.type(input, "중구{Enter}");
+    await waitFor(() => expect(fetchRestaurantsMock).toHaveBeenCalledWith("중구"));
+    await user.clear(input);
+    await user.type(input, "강남{Enter}");
+    await screen.findByText("‘강남’ 검색 결과 1곳");
+    await act(async () => { finishFirst([JINJU]); await first; });
+    expect(screen.getByText("강남식당")).toBeInTheDocument();
+    expect(screen.queryByText("진주회관")).not.toBeInTheDocument();
+  });
+
+  it("검색 실패 후 같은 검색어로 다시 조회할 수 있다", async () => {
+    const user = userEvent.setup();
+    fetchRestaurantsMock.mockResolvedValueOnce([JINJU]).mockRejectedValueOnce(new Error("검색 조회 실패"));
+    renderWithProviders(<RestaurantsPage />);
+    await screen.findByText("진주회관");
+    await user.type(screen.getByRole("searchbox", { name: "저장한 식당 검색" }), "중구{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("검색 조회 실패");
+    fetchRestaurantsMock.mockResolvedValue([JINJU]);
+    await user.click(screen.getByRole("button", { name: "식당 목록 다시 불러오기" }));
+    expect(await screen.findByText("‘중구’ 검색 결과 1곳")).toBeInTheDocument();
+    expect(fetchRestaurantsMock).toHaveBeenLastCalledWith("중구");
+  });
+});
+
 /**
  * 식당 수정 폼의 저장 버튼은 {@code disabled={isPending || !name.trim()}}이었다.
  *

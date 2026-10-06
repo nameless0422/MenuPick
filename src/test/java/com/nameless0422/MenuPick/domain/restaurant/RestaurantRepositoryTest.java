@@ -5,6 +5,8 @@ import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import com.nameless0422.MenuPick.common.config.JpaConfig;
 import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,5 +83,42 @@ class RestaurantRepositoryTest extends AbstractIntegrationTest {
                 .findAllByUserIdAndDeletedAtIsNull(user.getId());
         assertThat(restaurants).hasSize(1);
         assertThat(restaurants.get(0).getName()).isEqualTo("식당A");
+    }
+
+    @Test
+    @DisplayName("이름과 주소를 검색하되 다른 사용자와 삭제한 식당은 제외한다")
+    void searchSavedRestaurants_scopedNameAndAddress() {
+        Restaurant byName = saveRestaurant(user, "중구식당", null);
+        Restaurant byAddress = saveRestaurant(user, "진주회관", "서울 중구 세종대로");
+        saveRestaurant(user, "강남식당", "서울 강남구");
+        Restaurant deleted = saveRestaurant(user, "중구삭제식당", "중구");
+        deleted.softDelete(LocalDateTime.now());
+        User other = userRepository.save(User.builder().email("other-rest@example.com").nickname("다른유저").build());
+        saveRestaurant(other, "중구타인식당", "중구");
+        restaurantRepository.flush();
+
+        assertThat(restaurantRepository.searchSavedRestaurants(user.getId(), "%중구%"))
+                .extracting(Restaurant::getId).containsExactly(byAddress.getId(), byName.getId());
+        assertThat(restaurantRepository.searchSavedRestaurants(user.getId(), "%없는식당%"))
+                .isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"%,%!%%", "_,%!_%", "!,%!!%", "!%_,%!!!%!_%"})
+    @DisplayName("LIKE 특수 문자를 문자 그대로 이름과 주소에서 검색한다")
+    void searchSavedRestaurants_literalWildcards(String keyword, String pattern) {
+        Restaurant byName = saveRestaurant(user, "가게" + keyword + "이름", null);
+        Restaurant byAddress = saveRestaurant(user, "주소로찾는곳", "서울 " + keyword + " 거리");
+        saveRestaurant(user, "일반가게", "서울 아무거리");
+        restaurantRepository.flush();
+
+        assertThat(restaurantRepository.searchSavedRestaurants(user.getId(), pattern))
+                .extracting(Restaurant::getId).containsExactly(byAddress.getId(), byName.getId());
+    }
+
+    private Restaurant saveRestaurant(User owner, String name, String address) {
+        return restaurantRepository.save(Restaurant.builder().user(owner).name(name).address(address)
+                .latitude(new BigDecimal("37.5665")).longitude(new BigDecimal("126.978"))
+                .build());
     }
 }

@@ -30,7 +30,7 @@ class RestaurantControllerTest extends AbstractControllerTest {
     @Test
     @DisplayName("GET /api/v1/restaurants - 목록 조회 성공")
     void getRestaurants_success() throws Exception {
-        given(restaurantService.getRestaurants(1L))
+        given(restaurantService.getRestaurants(1L, null))
                 .willReturn(List.of(
                         new RestaurantResponse.RestaurantSummary(
                                 1L, "진주회관", "서울시 중구",
@@ -51,6 +51,36 @@ class RestaurantControllerTest extends AbstractControllerTest {
     void getRestaurants_unauthorized() throws Exception {
         mockMvc.perform(get("/api/v1/restaurants"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("저장한 식당 검색어를 인증된 사용자 ID와 함께 전달한다")
+    void getRestaurants_keyword() throws Exception {
+        given(restaurantService.getRestaurants(1L, "중구")).willReturn(List.of());
+        mockMvc.perform(get("/api/v1/restaurants").param("keyword", "중구")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray());
+        verify(restaurantService).getRestaurants(1L, "중구");
+    }
+
+    @Test
+    @DisplayName("검색어가 100자를 넘으면 400을 반환하고 조회하지 않는다")
+    void getRestaurants_keywordTooLong() throws Exception {
+        mockMvc.perform(get("/api/v1/restaurants").param("keyword", "가".repeat(101))
+                        .with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+        verify(restaurantService, never()).getRestaurants(any(), any());
+    }
+
+    @Test
+    @DisplayName("검색어 100자까지 허용한다")
+    void getRestaurants_keywordAtLimit() throws Exception {
+        String keyword = "가".repeat(100);
+        given(restaurantService.getRestaurants(1L, keyword)).willReturn(List.of());
+        mockMvc.perform(get("/api/v1/restaurants").param("keyword", keyword)
+                        .with(authentication(AUTH)))
+                .andExpect(status().isOk());
     }
 
     @Test
