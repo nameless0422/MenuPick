@@ -43,6 +43,7 @@ test("저장한 식당을 주소로 찾고 수정 후 검색 결과와 전체 �
   await page.getByLabel("주소", { exact: true }).fill("서울 종로구");
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await expect(page.getByText(/‘중구’ 검색 결과가 없습니다/)).toBeVisible();
+  await expect(search).toBeFocused();
   await page.getByRole("button", { name: "검색 초기화" }).click();
   await expect(page.getByText("서울 종로구")).toBeVisible();
   await expect(page.getByText("강남식당", { exact: true })).toBeVisible();

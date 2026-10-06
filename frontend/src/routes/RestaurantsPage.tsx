@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createRestaurant,
@@ -25,6 +25,7 @@ export default function RestaurantsPage() {
   const [keyword, setKeyword] = useState("");
   const searchId = useId();
   const searchRef = useRef<HTMLInputElement>(null);
+  const changedRestaurantRef = useRef<number | null>(null);
 
   const restaurantsQuery = useQuery({
     queryKey: ["restaurants", keyword],
@@ -32,6 +33,18 @@ export default function RestaurantsPage() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["restaurants"] });
+
+  useEffect(() => {
+    const restaurantId = changedRestaurantRef.current;
+    if (restaurantId === null || restaurantsQuery.isFetching) return;
+    changedRestaurantRef.current = null;
+    const results = restaurantsQuery.data;
+    // 수정으로 검색 조건에서 빠지면 카드의 버튼도 사라진다. 다른 곳으로 옮긴 초점은 유지한다.
+    if (keyword && results && !results.some((restaurant) => restaurant.id === restaurantId)
+        && document.activeElement === document.body) {
+      searchRef.current?.focus();
+    }
+  }, [keyword, restaurantsQuery.data, restaurantsQuery.isFetching]);
 
   const restaurants = restaurantsQuery.data ?? [];
 
@@ -137,7 +150,10 @@ export default function RestaurantsPage() {
             <RestaurantCard
               key={restaurant.id}
               summary={restaurant}
-              onChanged={invalidate}
+              onChanged={() => {
+                changedRestaurantRef.current = restaurant.id;
+                void invalidate();
+              }}
               onDeleted={handleDeleted}
             />
           ))}
@@ -324,6 +340,7 @@ function RestaurantCard({
 }) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"edit" | "link" | null>(null);
+  const cardRef = useRef<HTMLLIElement>(null);
 
   // 수정 폼은 카드 전체를 대체하므로 폼을 닫으면 눌렀던 버튼이 새로 마운트된다 —
   // 초점이 <body>로 떨어지지 않도록 "어느 버튼으로 돌아갈지"를 예약해 두고, 그 버튼이
@@ -340,7 +357,7 @@ function RestaurantCard({
   };
 
   const closeForm = () => {
-    focusAfterClose.current = mode;
+    focusAfterClose.current = cardRef.current?.contains(document.activeElement) ? mode : null;
     setMode(null);
   };
 
@@ -386,7 +403,7 @@ function RestaurantCard({
 
   if (mode === "edit" && detail) {
     return (
-      <li className="card">
+      <li ref={cardRef} className="card">
         <RestaurantEditForm
           detail={detail}
           onClose={closeForm}
@@ -401,7 +418,7 @@ function RestaurantCard({
   }
 
   return (
-    <li className="card">
+    <li ref={cardRef} className="card">
       <div className="card-main">
         <strong>{summary.name}</strong>
         {/* 저장된 값을 그대로 href에 넣지 않는다 — 근거는 safeExternalUrl(../externalUrl).
