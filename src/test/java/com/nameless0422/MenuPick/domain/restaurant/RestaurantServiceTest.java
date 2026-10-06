@@ -12,6 +12,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -94,6 +98,26 @@ class RestaurantServiceTest {
 
         assertThat(result.name()).isEqualTo("진주회관");
         assertThat(result.latitude()).isEqualByComparingTo(new BigDecimal("37.5665350"));
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   "})
+    @DisplayName("검색어가 없거나 공백이면 기존 전체 목록을 반환한다")
+    void getRestaurants_blankKeyword(String keyword) {
+        given(restaurantRepository.findAllByUserIdAndDeletedAtIsNull(1L)).willReturn(List.of(restaurant));
+        assertThat(restaurantService.getRestaurants(1L, keyword)).hasSize(1);
+        verify(restaurantRepository, never()).searchSavedRestaurants(any(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"'  진주  ',%진주%", "%,%!%%", "_,%!_%", "!,%!!%", "!%_,%!!!%!_%"})
+    @DisplayName("검색어 공백을 제거하고 LIKE 특수 문자를 이스케이프한다")
+    void getRestaurants_literalKeyword(String keyword, String pattern) {
+        given(restaurantRepository.searchSavedRestaurants(1L, pattern)).willReturn(List.of(restaurant));
+        assertThat(restaurantService.getRestaurants(1L, keyword))
+                .extracting(RestaurantResponse.RestaurantSummary::name).containsExactly("진주회관");
+        verify(restaurantRepository, never()).findAllByUserIdAndDeletedAtIsNull(any());
     }
 
     @Test

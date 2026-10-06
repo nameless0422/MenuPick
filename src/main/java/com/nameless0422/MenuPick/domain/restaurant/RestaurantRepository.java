@@ -12,6 +12,14 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
 
     List<Restaurant> findAllByUserIdAndDeletedAtIsNull(Long userId);
 
+    @Query("""
+            select r from Restaurant r
+            where r.user.id = :userId and r.deletedAt is null
+              and (r.name like :pattern escape '!' or r.address like :pattern escape '!')
+            order by r.id desc
+            """)
+    List<Restaurant> searchSavedRestaurants(@Param("userId") Long userId, @Param("pattern") String pattern);
+
     Optional<Restaurant> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
 
     /**
