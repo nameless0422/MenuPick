@@ -463,6 +463,12 @@ nav a:hover:not([aria-current='page']) {
   margin-bottom: 20px;
 }
 
+.menu-trash {
+  border-top: 1px solid var(--field-border);
+  margin-top: 24px;
+  padding-top: 16px;
+}
+
 .menu-search input {
   flex: 1 1 180px;
   max-width: 360px;

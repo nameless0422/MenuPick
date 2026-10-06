@@ -42,6 +42,30 @@ export interface MenuListResponse {
   hasNext: boolean;
 }
 
+export interface DeletedMenuSummary {
+  id: number;
+  name: string;
+  deletedAt: string;
+  version: number;
+}
+
+export interface DeletedMenuListResponse {
+  menus: DeletedMenuSummary[];
+  nextCursor: string | null;
+  hasNext: boolean;
+}
+
+export async function fetchDeletedMenus(cursor?: string, size = 20) {
+  const res = await http.get<ApiResponse<DeletedMenuListResponse>>("/api/v1/menus/trash", {
+    params: { cursor, size },
+  });
+  return unwrap(res);
+}
+
+export async function restoreMenu(menuId: number, version: number) {
+  await http.post<ApiResponse<null>>(`/api/v1/menus/${menuId}/restore`, { version });
+}
+
 export interface MenuCreateRequest {
   name: string;
   memo?: string;

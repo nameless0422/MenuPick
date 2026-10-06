@@ -33,6 +33,62 @@ class MenuControllerTest extends AbstractControllerTest {
     @MockitoBean private MenuService menuService;
 
     @Test
+    void getTrash_forwardsOwnerAndCursor() throws Exception {
+        given(menuService.getDeletedMenus(1L, "cursor-10", 2)).willReturn(new MenuResponse.DeletedMenuListResponse(
+                List.of(new MenuResponse.DeletedMenuSummary(9L, "김치찌개", LocalDateTime.of(2026, 10, 7, 0, 15), 3)),
+                "next-cursor", true));
+        mockMvc.perform(get("/api/v1/menus/trash").param("cursor", "cursor-10").param("size", "2")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.menus[0].version").value(3))
+                .andExpect(jsonPath("$.data.menus[0].deletedAt").value("2026-10-07T00:15:00"))
+                .andExpect(jsonPath("$.data.nextCursor").value("next-cursor"))
+                .andExpect(jsonPath("$.data.hasNext").value(true));
+        verify(menuService).getDeletedMenus(1L, "cursor-10", 2);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"size,0", "size,101"})
+    void getTrash_invalidBounds(String parameter, String value) throws Exception {
+        mockMvc.perform(get("/api/v1/menus/trash").param(parameter, value).with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(menuService);
+    }
+
+    @Test
+    void getTrash_rejectsLongCursor() throws Exception {
+        mockMvc.perform(get("/api/v1/menus/trash").param("cursor", "a".repeat(101)).with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(menuService);
+    }
+
+    @Test
+    void restoreMenu_success() throws Exception {
+        mockMvc.perform(post("/api/v1/menus/9/restore").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":3}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        verify(menuService).restoreMenu(1L, 9L, new MenuRequest.Restore(3L));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"{}", "{\"version\":null}", "{\"version\":-1}"})
+    void restoreMenu_invalidVersion(String body) throws Exception {
+        mockMvc.perform(post("/api/v1/menus/9/restore").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(menuService);
+    }
+
+    @Test
+    void trashAndRestore_requireAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/menus/trash")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/menus/9/restore").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":3}"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(menuService);
+    }
+
+    @Test
     @DisplayName("GET /api/v1/menus - 메뉴 목록 조회 성공")
     void getMenus_success() throws Exception {
         var summary = new MenuResponse.MenuSummary(1L, "김치찌개", 3, false, Set.of("한식"), List.of());

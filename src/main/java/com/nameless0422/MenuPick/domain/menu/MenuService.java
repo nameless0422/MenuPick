@@ -15,6 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -62,6 +65,54 @@ public class MenuService {
 
     public MenuResponse.MenuDetail getMenu(Long userId, Long menuId) {
         return toDetail(findMenuOrThrow(userId, menuId));
+    }
+
+    public MenuResponse.DeletedMenuListResponse getDeletedMenus(Long userId, String cursor, int size) {
+        TrashCursor anchor = decodeTrashCursor(cursor);
+        List<Menu> menus = menuRepository.findDeletedMenus(userId,
+                anchor == null ? null : anchor.deletedAt(), anchor == null ? null : anchor.id(),
+                PageRequest.of(0, size + 1));
+        boolean hasNext = menus.size() > size;
+        List<Menu> result = hasNext ? menus.subList(0, size) : menus;
+        String nextCursor = hasNext ? encodeTrashCursor(result.get(result.size() - 1)) : null;
+        // 휴지통에서는 태그·카테고리 컬렉션을 읽지 않는다.
+        return new MenuResponse.DeletedMenuListResponse(result.stream()
+                .map(menu -> new MenuResponse.DeletedMenuSummary(
+                        menu.getId(), menu.getName(), menu.getDeletedAt(), menu.getVersion()))
+                .toList(), nextCursor, hasNext);
+    }
+
+    private record TrashCursor(LocalDateTime deletedAt, long id) {}
+
+    private static String encodeTrashCursor(Menu menu) {
+        String value = menu.getDeletedAt() + "|" + menu.getId();
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static TrashCursor decodeTrashCursor(String cursor) {
+        if (cursor == null) return null;
+        try {
+            if (cursor.length() > 100) throw new IllegalArgumentException();
+            String[] values = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).split("\\|", -1);
+            if (values.length != 2) throw new IllegalArgumentException();
+            LocalDateTime deletedAt = LocalDateTime.parse(values[0]);
+            long id = Long.parseLong(values[1]);
+            if (id <= 0 || deletedAt.getYear() < 1000 || deletedAt.getYear() > 9999) throw new IllegalArgumentException();
+            return new TrashCursor(deletedAt, id);
+        } catch (IllegalArgumentException | DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "휴지통 커서가 올바르지 않습니다.");
+        }
+    }
+
+    @Transactional
+    public void restoreMenu(Long userId, Long menuId, MenuRequest.Restore request) {
+        Menu menu = menuRepository.findByIdAndUserId(menuId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));
+        // 응답 유실 후 재시도해도 이미 복원한 메뉴의 설정을 변경하지 않는다.
+        if (!menu.isDeleted()) return;
+        // 복원 뒤 다시 삭제됐다면 옛 휴지통 화면의 요청으로 되살리면 안 된다.
+        VersionGuard.requireCurrentVersion(menu.getVersion(), request.version());
+        menu.restore();
     }
 
     @Transactional

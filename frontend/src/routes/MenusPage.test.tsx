@@ -22,6 +22,8 @@ vi.mock("../api/menus", () => ({
   createBulkMenus: vi.fn(),
   previewBulkMenus: vi.fn(),
   fetchMenus: vi.fn(),
+  fetchDeletedMenus: vi.fn(),
+  restoreMenu: vi.fn(),
   fetchMenu: vi.fn(),
   createMenu: vi.fn(),
   updateMenu: vi.fn(),
