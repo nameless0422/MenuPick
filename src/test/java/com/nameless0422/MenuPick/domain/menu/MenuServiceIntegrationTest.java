@@ -63,6 +63,7 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
         var configured = menuService.updateMenu(user.getId(), created.id(), new MenuRequest.Update(
                 created.name(), created.memo(), 4, true, created.categories(), java.util.Set.of(tag.getId()), created.version()));
         var paused = menuService.pauseMenu(user.getId(), created.id(), 7);
+        var persistedPause = menuService.getMenu(user.getId(), created.id()).pausedUntil();
         Restaurant restaurant = trashRestaurant(user);
         MenuRestaurant link = menuRestaurantRepository.save(MenuRestaurant.builder()
                 .menu(menuRepository.findById(created.id()).orElseThrow()).restaurant(restaurant)
@@ -79,7 +80,7 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(restored.memo()).isEqualTo("메모");
         assertThat(restored.weight()).isEqualTo(configured.weight());
         assertThat(restored.isExcluded()).isTrue();
-        assertThat(restored.pausedUntil()).isEqualTo(paused.pausedUntil());
+        assertThat(restored.pausedUntil()).isEqualTo(persistedPause);
         assertThat(restored.categories()).containsExactly("한식");
         assertThat(restored.tags()).extracting(MenuResponse.TagSummary::id).containsExactly(tag.getId());
         assertThat(menuRestaurantRepository.findById(link.getId()).orElseThrow().getMemo()).isEqualTo("연결 메모");
