@@ -141,6 +141,113 @@ describe("이력의 메뉴 ID로 식당 선택", () => {
   });
 });
 
+describe("픽 기록 이름 검색", () => {
+  it("제출할 때 공백을 제거하고 기간과 방문 상태를 함께 보낸다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await screen.findByText("김치찌개");
+    await user.click(screen.getByRole("button", { name: "30일" }));
+    await user.click(within(screen.getByRole("group", { name: "방문 상태" })).getByRole("button", { name: "미방문" }));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenLastCalledWith(undefined, 30, 20, false, undefined));
+    const calls = fetchHistoriesMock.mock.calls.length;
+    await user.type(screen.getByRole("searchbox", { name: "픽 기록 검색" }), "  진주  ");
+    expect(fetchHistoriesMock).toHaveBeenCalledTimes(calls);
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenLastCalledWith(undefined, 30, 20, false, "진주"));
+    await user.click(screen.getByRole("button", { name: "검색 초기화" }));
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "30일" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("group", { name: "방문 상태" })).getByRole("button", { name: "미방문" }))
+      .toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("검색 결과의 다음 페이지에도 같은 검색어를 보내며 다른 검색은 첫 페이지부터 조회한다", async () => {
+    fetchHistoriesMock.mockImplementation(async (cursor, _days, _size, _visited, keyword) => {
+      if (keyword === "회관") return { histories: [{ ...KIMCHI_PICK, id: 9, menuName: "비빔밥" }], nextCursor: null, hasNext: false };
+      if (keyword === "김치") return cursor
+        ? { histories: [{ ...KIMCHI_PICK, id: 7, menuName: "김치볶음밥" }], nextCursor: null, hasNext: false }
+        : { histories: [KIMCHI_PICK], nextCursor: 10, hasNext: true };
+      return { histories: [KIMCHI_PICK], nextCursor: null, hasNext: false };
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await screen.findByText("김치찌개");
+    await user.type(screen.getByRole("searchbox"), "김치");
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await user.click(await screen.findByRole("button", { name: "더 보기" }));
+    await screen.findByText("김치볶음밥");
+    expect(fetchHistoriesMock).toHaveBeenLastCalledWith(10, 7, 20, undefined, "김치");
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "회관");
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await screen.findByText("비빔밥");
+    expect(fetchHistoriesMock).toHaveBeenLastCalledWith(undefined, 7, 20, undefined, "회관");
+    expect(screen.queryByText("김치볶음밥")).not.toBeInTheDocument();
+  });
+
+  it("결과 없음은 미등록 안내와 구분하고 실패한 검색을 같은 조건으로 재시도한다", async () => {
+    let failed = false;
+    fetchHistoriesMock.mockImplementation(async (_cursor, _days, _size, _visited, keyword) => {
+      if (keyword && !failed) { failed = true; throw new Error("검색 연결 실패"); }
+      return { histories: keyword ? [] : [KIMCHI_PICK], nextCursor: null, hasNext: false };
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await screen.findByText("김치찌개");
+    await user.type(screen.getByRole("searchbox"), "없는식당");
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await screen.findByRole("button", { name: "픽 기록 다시 조회" });
+    await user.click(screen.getByRole("button", { name: "픽 기록 다시 조회" }));
+    await screen.findByText(/검색 조건에 맞는 픽 기록이 없습니다/);
+    expect(screen.queryByText(/아직 픽 기록이 없어요/)).not.toBeInTheDocument();
+    expect(fetchHistoriesMock).toHaveBeenLastCalledWith(undefined, 7, 20, undefined, "없는식당");
+  });
+
+  it("다음 페이지 실패 후 기존 결과를 유지하고 실패한 커서부터 재시도한다", async () => {
+    let failed = false;
+    fetchHistoriesMock.mockImplementation(async (cursor) => {
+      if (cursor && !failed) { failed = true; throw new Error("다음 페이지 실패"); }
+      return cursor
+        ? { histories: [{ ...KIMCHI_PICK, id: 7, menuName: "김치볶음밥" }], nextCursor: null, hasNext: false }
+        : { histories: [KIMCHI_PICK], nextCursor: 10, hasNext: true };
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await screen.findByText("김치찌개");
+    await user.type(screen.getByRole("searchbox"), "김치");
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await user.click(await screen.findByRole("button", { name: "더 보기" }));
+    await screen.findByRole("button", { name: "픽 기록 다시 조회" });
+    expect(screen.getByText("김치찌개")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "픽 기록 다시 조회" }));
+    await screen.findByText("김치볶음밥");
+    expect(fetchHistoriesMock.mock.calls.slice(-2)).toEqual([
+      [10, 7, 20, undefined, "김치"], [10, 7, 20, undefined, "김치"],
+    ]);
+  });
+
+  it("늦게 도착한 이전 검색 응답이 현재 검색 결과를 바꾸지 않는다", async () => {
+    let resolveOld!: (value: Awaited<ReturnType<typeof fetchHistories>>) => void;
+    fetchHistoriesMock.mockImplementation(async (_cursor, _days, _size, _visited, keyword) => {
+      if (keyword === "김치") return new Promise((resolve) => { resolveOld = resolve; });
+      return { histories: [{ ...KIMCHI_PICK, menuName: keyword ? "현재 결과" : "김치찌개" }], nextCursor: null, hasNext: false };
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    await screen.findByText("김치찌개");
+    await user.type(screen.getByRole("searchbox"), "김치");
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await waitFor(() => expect(resolveOld).toBeDefined());
+    await user.clear(screen.getByRole("searchbox"));
+    await user.type(screen.getByRole("searchbox"), "회관");
+    await user.click(screen.getByRole("button", { name: "기록 검색" }));
+    await screen.findByText("현재 결과");
+    resolveOld({ histories: [{ ...KIMCHI_PICK, menuName: "이전 결과" }], nextCursor: null, hasNext: false });
+    await waitFor(() => expect(screen.getByText("현재 결과")).toBeVisible());
+    expect(screen.queryByText("이전 결과")).not.toBeInTheDocument();
+  });
+});
+
 describe("방문 처리 취소", () => {
   it("방문한 기록에서 취소하고 목록을 다시 읽는다", async () => {
     const user = userEvent.setup();
@@ -358,11 +465,11 @@ describe("방문 상태 필터", () => {
 
     const group = await screen.findByRole("group", { name: "방문 상태" });
     await user.click(within(group).getByRole("button", { name: /^방문$/ }));
-    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledWith(undefined, 7, 20, true));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledWith(undefined, 7, 20, true, undefined));
     expect(await screen.findByText("선택한 방문 상태의 픽 기록이 없어요.")).toBeInTheDocument();
 
     await user.click(within(group).getByRole("button", { name: "미방문" }));
-    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledWith(undefined, 7, 20, false));
+    await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledWith(undefined, 7, 20, false, undefined));
     expect(within(group).getByRole("button", { name: "미방문" })).toHaveAttribute("aria-pressed", "true");
   });
 
