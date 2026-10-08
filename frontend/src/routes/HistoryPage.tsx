@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -63,10 +63,13 @@ export default function HistoryPage() {
   const queryClient = useQueryClient();
   const [days, setDays] = useState(7);
   const [visited, setVisited] = useState<boolean | undefined>(undefined);
+  const [searchInput, setSearchInput] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const searchId = useId();
 
   const historyQuery = useInfiniteQuery({
-    queryKey: ["history", days, visited],
-    queryFn: ({ pageParam }) => fetchHistories(pageParam, days, 20, visited),
+    queryKey: ["history", days, visited, keyword],
+    queryFn: ({ pageParam }) => fetchHistories(pageParam, days, 20, visited, keyword || undefined),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => (last.hasNext && last.nextCursor != null ? last.nextCursor : undefined),
   });
@@ -114,7 +117,7 @@ export default function HistoryPage() {
       ? `'${deleteMutation.variables.label}' 픽 기록을 삭제했습니다. 픽 기록 ${histories.length}개.`
       : undoVisitMutation.isSuccess
         ? "방문 처리를 취소했습니다."
-      : `픽 기록 ${histories.length}개`;
+      : `${keyword ? "검색 결과 " : ""}픽 기록 ${histories.length}개`;
 
   return (
     <div className="page">
@@ -128,6 +131,22 @@ export default function HistoryPage() {
       <EatingSummary />
 
       <VisitCalendar />
+
+      <form className="menu-search" role="search" aria-label="픽 기록 검색"
+        onSubmit={(event) => { event.preventDefault(); setKeyword(searchInput.trim()); }}>
+        <label htmlFor={searchId}>픽 기록 검색</label>
+        <input id={searchId} type="search" value={searchInput} maxLength={100}
+          placeholder="메뉴 또는 식당 이름" onChange={(event) => setSearchInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.nativeEvent.isComposing || event.keyCode === 229)) {
+              event.preventDefault();
+            }
+          }} />
+        <button type="submit">기록 검색</button>
+        {(keyword || searchInput) && <button type="button"
+          onClick={() => { setSearchInput(""); setKeyword(""); }}>검색 초기화</button>}
+        <p>아래 픽 기록 목록에서 찾습니다. 선택한 기간과 방문 상태를 함께 적용합니다.</p>
+      </form>
 
       {/* 세 버튼은 "조회 기간"이라는 하나의 질문에 대한 선택지인데, 묶음에 이름이 없으면
           스크린리더에는 "7일 버튼, 30일 버튼, 전체 버튼"이 페이지에 그냥 흩어져 있는 것으로
@@ -169,7 +188,16 @@ export default function HistoryPage() {
         ))}
       </div>
 
-      {historyQuery.isError && <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>}
+      {historyQuery.isError && <>
+        <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>
+        <button type="button" aria-disabled={historyQuery.isFetching || undefined}
+          onClick={() => {
+            if (!historyQuery.isFetching) {
+              if (historyQuery.isFetchNextPageError) void historyQuery.fetchNextPage();
+              else void historyQuery.refetch();
+            }
+          }}>픽 기록 다시 조회</button>
+      </>}
 
       {/* 삭제 실패 시 목록만 새로고침되어 항목이 그대로 남는다 — 이유를 알려야 한다 */}
       {deleteMutation.isError && (
@@ -185,13 +213,13 @@ export default function HistoryPage() {
         {historyQuery.isPending && <p>불러오는 중…</p>}
         {historyQuery.isSuccess && histories.length === 0 && (
           <p>
-            {visited === undefined ? (
+            {keyword ? "검색 조건에 맞는 픽 기록이 없습니다. 기간·방문 상태를 바꾸거나 검색을 초기화해 보세요." : visited === undefined ? (
               <>아직 픽 기록이 없어요. <Link to="/pick">오늘 뭐 먹을지 골라볼까요?</Link></>
             ) : "선택한 방문 상태의 픽 기록이 없어요."}
           </p>
         )}
         {historyQuery.isSuccess && histories.length > 0 && (
-          <p className="sr-only">{listAnnouncement}</p>
+          <p className={keyword ? undefined : "sr-only"}>{listAnnouncement}</p>
         )}
       </div>
 

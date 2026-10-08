@@ -43,6 +43,19 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
 
     Optional<History> findByIdAndUserId(Long id, Long userId);
 
+    // 단일 연관만 fetch join해 SQL LIMIT을 유지한다. 삭제된 메뉴·식당 이름도 이력에 남긴다.
+    @Query("""
+            select h from History h left join fetch h.menu m left join fetch h.restaurant r
+            where h.user.id = :userId and h.recommendedAt > :after
+              and (:cursor is null or h.id < :cursor)
+              and (:visited is null or h.isVisited = :visited)
+              and (m.name like :pattern escape '!' or r.name like :pattern escape '!')
+            order by h.id desc
+            """)
+    List<History> searchByNames(@Param("userId") Long userId, @Param("after") LocalDateTime after,
+                               @Param("cursor") Long cursor, @Param("visited") Boolean visited,
+                               @Param("pattern") String pattern, Pageable pageable);
+
     /** 방 코드로 남긴 호스트의 픽 기록. 방당 한 건이며 원본 메뉴가 지워졌으면 없을 수 있다. */
     @Query("select h from History h join h.filterConditions fc " +
             "where h.user.id = :userId and fc.filterType = 'ROOM' and fc.filterValue = :code " +

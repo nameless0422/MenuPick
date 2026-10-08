@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -29,8 +30,9 @@ public class HistoryController {
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) @Min(value = 1, message = "days는 1 이상이어야 합니다.") Integer days,
             @RequestParam(required = false) Boolean visited,
+            @RequestParam(required = false) @Size(max = 100, message = "검색어는 100자 이하여야 합니다.") String keyword,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return ResponseEntity.ok(ApiResponse.ok(historyService.getHistories(userId, cursor, days, visited, size)));
+        return ResponseEntity.ok(ApiResponse.ok(historyService.getHistories(userId, cursor, days, visited, size, keyword)));
     }
 
     /**

@@ -33,13 +33,23 @@ public class HistoryService {
     private final Clock clock;
 
     public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, Boolean visited, int size) {
+        return getHistories(userId, cursor, days, visited, size, null);
+    }
+
+    public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, Boolean visited,
+                                                           int size, String keyword) {
         // days는 컨트롤러에서 @Min(1)로 검증되므로 여기서는 미지정(null) 여부만 판단한다.
         int effectiveDays = (days != null) ? days : DEFAULT_DAYS;
         LocalDateTime after = LocalDateTime.now(clock).minusDays(effectiveDays);
         PageRequest pageable = PageRequest.of(0, size + 1);
 
         List<History> histories;
-        if (visited != null && cursor != null) {
+        String search = keyword == null ? "" : keyword.trim();
+        if (!search.isEmpty()) {
+            String pattern = "%" + search.replace("!", "!!").replace("%", "!%")
+                    .replace("_", "!_") + "%";
+            histories = historyRepository.searchByNames(userId, after, cursor, visited, pattern, pageable);
+        } else if (visited != null && cursor != null) {
             histories = historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
                     userId, visited, after, cursor, pageable);
         } else if (visited != null) {

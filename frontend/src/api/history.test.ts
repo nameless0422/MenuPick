@@ -15,8 +15,8 @@ describe("픽 기록 조회 API", () => {
         status: 200, statusText: "OK", headers: {}, config } as AxiosResponse;
     };
 
-    await fetchHistories(42, 30, 20, false);
-    expect(sent?.params).toEqual({ cursor: 42, days: 30, size: 20, visited: false });
+    await fetchHistories(42, 30, 20, false, "진주회관");
+    expect(sent?.params).toEqual({ cursor: 42, days: 30, size: 20, visited: false, keyword: "진주회관" });
   });
 });
 

@@ -38,6 +38,38 @@ class HistoryControllerTest extends AbstractControllerTest {
             """;
 
     @Test
+    void getHistories_searchKeepsOtherFilters() throws Exception {
+        given(historyService.getHistories(1L, 42L, 30, true, 10, "회관"))
+                .willReturn(new HistoryResponse.HistoryListResponse(List.of(), null, false));
+        mockMvc.perform(get("/api/v1/history").with(authentication(AUTH))
+                        .param("cursor", "42").param("days", "30").param("visited", "true")
+                        .param("size", "10").param("keyword", "회관"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.histories").isEmpty());
+        verify(historyService).getHistories(1L, 42L, 30, true, 10, "회관");
+    }
+
+    @Test
+    void getHistories_searchRejectsLongKeyword() throws Exception {
+        mockMvc.perform(get("/api/v1/history").with(authentication(AUTH)).param("keyword", "가".repeat(101)))
+                .andExpect(status().isBadRequest());
+        verify(historyService, never()).getHistories(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
+    }
+
+    @Test
+    void getHistories_searchAccepts100Characters() throws Exception {
+        String keyword = "가".repeat(100);
+        given(historyService.getHistories(1L, null, null, null, 20, keyword))
+                .willReturn(new HistoryResponse.HistoryListResponse(List.of(), null, false));
+        mockMvc.perform(get("/api/v1/history").with(authentication(AUTH)).param("keyword", keyword))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getHistories_searchRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/history").param("keyword", "회관")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("DELETE /api/v1/history/{id}/visit - 방문 취소")
     void unmarkVisited_success() throws Exception {
         mockMvc.perform(delete("/api/v1/history/5/visit").with(authentication(AUTH)))
@@ -180,7 +212,7 @@ class HistoryControllerTest extends AbstractControllerTest {
                 List.of(new HistoryResponse.FilterCondition("CATEGORY", "한식")));
         var response = new HistoryResponse.HistoryListResponse(List.of(summary), null, false);
 
-        given(historyService.getHistories(1L, null, null, null, 20)).willReturn(response);
+        given(historyService.getHistories(1L, null, null, null, 20, null)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/history")
                         .with(authentication(AUTH)))
@@ -206,14 +238,14 @@ class HistoryControllerTest extends AbstractControllerTest {
         mockMvc.perform(get("/api/v1/history").with(authentication(AUTH))
                         .param("cursor", "42").param("visited", "false"))
                 .andExpect(status().isOk());
-        verify(historyService).getHistories(1L, 42L, null, false, 20);
+        verify(historyService).getHistories(1L, 42L, null, false, 20, null);
     }
 
     @Test
     @DisplayName("GET /api/v1/history - days 파라미터 전달")
     void getHistories_withDays() throws Exception {
         var response = new HistoryResponse.HistoryListResponse(List.of(), null, false);
-        given(historyService.getHistories(1L, null, 30, null, 10)).willReturn(response);
+        given(historyService.getHistories(1L, null, 30, null, 10, null)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/history")
                         .with(authentication(AUTH))
