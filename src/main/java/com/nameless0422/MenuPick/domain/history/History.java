@@ -48,6 +48,13 @@ public class History {
 
     private LocalDateTime visitedAt;
 
+    @Column(length = 500)
+    private String memo;
+
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @OneToMany(mappedBy = "history", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<HistoryFilterCondition> filterConditions = new ArrayList<>();
 
@@ -93,6 +100,10 @@ public class History {
 
     public void recordFeedback(RecommendationFeedback feedback) {
         this.recommendationFeedback = Objects.requireNonNull(feedback);
+    }
+
+    public void updateMemo(String memo) {
+        this.memo = memo;
     }
 
     public void addFilterCondition(String filterType, String filterValue) {

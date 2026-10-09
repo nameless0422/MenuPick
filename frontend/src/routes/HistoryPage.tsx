@@ -15,6 +15,7 @@ import { apiErrorMessage as errorMessage } from "../api/http";
 import "./HistoryPage.css";
 import VisitCalendar from "./VisitCalendar";
 import EatingSummary from "./EatingSummary";
+import HistoryMemo from "./HistoryMemo";
 
 // "전체" 필터는 백엔드에 별도 옵션이 없어 충분히 큰 값을 넘겨 사실상 전체 기간을 조회한다.
 // days를 아예 생략하면 백엔드가 7일로 대체하고(HistoryService), 0 이하는 @Min(1)에 걸려 400이다.
@@ -258,6 +259,9 @@ export default function HistoryPage() {
                 ))}
               </div>
             )}
+
+            <HistoryMemo historyId={history.id} label={`${label} (${formatDateTime(history.recommendedAt)})`}
+              memo={history.memo ?? null} />
 
             <div className="card-actions">
               {history.isVisited ? (

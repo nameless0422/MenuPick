@@ -1,6 +1,8 @@
 package com.nameless0422.MenuPick.domain.history;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
+import com.nameless0422.MenuPick.common.domain.VersionGuard;
+import com.nameless0422.MenuPick.domain.history.dto.HistoryRequest;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
@@ -96,6 +98,24 @@ public class HistoryService {
         return new HistoryResponse.VisitCalendarResponse(month, entries, truncated);
     }
 
+    public HistoryResponse.MemoResponse getMemo(Long userId, Long historyId) {
+        History history = historyRepository.findByIdAndUserId(historyId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        return new HistoryResponse.MemoResponse(history.getId(), history.getMemo(), history.getVersion());
+    }
+
+    @Transactional
+    public HistoryResponse.MemoResponse updateMemo(Long userId, Long historyId, HistoryRequest.MemoRequest request) {
+        History history = historyRepository.findByIdAndUserId(historyId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        VersionGuard.requireCurrentVersion(history.getVersion(), request.version());
+        String memo = request.memo() == null ? null : request.memo().strip();
+        history.updateMemo(memo == null || memo.isEmpty() ? null : memo);
+        // 응답 버전에 이번 쓰기를 반영하고, 커밋 전 경합도 낙관적 락으로 확인한다.
+        historyRepository.flush();
+        return new HistoryResponse.MemoResponse(history.getId(), history.getMemo(), history.getVersion());
+    }
+
     private YearMonth parseCalendarMonth(String requestedMonth, YearMonth defaultMonth) {
         if (requestedMonth == null) {
             return defaultMonth;
@@ -177,7 +197,8 @@ public class HistoryService {
                 history.getRecommendedAt(),
                 history.getVisitedAt(),
                 history.getRecommendationFeedback(),
-                conditions
+                conditions,
+                history.getMemo()
         );
     }
 }

@@ -24,8 +24,11 @@ public class HistoryResponse {
              * 메뉴를 두고 먹었냐고 물으면 방금 한 대답을 무시한 셈이 된다.
              */
             RecommendationFeedback recommendationFeedback,
-            List<FilterCondition> filterConditions
+            List<FilterCondition> filterConditions,
+            String memo
     ) {}
+
+    public record MemoResponse(Long historyId, String memo, Long version) {}
 
     public record FilterCondition(
             String filterType,

@@ -24,6 +24,19 @@ public class HistoryController {
     private final HistoryPlaceService historyPlaceService;
     private final EatingSummaryService eatingSummaryService;
 
+    @GetMapping("/{historyId}/memo")
+    public ResponseEntity<ApiResponse<HistoryResponse.MemoResponse>> getMemo(
+            @AuthenticationPrincipal Long userId, @PathVariable Long historyId) {
+        return ResponseEntity.ok(ApiResponse.ok(historyService.getMemo(userId, historyId)));
+    }
+
+    @PutMapping("/{historyId}/memo")
+    public ResponseEntity<ApiResponse<HistoryResponse.MemoResponse>> updateMemo(
+            @AuthenticationPrincipal Long userId, @PathVariable Long historyId,
+            @Valid @RequestBody HistoryRequest.MemoRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(historyService.updateMemo(userId, historyId, request)));
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<HistoryResponse.HistoryListResponse>> getHistories(
             @AuthenticationPrincipal Long userId,

@@ -8,6 +8,8 @@ import { fetchMenus } from "../api/menus";
 
 vi.mock("../api/history", () => ({
   fetchHistories: vi.fn(),
+  fetchHistoryMemo: vi.fn(),
+  updateHistoryMemo: vi.fn(),
   // 요약 절도 마운트되자마자 부른다. 빈 요약이면 이 파일이 보는 화면은 그대로다
   // (요약 자체는 EatingSummary.test.tsx가 검증한다).
   fetchEatingSummary: vi.fn().mockResolvedValue({

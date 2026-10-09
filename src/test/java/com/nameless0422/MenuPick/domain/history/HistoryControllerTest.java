@@ -6,6 +6,8 @@ import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
 import com.nameless0422.MenuPick.support.AbstractControllerTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -30,6 +32,53 @@ class HistoryControllerTest extends AbstractControllerTest {
     @MockitoBean private HistoryService historyService;
     @MockitoBean private HistoryPlaceService historyPlaceService;
     @MockitoBean private EatingSummaryService eatingSummaryService;
+
+    @Test void getMemo_returnsTextAndVersion() throws Exception {
+        given(historyService.getMemo(1L, 5L)).willReturn(new HistoryResponse.MemoResponse(5L, "덜 맵게", 3L));
+        mockMvc.perform(get("/api/v1/history/5/memo").with(authentication(AUTH)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.memo").value("덜 맵게"))
+                .andExpect(jsonPath("$.data.version").value(3));
+    }
+
+    @Test void updateMemo_accepts500CharactersAndReturnsNewVersion() throws Exception {
+        String memo = "가".repeat(500);
+        given(historyService.updateMemo(eq(1L), eq(5L), any()))
+                .willReturn(new HistoryResponse.MemoResponse(5L, memo, 1L));
+        mockMvc.perform(put("/api/v1/history/5/memo").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"memo\":\"" + memo + "\",\"version\":0}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.memo").value(memo))
+                .andExpect(jsonPath("$.data.version").value(1));
+        verify(historyService).updateMemo(1L, 5L, new com.nameless0422.MenuPick.domain.history.dto.HistoryRequest.MemoRequest(memo, 0L));
+    }
+
+    static java.util.stream.Stream<String> invalidMemoBodies() {
+        return java.util.stream.Stream.of(
+                "{\"memo\":\"x\"}", "{\"memo\":\"x\",\"version\":null}",
+                "{\"memo\":\"x\",\"version\":-1}",
+                "{\"memo\":\"" + "가".repeat(501) + "\",\"version\":0}");
+    }
+
+    @ParameterizedTest @MethodSource("invalidMemoBodies")
+    void updateMemo_rejectsInvalidBody(String body) throws Exception {
+        mockMvc.perform(put("/api/v1/history/5/memo").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        verify(historyService, never()).updateMemo(any(), any(), any());
+    }
+
+    @Test void memoEndpoints_requireAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/history/5/memo")).andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/history/5/memo").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"memo\":\"x\",\"version\":0}")).andExpect(status().isUnauthorized());
+    }
+
+    @Test void updateMemo_returnsConflict() throws Exception {
+        given(historyService.updateMemo(eq(1L), eq(5L), any()))
+                .willThrow(new BusinessException(com.nameless0422.MenuPick.common.exception.ErrorCode.CONCURRENT_MODIFICATION));
+        mockMvc.perform(put("/api/v1/history/5/memo").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"memo\":\"x\",\"version\":0}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("CONCURRENT_MODIFICATION"));
+    }
 
     private static final String PLACE_BODY = """
             {"name":"할매김치찌개","address":"서울 중구 세종대로 110","phone":"02-123-4567",
@@ -209,7 +258,7 @@ class HistoryControllerTest extends AbstractControllerTest {
         var summary = new HistoryResponse.HistorySummary(
                 1L, 7L, "김치찌개", "맛집A", false,
                 LocalDateTime.of(2026, 6, 28, 12, 0), null, RecommendationFeedback.ACCEPTED,
-                List.of(new HistoryResponse.FilterCondition("CATEGORY", "한식")));
+                List.of(new HistoryResponse.FilterCondition("CATEGORY", "한식")), null);
         var response = new HistoryResponse.HistoryListResponse(List.of(summary), null, false);
 
         given(historyService.getHistories(1L, null, null, null, 20, null)).willReturn(response);

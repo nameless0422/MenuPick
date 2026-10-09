@@ -31,6 +31,19 @@ export interface HistorySummary {
   /** 픽 결과에서 누른 수락/거절. 누르지 않았으면 null. */
   recommendationFeedback: RecommendationFeedback | null;
   filterConditions: HistoryFilterCondition[];
+  memo?: string | null;
+}
+
+export interface HistoryMemoResponse { historyId: number; memo: string | null; version: number; }
+
+export async function fetchHistoryMemo(historyId: number) {
+  const res = await http.get<ApiResponse<HistoryMemoResponse>>(`/api/v1/history/${historyId}/memo`);
+  return unwrap(res);
+}
+
+export async function updateHistoryMemo(historyId: number, memo: string, version: number) {
+  const res = await http.put<ApiResponse<HistoryMemoResponse>>(`/api/v1/history/${historyId}/memo`, { memo, version });
+  return unwrap(res);
 }
 
 export interface HistoryListResponse {
