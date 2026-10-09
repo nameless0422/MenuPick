@@ -107,3 +107,6 @@
   font-size: var(--fs-2xs);
   opacity: 0.75;
 }
+
+.history-memo-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.history-memo-form { display: flex; flex-direction: column; gap: 8px; margin-block: 12px; }

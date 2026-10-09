@@ -16,7 +16,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 낙관적 락 버전 컬럼 마이그레이션(V9)이 실제 MySQL에 적용되는지 검증한다.
+ * 낙관적 락 버전 컬럼 마이그레이션(V9·V19)이 실제 MySQL에 적용되는지 검증한다.
  * (Testcontainers MySQL에 Flyway가 순서대로 적용한 결과를 information_schema로 확인)
  *
  * <p>동작 자체는 {@code domain/OptimisticLockTest}가 본다. 여기서 따로 확인하는 것은
@@ -31,9 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("integration")
 class OptimisticLockMigrationTest extends AbstractIntegrationTest {
 
-    /** V9가 버전 컬럼을 넣는 테이블. 근거는 V9 주석(왜 이 셋인지, 왜 나머지가 아닌지). */
+    /** V9의 메뉴·식당·연결과 V19의 이력 메모가 사용하는 버전 컬럼. */
     private static final List<String> VERSIONED_TABLES =
-            List.of("menus", "restaurants", "menu_restaurants");
+            List.of("menus", "restaurants", "menu_restaurants", "histories");
 
     @Autowired
     private EntityManager em;
@@ -52,7 +52,7 @@ class OptimisticLockMigrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("세 테이블에 NOT NULL + 기본값 0인 version 컬럼이 생긴다")
+    @DisplayName("수정 충돌을 검사하는 테이블에 NOT NULL + 기본값 0인 version 컬럼이 생긴다")
     void versionColumnsExist() {
         for (String table : VERSIONED_TABLES) {
             List<?> rows = em.createNativeQuery("""
@@ -78,10 +78,8 @@ class OptimisticLockMigrationTest extends AbstractIntegrationTest {
     @Test
     @DisplayName("버전 컬럼을 넣지 않기로 한 테이블에는 생기지 않는다")
     void unversionedTablesAreUntouched() {
-        // 근거는 V9 주석. histories는 쓰기가 단조 전이라 잃을 앞선 변경이 없고, tags와
-        // history_filter_conditions는 수정 엔드포인트 자체가 없다. "일단 전부 붙이자"로
-        // 번지면 histories처럼 쓰기가 잦은 테이블에서 이유 없는 409가 나기 시작한다.
-        for (String table : List.of("histories", "tags", "history_filter_conditions", "users")) {
+        // histories에는 V19에서 편집 가능한 메모를 추가했다. 나머지 테이블은 기존 정책을 유지한다.
+        for (String table : List.of("tags", "history_filter_conditions", "users")) {
             Number count = (Number) em.createNativeQuery("""
                             SELECT COUNT(*) FROM information_schema.columns
                             WHERE table_schema = DATABASE()
@@ -93,5 +91,19 @@ class OptimisticLockMigrationTest extends AbstractIntegrationTest {
 
             assertThat(count.intValue()).as("%s.version 컬럼", table).isZero();
         }
+    }
+
+    @Test
+    void v19_isAppliedAndMemoColumnIsNullableAndLimitedTo500() {
+        Object applied = em.createNativeQuery("SELECT success FROM flyway_schema_history WHERE version = '19'")
+                .getSingleResult();
+        boolean success = (applied instanceof Boolean b) ? b : ((Number) applied).intValue() == 1;
+        assertThat(success).isTrue();
+        Object[] row = (Object[]) em.createNativeQuery("""
+                SELECT character_maximum_length, is_nullable FROM information_schema.columns
+                WHERE table_schema = DATABASE() AND table_name = 'histories' AND column_name = 'memo'
+                """).getSingleResult();
+        assertThat(((Number) row[0]).intValue()).isEqualTo(500);
+        assertThat(row[1]).isEqualTo("YES");
     }
 }
