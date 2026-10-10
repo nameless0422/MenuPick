@@ -2,8 +2,15 @@ package com.nameless0422.MenuPick.domain.restaurant.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class RestaurantResponse {
+
+    public record DeletedRestaurantSummary(Long id, String name, String address,
+                                           LocalDateTime deletedAt, long version) {}
+
+    public record DeletedRestaurantListResponse(List<DeletedRestaurantSummary> restaurants,
+                                               String nextCursor, boolean hasNext) {}
 
     public record RestaurantDetail(
             Long id,

@@ -88,3 +88,28 @@ export async function updateRestaurant(restaurantId: number, request: Restaurant
 export async function deleteRestaurant(restaurantId: number) {
   await http.delete<ApiResponse<null>>(`/api/v1/restaurants/${restaurantId}`);
 }
+
+export interface DeletedRestaurantSummary {
+  id: number;
+  name: string;
+  address: string | null;
+  deletedAt: string;
+  version: number;
+}
+
+export interface DeletedRestaurantListResponse {
+  restaurants: DeletedRestaurantSummary[];
+  nextCursor: string | null;
+  hasNext: boolean;
+}
+
+export async function fetchDeletedRestaurants(cursor?: string, size = 20) {
+  const res = await http.get<ApiResponse<DeletedRestaurantListResponse>>("/api/v1/restaurants/trash", {
+    params: { cursor, size },
+  });
+  return unwrap(res);
+}
+
+export async function restoreRestaurant(restaurantId: number, version: number) {
+  await http.post<ApiResponse<null>>(`/api/v1/restaurants/${restaurantId}/restore`, { version });
+}

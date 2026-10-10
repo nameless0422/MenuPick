@@ -15,6 +15,8 @@ vi.mock("../api/restaurants", () => ({
   createRestaurant: vi.fn(),
   updateRestaurant: vi.fn(),
   deleteRestaurant: vi.fn(),
+  fetchDeletedRestaurants: vi.fn(),
+  restoreRestaurant: vi.fn(),
 }));
 vi.mock("../api/places", () => ({ searchPlacesByKeyword: vi.fn() }));
 vi.mock("../api/menus", () => ({ fetchMenus: vi.fn().mockResolvedValue({ menus: [] }) }));

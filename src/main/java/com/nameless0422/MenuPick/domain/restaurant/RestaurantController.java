@@ -5,6 +5,8 @@ import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,22 @@ import java.util.List;
 public class RestaurantController {
 
     private final RestaurantService restaurantService;
+
+    @GetMapping("/trash")
+    public ResponseEntity<ApiResponse<RestaurantResponse.DeletedRestaurantListResponse>> getDeletedRestaurants(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) @Size(max = 100) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return ResponseEntity.ok(ApiResponse.ok(restaurantService.getDeletedRestaurants(userId, cursor, size)));
+    }
+
+    @PostMapping("/{restaurantId}/restore")
+    public ResponseEntity<ApiResponse<Void>> restoreRestaurant(
+            @AuthenticationPrincipal Long userId, @PathVariable Long restaurantId,
+            @RequestBody @Valid RestaurantRequest.Restore request) {
+        restaurantService.restoreRestaurant(userId, restaurantId, request);
+        return ResponseEntity.ok(ApiResponse.ok());
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<RestaurantResponse.RestaurantSummary>>> getRestaurants(

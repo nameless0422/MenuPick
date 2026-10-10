@@ -12,6 +12,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.time.format.DateTimeParseException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +29,51 @@ public class RestaurantService {
     private final UserRepository userRepository;
     private final MenuRestaurantRepository menuRestaurantRepository;
     private final Clock clock;
+
+    public RestaurantResponse.DeletedRestaurantListResponse getDeletedRestaurants(Long userId, String cursor, int size) {
+        TrashCursor anchor = decodeTrashCursor(cursor);
+        List<Restaurant> restaurants = restaurantRepository.findDeletedRestaurants(userId,
+                anchor == null ? null : anchor.deletedAt(), anchor == null ? null : anchor.id(),
+                PageRequest.of(0, size + 1));
+        boolean hasNext = restaurants.size() > size;
+        List<Restaurant> result = hasNext ? restaurants.subList(0, size) : restaurants;
+        String nextCursor = hasNext ? encodeTrashCursor(result.get(result.size() - 1)) : null;
+        return new RestaurantResponse.DeletedRestaurantListResponse(result.stream()
+                .map(r -> new RestaurantResponse.DeletedRestaurantSummary(
+                        r.getId(), r.getName(), r.getAddress(), r.getDeletedAt(), r.getVersion()))
+                .toList(), nextCursor, hasNext);
+    }
+
+    @Transactional
+    public void restoreRestaurant(Long userId, Long restaurantId, RestaurantRequest.Restore request) {
+        Restaurant restaurant = restaurantRepository.findByIdAndUserId(restaurantId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESTAURANT_NOT_FOUND));
+        if (!restaurant.isDeleted()) return;
+        VersionGuard.requireCurrentVersion(restaurant.getVersion(), request.version());
+        restaurant.restore();
+    }
+
+    private record TrashCursor(LocalDateTime deletedAt, long id) {}
+
+    private static String encodeTrashCursor(Restaurant restaurant) {
+        String value = restaurant.getDeletedAt() + "|" + restaurant.getId();
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static TrashCursor decodeTrashCursor(String cursor) {
+        if (cursor == null) return null;
+        try {
+            if (cursor.length() > 100) throw new IllegalArgumentException();
+            String[] values = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8).split("\\|", -1);
+            if (values.length != 2) throw new IllegalArgumentException();
+            LocalDateTime deletedAt = LocalDateTime.parse(values[0]);
+            long id = Long.parseLong(values[1]);
+            if (id <= 0 || deletedAt.getYear() < 1000 || deletedAt.getYear() > 9999) throw new IllegalArgumentException();
+            return new TrashCursor(deletedAt, id);
+        } catch (IllegalArgumentException | DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "휴지통 커서가 올바르지 않습니다.");
+        }
+    }
 
     public List<RestaurantResponse.RestaurantSummary> getRestaurants(Long userId) {
         return getRestaurants(userId, null);
@@ -142,9 +191,8 @@ public class RestaurantService {
     public void deleteRestaurant(Long userId, Long restaurantId) {
         Restaurant restaurant = findRestaurantOrThrow(userId, restaurantId);
 
-        // 식당은 soft-delete지만 메뉴-식당 링크는 남겨둘 이유가 없다. 남겨두면 링크 조회/수정
-        // 경로마다 isDeleted() 필터에 의존해야 하고, 같은 식당을 다시 등록할 때 유니크 제약과
-        // 충돌한다. 여기서 일괄 정리한다.
+        // 기존 삭제 계약대로 메뉴 연결과 연결별 별점·메모를 물리 삭제한다.
+        // 휴지통 복원은 식당 정보만 복구하며, 연결은 사용자가 다시 만든다.
         menuRestaurantRepository.deleteByRestaurantId(restaurantId);
 
         restaurant.softDelete(LocalDateTime.now(clock));
