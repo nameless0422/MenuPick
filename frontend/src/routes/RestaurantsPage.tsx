@@ -18,6 +18,7 @@ import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import KakaoMap from "../maps/KakaoMap";
 import { safeExternalUrl } from "../externalUrl";
+import RestaurantTrash from "./RestaurantTrash";
 
 export default function RestaurantsPage() {
   const queryClient = useQueryClient();
@@ -32,7 +33,10 @@ export default function RestaurantsPage() {
     queryFn: () => fetchRestaurants(keyword || undefined),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["restaurants"] });
+  const invalidate = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["restaurants"] }),
+    queryClient.invalidateQueries({ queryKey: ["deleted-restaurants"] }),
+  ]);
 
   useEffect(() => {
     const restaurantId = changedRestaurantRef.current;
@@ -72,6 +76,8 @@ export default function RestaurantsPage() {
       </header>
 
       <PlaceSearch onSaved={invalidate} />
+
+      <RestaurantTrash />
 
       <h2>저장한 식당</h2>
       <form
@@ -396,6 +402,8 @@ function RestaurantCard({
     mutationFn: () => deleteRestaurant(summary.id),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["restaurant", summary.id] });
+      void queryClient.invalidateQueries({ queryKey: ["menu-restaurants"] });
+      void queryClient.invalidateQueries({ queryKey: ["history"] });
       onChanged();
       onDeleted();
     },
@@ -503,7 +511,7 @@ function RestaurantCard({
           disabled={deleteMutation.isPending}
           aria-label={`${summary.name} 삭제`}
           onClick={() => {
-            if (window.confirm(`'${summary.name}' 식당을 삭제할까요?`)) {
+            if (window.confirm(`'${summary.name}' 식당을 삭제할까요? 휴지통에서 식당 정보를 복원할 수 있지만 메뉴 연결과 연결별 별점·메모는 삭제됩니다.`)) {
               deleteMutation.mutate();
             }
           }}

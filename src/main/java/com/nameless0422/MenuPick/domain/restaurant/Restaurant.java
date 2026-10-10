@@ -114,6 +114,11 @@ public class Restaurant extends BaseTimeEntity {
         update(name, address, phone, latitude, longitude, naverUrl);
     }
 
+    /** 휴지통 복원은 사용자가 수정해 둔 정보를 유지한다. */
+    public void restore() {
+        this.deletedAt = null;
+    }
+
     /** 삭제 시각은 서비스가 주입한다 — 엔티티는 Clock 빈을 주입받을 수 없다. */
     public void softDelete(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;

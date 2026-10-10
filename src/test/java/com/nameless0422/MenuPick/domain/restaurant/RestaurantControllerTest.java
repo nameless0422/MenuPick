@@ -258,4 +258,60 @@ class RestaurantControllerTest extends AbstractControllerTest {
 
         verify(restaurantService).deleteRestaurant(1L, 1L);
     }
+    @Test void trashReturnsOwnerScopedPageAndCursor() throws Exception {
+        var deletedAt = LocalDateTime.of(2026, 10, 10, 12, 0);
+        given(restaurantService.getDeletedRestaurants(1L, "anchor", 2)).willReturn(
+                new RestaurantResponse.DeletedRestaurantListResponse(List.of(
+                        new RestaurantResponse.DeletedRestaurantSummary(4L, "수정한 식당", "주소", deletedAt, 3)), "next", true));
+        mockMvc.perform(get("/api/v1/restaurants/trash").param("cursor", "anchor").param("size", "2")
+                        .with(authentication(AUTH)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.restaurants[0].version").value(3))
+                .andExpect(jsonPath("$.data.restaurants[0].address").value("주소"))
+                .andExpect(jsonPath("$.data.nextCursor").value("next")).andExpect(jsonPath("$.data.hasNext").value(true));
+        verify(restaurantService).getDeletedRestaurants(1L, "anchor", 2);
+    }
+
+    @Test void trashDefaultsToTwenty() throws Exception {
+        given(restaurantService.getDeletedRestaurants(1L, null, 20)).willReturn(
+                new RestaurantResponse.DeletedRestaurantListResponse(List.of(), null, false));
+        mockMvc.perform(get("/api/v1/restaurants/trash").with(authentication(AUTH)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.restaurants").isEmpty());
+        verify(restaurantService).getDeletedRestaurants(1L, null, 20);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"0", "101", "-1"})
+    void invalidTrashSize(String size) throws Exception {
+        mockMvc.perform(get("/api/v1/restaurants/trash").param("size", size).with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+        verify(restaurantService, never()).getDeletedRestaurants(any(), any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test void longTrashCursorIsRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/restaurants/trash").param("cursor", "a".repeat(101)).with(authentication(AUTH)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test void restorePassesVersion() throws Exception {
+        mockMvc.perform(post("/api/v1/restaurants/4/restore").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"version\":3}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        verify(restaurantService).restoreRestaurant(1L, 4L, new RestaurantRequest.Restore(3L));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"{}", "{\"version\":null}", "{\"version\":-1}"})
+    void invalidRestoreVersion(String body) throws Exception {
+        mockMvc.perform(post("/api/v1/restaurants/4/restore").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest());
+        verify(restaurantService, never()).restoreRestaurant(any(), any(), any());
+    }
+
+    @Test void trashAndRestoreRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/restaurants/trash")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/restaurants/4/restore").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":3}"))
+                .andExpect(status().isUnauthorized());
+    }
 }

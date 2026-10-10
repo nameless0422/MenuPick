@@ -3,6 +3,7 @@ package com.nameless0422.MenuPick.domain.restaurant.dto;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -27,6 +28,10 @@ import java.math.BigDecimal;
  * 그게 이 값의 실제 의미이기 때문이다 — 컬럼에는 들어가지만 지구상에 없는 좌표도 막는다.
  */
 public class RestaurantRequest {
+
+    public record Restore(
+            @NotNull(message = "버전(version)은 필수입니다.") @Min(0) Long version
+    ) {}
 
     /**
      * 링크로 걸어도 되는 주소의 형식. 빈 문자열을 허용하는 이유는 화면이 "지도 링크 없음"을
