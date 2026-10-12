@@ -6,11 +6,12 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantResponse;
-import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import org.springframework.data.domain.PageRequest;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +27,7 @@ import java.util.List;
 public class RestaurantService {
 
     private final RestaurantRepository restaurantRepository;
-    private final UserRepository userRepository;
+    private final RestaurantCreation restaurantCreation;
     private final MenuRestaurantRepository menuRestaurantRepository;
     private final Clock clock;
 
@@ -109,66 +110,36 @@ public class RestaurantService {
      * @return 이미 있던 식당이면 {@code created=false}. 호출부가 201과 200을 구분하는 데 쓴다 —
      *         사용자에게 "새로 저장됐다"와 "이미 있다"는 다른 사실이다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS)
     public CreateResult createRestaurant(Long userId, RestaurantRequest.Create request) {
-        Restaurant existing = findSamePlace(userId, request.kakaoPlaceId());
-
-        if (existing != null) {
-            if (!existing.isDeleted()) {
-                return new CreateResult(toDetail(existing), false);
-            }
-            // 지웠던 식당을 다시 저장하는 경우. 새 행을 넣으면 유니크 제약에 걸리므로 되살린다.
-            existing.restore(request.name(), request.address(), request.phone(),
-                    request.latitude(), request.longitude(), request.naverUrl());
-            return new CreateResult(toDetail(existing), true);
+        // 픽 기록의 식당 선택은 저장·연결·이력 변경을 한 트랜잭션으로 묶는다.
+        // 상위 트랜잭션 안에서는 재시도하지 않고 오류를 전달해 전체를 롤백한다.
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            return restaurantCreation.create(userId, request);
         }
-
-        Restaurant restaurant;
         try {
-            // IDENTITY 전략이라 save() 시점에 INSERT가 즉시 실행되므로 여기서 제약 위반을 잡을 수 있다.
-            restaurant = restaurantRepository.save(Restaurant.builder()
-                    .user(userRepository.getReferenceById(userId))
-                    .name(request.name())
-                    .address(request.address())
-                    .phone(request.phone())
-                    .latitude(request.latitude())
-                    .longitude(request.longitude())
-                    .naverUrl(request.naverUrl())
-                    .kakaoPlaceId(request.kakaoPlaceId())
-                    .build());
-        } catch (DataIntegrityViolationException e) {
-            // uq_restaurants_user_place(user_id, kakao_place_id) 위반 — 위 findSamePlace와 이 INSERT
-            // 사이에 같은 장소를 저장하는 요청이 끼어들었다(더블클릭·재시도가 실제 경로다).
-            //
-            // 여기서 그냥 올려보내면 GlobalExceptionHandler가 409 "데이터 무결성 제약 조건을
-            // 위반했습니다"로 바꾼다. 그런데 이 API의 계약은 정반대다 — 컨트롤러 javadoc이
-            // "중복을 409로 거절하지 않는다"고 길게 적어 두었고, 위의 findSamePlace 분기도
-            // 이미 있던 식당을 created=false로 돌려준다. 경합으로 들어온 요청만 다른 답을
-            // 받으면 같은 버튼을 두 번 누른 사용자에게만 실패가 보인다.
-            //
-            // TagService.createTag / MenuRestaurantService.createMenuRestaurant가 같은 경합을
-            // 같은 방식으로 처리한다. 다만 그쪽은 중복이 곧 오류라 409로 바꾸고, 여기는
-            // 중복이 정상이라 이긴 쪽의 결과를 그대로 돌려준다.
-            Restaurant winner = findSamePlace(userId, request.kakaoPlaceId());
-            if (winner == null) {
-                // kakaoPlaceId가 아닌 다른 제약이 걸렸다는 뜻이다. 삼키면 원인을 잃는다.
-                throw e;
+            return restaurantCreation.create(userId, request);
+        } catch (DataIntegrityViolationException failure) {
+            if (request.kakaoPlaceId() == null || request.kakaoPlaceId().isBlank() || !isPlaceDuplicate(failure)) {
+                throw failure;
             }
-            return new CreateResult(toDetail(winner), false);
+            // 실패한 저장 트랜잭션은 이미 종료됐다. 새 세션으로 한 번만 다시 조회·저장한다.
+            return restaurantCreation.create(userId, request);
         }
-
-        return new CreateResult(toDetail(restaurant), true);
     }
 
-    /** 저장 결과. {@code created=false}면 이미 갖고 있던 식당을 그대로 돌려준 것이다. */
+    private static boolean isPlaceDuplicate(DataIntegrityViolationException failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.hibernate.exception.ConstraintViolationException violation) {
+                String name = violation.getConstraintName();
+                return name != null && (name.equals("uq_restaurants_user_place")
+                        || name.endsWith(".uq_restaurants_user_place"));
+            }
+        }
+        return false;
+    }
+
     public record CreateResult(RestaurantResponse.RestaurantDetail restaurant, boolean created) {}
-
-    private Restaurant findSamePlace(Long userId, String kakaoPlaceId) {
-        if (kakaoPlaceId == null || kakaoPlaceId.isBlank()) {
-            return null;
-        }
-        return restaurantRepository.findByUserIdAndKakaoPlaceId(userId, kakaoPlaceId).orElse(null);
-    }
 
     @Transactional
     public RestaurantResponse.RestaurantDetail updateRestaurant(Long userId, Long restaurantId,
@@ -207,7 +178,7 @@ public class RestaurantService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESTAURANT_NOT_FOUND));
     }
 
-    private RestaurantResponse.RestaurantDetail toDetail(Restaurant restaurant) {
+    static RestaurantResponse.RestaurantDetail toDetail(Restaurant restaurant) {
         return new RestaurantResponse.RestaurantDetail(
                 restaurant.getId(),
                 restaurant.getName(),

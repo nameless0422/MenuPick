@@ -16,6 +16,7 @@ import com.nameless0422.MenuPick.domain.menu.dto.MenuRestaurantResponse;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantService;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantCreation;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantResponse;
 import com.nameless0422.MenuPick.domain.tag.TagRepository;
@@ -60,7 +61,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({JpaConfig.class, MenuService.class, RestaurantService.class, MenuRestaurantService.class})
+@Import({JpaConfig.class, MenuService.class, RestaurantService.class, RestaurantCreation.class, MenuRestaurantService.class})
 @ActiveProfiles("integration")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class StaleFormRejectionTest extends AbstractIntegrationTest {

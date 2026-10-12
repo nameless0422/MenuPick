@@ -52,7 +52,7 @@ class RestaurantServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        restaurantService = new RestaurantService(restaurantRepository, userRepository,
+        restaurantService = new RestaurantService(restaurantRepository, new RestaurantCreation(restaurantRepository, userRepository),
                 menuRestaurantRepository, FIXED_CLOCK);
 
         user = User.builder().email("test@test.com").nickname("tester").build();
@@ -345,7 +345,7 @@ class RestaurantServiceTest {
         given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "8005012"))
                 .willReturn(Optional.empty(), Optional.of(restaurant));
         given(restaurantRepository.save(any(Restaurant.class)))
-                .willThrow(new DataIntegrityViolationException("uq_restaurants_user_place"));
+                .willThrow(new DataIntegrityViolationException("duplicate place", new org.hibernate.exception.ConstraintViolationException("duplicate", new java.sql.SQLException("duplicate", "23000", 1062), "restaurants.uq_restaurants_user_place")));
 
         RestaurantService.CreateResult result = restaurantService.createRestaurant(1L, createRequest());
 
@@ -374,4 +374,23 @@ class RestaurantServiceTest {
                 new BigDecimal("37.5665350"), new BigDecimal("126.9779692"), null, "8005012");
     }
 
+    @Test
+    void createRestaurant_duplicateRetryIsLimitedToOneAttempt() {
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "8005012")).willReturn(Optional.empty());
+        var failure = new DataIntegrityViolationException("duplicate", new org.hibernate.exception.ConstraintViolationException(
+                "duplicate", new java.sql.SQLException("duplicate", "23000", 1062), "uq_restaurants_user_place"));
+        given(restaurantRepository.save(any(Restaurant.class))).willThrow(failure);
+        assertThatThrownBy(() -> restaurantService.createRestaurant(1L, createRequest())).isSameAs(failure);
+        verify(restaurantRepository, org.mockito.Mockito.times(2)).save(any(Restaurant.class));
+    }
+
+    @Test
+    void createRestaurant_otherNamedConstraintIsNotRetried() {
+        given(restaurantRepository.findByUserIdAndKakaoPlaceId(1L, "8005012")).willReturn(Optional.empty());
+        var failure = new DataIntegrityViolationException("foreign key", new org.hibernate.exception.ConstraintViolationException(
+                "foreign key", new java.sql.SQLException("foreign key", "23000", 1452), "fk_restaurants_user"));
+        given(restaurantRepository.save(any(Restaurant.class))).willThrow(failure);
+        assertThatThrownBy(() -> restaurantService.createRestaurant(1L, createRequest())).isSameAs(failure);
+        verify(restaurantRepository, org.mockito.Mockito.times(1)).save(any(Restaurant.class));
+    }
 }

@@ -29,7 +29,7 @@ import static org.mockito.BDDMockito.given;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({JpaConfig.class, RestaurantService.class})
+@Import({JpaConfig.class, RestaurantService.class, RestaurantCreation.class})
 @ActiveProfiles("integration")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class RestaurantTrashIntegrationTest extends AbstractIntegrationTest {
