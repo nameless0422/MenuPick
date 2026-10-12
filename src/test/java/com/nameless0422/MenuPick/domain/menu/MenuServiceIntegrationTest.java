@@ -6,6 +6,7 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantService;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantCreation;
 import com.nameless0422.MenuPick.domain.tag.Tag;
 import com.nameless0422.MenuPick.domain.tag.TagRepository;
 import com.nameless0422.MenuPick.domain.tag.TagService;
@@ -34,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({JpaConfig.class, MenuService.class, RestaurantService.class, TagService.class})
+@Import({JpaConfig.class, MenuService.class, RestaurantService.class, RestaurantCreation.class, TagService.class})
 @ActiveProfiles("integration")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class MenuServiceIntegrationTest extends AbstractIntegrationTest {

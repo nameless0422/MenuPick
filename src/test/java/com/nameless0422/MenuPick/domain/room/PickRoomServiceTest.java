@@ -9,6 +9,7 @@ import com.nameless0422.MenuPick.domain.history.HistoryPlaceService;
 import com.nameless0422.MenuPick.domain.menu.MenuRestaurantRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantService;
+import com.nameless0422.MenuPick.domain.restaurant.RestaurantCreation;
 import com.nameless0422.MenuPick.domain.restaurant.dto.RestaurantRequest;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
@@ -77,7 +78,7 @@ class PickRoomServiceTest extends AbstractIntegrationTest {
     private PickRoomService serviceAt(LocalDateTime now) {
         Clock clock = Clock.fixed(now.atZone(KST).toInstant(), KST);
         RestaurantService restaurants = new RestaurantService(
-                restaurantRepository, userRepository, menuRestaurantRepository, clock);
+                restaurantRepository, new RestaurantCreation(restaurantRepository, userRepository), menuRestaurantRepository, clock);
         HistoryPlaceService places = new HistoryPlaceService(
                 historyRepository, restaurants, restaurantRepository, menuRestaurantRepository);
         return new PickRoomService(roomRepository, vetoRepository, menuRepository,
