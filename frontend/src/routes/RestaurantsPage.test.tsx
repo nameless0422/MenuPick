@@ -949,6 +949,7 @@ describe("수정할 때 상세 조회", () => {
     expect(await screen.findByRole("heading", { name: "식당 수정" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "식당 이름" })).toHaveValue("진주회관");
     expect(fetchRestaurantMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "식당 수정" })).toHaveFocus());
   });
 });
 

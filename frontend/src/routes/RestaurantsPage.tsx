@@ -471,7 +471,7 @@ function RestaurantEditor({ restaurantId, restaurantName, onClose, onSaved }: {
   });
   useEffect(() => {
     if (detail === null && query.data && query.fetchStatus === "idle" && !query.isError) {
-      setFocusForm(pendingRef.current?.contains(document.activeElement) ?? false);
+      setFocusForm(pendingRef.current?.contains(document.activeElement) || document.activeElement === document.body);
       setDetail(query.data);
     }
   }, [detail, query.data, query.fetchStatus, query.isError]);
