@@ -367,36 +367,7 @@ function RestaurantCard({
     setMode(null);
   };
 
-  // 목록(RestaurantSummary)에는 전화·네이버 링크가 없어 상세를 카드별로 조회한다 (react-query가 캐시)
-  const detailQuery = useQuery({
-    queryKey: ["restaurant", summary.id],
-    queryFn: () => fetchRestaurant(summary.id),
-  });
-  const detail = detailQuery.data;
-
-  // "수정"은 상세가 도착해야 폼을 채울 수 있다. 예전에는 그동안 disabled로 잠갔는데,
-  // 그 한 줄이 두 가지를 동시에 망가뜨렸다.
-  //  - 잠긴 이유가 어디에도 없다: disabled 버튼은 Tab 순회에서 통째로 빠지므로
-  //    키보드·스크린리더 사용자에게는 "수정" 버튼이 있다는 사실 자체가 전달되지 않고,
-  //    잠깐 기다리면 되는 상황인지도 알 수 없다.
-  //  - 조회가 실패하면 영구히 잠긴다: detail은 영영 오지 않는데 실패했다는 사실이
-  //    화면에 나오지도 않아, 사용자는 이유 없이 죽어 있는 버튼만 보게 된다. 재시도 수단도
-  //    없어 이 카드의 수정은 새로고침 말고는 되살릴 방법이 없었다.
-  // 진행 중은 aria-busy, 아직 못 쓰는 상태는 aria-disabled로 알리고 사유를
-  // aria-describedby로 버튼에 묶는다. 실패는 사유와 "다시 시도"를 함께 화면에 낸다.
-  // aria-*는 표시일 뿐 클릭을 막지 않으므로, 막는 일은 onClick의 조기 반환이 한다.
-  const editBlocked = !detail;
-  const detailLoadingNoteId = useId();
-  const detailErrorId = useId();
-  // 두 사유는 동시에 성립하지 않는다(실패했으면 로딩 중이 아니다). 성공한 뒤에는
-  // 가리킬 사유가 없다 — 없는 id를 가리키면 참조가 끊겨 아무것도 읽히지 않는다.
-  const editBlockedReasonId = detailQuery.isError
-    ? detailErrorId
-    : editBlocked
-      ? detailLoadingNoteId
-      : undefined;
-
-  const mapUrl = safeExternalUrl(detail?.naverUrl);
+  const mapUrl = safeExternalUrl(summary.naverUrl);
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteRestaurant(summary.id),
@@ -409,11 +380,11 @@ function RestaurantCard({
     },
   });
 
-  if (mode === "edit" && detail) {
+  if (mode === "edit") {
     return (
       <li ref={cardRef} className="card">
-        <RestaurantEditForm
-          detail={detail}
+        <RestaurantEditor
+          restaurantId={summary.id} restaurantName={summary.name}
           onClose={closeForm}
           onSaved={() => {
             closeForm();
@@ -446,55 +417,16 @@ function RestaurantCard({
         )}
       </div>
       <span>{summary.address || "주소 정보 없음"}</span>
-      {detail?.phone && <span>{detail.phone}</span>}
+      {summary.phone && <span>{summary.phone}</span>}
       {deleteMutation.isError && <p className="error" role="alert">{errorMessage(deleteMutation.error)}</p>}
-
-      {/* 아직 조회 중이라 "수정"이 잠겼다는 사실은 눈으로 보면 흐려진 버튼으로 드러나지만,
-          그 사유는 화면에 글자로 없다. 카드마다 "불러오는 중"을 한 줄씩 띄우면 목록이
-          안내문으로 뒤덮이므로, 사유는 감춰 두고 버튼에 aria-describedby로만 묶는다 —
-          초점이 버튼에 닿는 순간 이름 뒤에 이유가 이어 읽힌다. */}
-      {editBlocked && !detailQuery.isError && (
-        <p className="sr-only" id={detailLoadingNoteId}>
-          상세 정보를 불러오는 중이라 아직 수정할 수 없어요.
-        </p>
-      )}
-
-      {/* 조회가 실패하면 여기서 끝나면 안 된다 — 사유와 재시도 수단이 없으면 이 카드의
-          수정은 새로고침 말고 되살릴 방법이 없다. */}
-      {detailQuery.isError && (
-        <>
-          <p className="error" role="alert" id={detailErrorId}>
-            상세 정보를 불러오지 못해 지금은 수정할 수 없어요. {errorMessage(detailQuery.error)}
-          </p>
-          <div className="card-actions">
-            <button
-              type="button"
-              aria-busy={detailQuery.isFetching}
-              aria-disabled={detailQuery.isFetching || undefined}
-              aria-label={`${summary.name} 상세 정보 다시 불러오기`}
-              onClick={() => {
-                if (detailQuery.isFetching) return;
-                void detailQuery.refetch();
-              }}
-            >
-              {detailQuery.isFetching ? "다시 불러오는 중…" : "다시 시도"}
-            </button>
-          </div>
-        </>
-      )}
 
       {/* 버튼 이름에 식당 이름을 넣는다. 없으면 NVDA 요소 목록에서 "수정, 메뉴 연결, 삭제"만
           반복되어 어느 카드의 것인지 알 수 없다. "수정"과 "메뉴 연결"은 확인 단계도 없다. */}
       <div className="card-actions">
         <button
           ref={opener("edit")}
-          // disabled를 쓰지 않는 이유는 위 editBlocked 주석에 적어 두었다.
-          aria-busy={editBlocked && detailQuery.isFetching}
-          aria-disabled={editBlocked || undefined}
-          aria-describedby={editBlockedReasonId}
           aria-label={`${summary.name} 수정`}
           onClick={() => {
-            if (editBlocked) return;
             setMode("edit");
           }}
         >
@@ -526,21 +458,55 @@ function RestaurantCard({
   );
 }
 
+function RestaurantEditor({ restaurantId, restaurantName, onClose, onSaved }: {
+  restaurantId: number; restaurantName: string; onClose: () => void; onSaved: () => void;
+}) {
+  const [detail, setDetail] = useState<RestaurantDetail | null>(null);
+  const [focusForm, setFocusForm] = useState(true);
+  const pendingRef = useRef<HTMLDivElement>(null);
+  const headingRef = useFocusOnMount<HTMLHeadingElement>();
+  const query = useQuery({
+    queryKey: ["restaurant", restaurantId], queryFn: () => fetchRestaurant(restaurantId),
+    enabled: detail === null, refetchOnMount: "always", refetchOnWindowFocus: false, refetchOnReconnect: false,
+  });
+  useEffect(() => {
+    if (detail === null && query.data && query.fetchStatus === "idle" && !query.isError) {
+      setFocusForm(pendingRef.current?.contains(document.activeElement) ?? false);
+      setDetail(query.data);
+    }
+  }, [detail, query.data, query.fetchStatus, query.isError]);
+  // 편집 중에는 초안과 편집을 시작할 때 받은 버전을 고정한다.
+  if (detail) return <RestaurantEditForm detail={detail} focusOnMount={focusForm} onClose={onClose} onSaved={onSaved} />;
+  return <div ref={pendingRef}>
+    <h3 ref={headingRef} tabIndex={-1}>{restaurantName} 수정 정보</h3>
+    {query.isError ? <>
+      <p className="error" role="alert">상세 정보를 불러오지 못했습니다. {errorMessage(query.error)}</p>
+      <button type="button" aria-label={`${restaurantName} 상세 정보 다시 불러오기`}
+        aria-disabled={query.isFetching || undefined}
+        onClick={() => { if (!query.isFetching) void query.refetch(); }}>다시 시도</button>
+    </> : <p role="status">수정할 식당 정보를 불러오는 중…</p>}
+    <button type="button" onClick={onClose}>수정 취소</button>
+  </div>;
+}
+
 // ---- 식당 수정 폼 ----
 
 function RestaurantEditForm({
   detail,
+  focusOnMount,
   onClose,
   onSaved,
 }: {
   detail: RestaurantDetail;
+  focusOnMount: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [name, setName] = useState(detail.name);
   const [address, setAddress] = useState(detail.address ?? "");
   const [phone, setPhone] = useState(detail.phone ?? "");
-  const headingRef = useFocusOnMount<HTMLHeadingElement>();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (focusOnMount) headingRef.current?.focus(); }, [focusOnMount]);
   const queryClient = useQueryClient();
 
   // 이름이 비어 제출을 막았을 때 초점을 돌려보낼 칸과, 그 사유를 버튼·입력에 묶을 id.
@@ -635,6 +601,8 @@ function RestaurantEditForm({
       </label>
 
       {saveMutation.isError && <p className="error" role="alert">{errorMessage(saveMutation.error)}</p>}
+      {saveMutation.isError && apiErrorCode(saveMutation.error) === "CONCURRENT_MODIFICATION" &&
+        <p>작성한 내용은 유지했습니다. 최신 정보를 확인하려면 취소한 뒤 수정 화면을 다시 여세요.</p>}
 
       <div className="card-actions">
         {/* disabled를 쓰지 않는 이유가 두 조건에서 서로 다르다.

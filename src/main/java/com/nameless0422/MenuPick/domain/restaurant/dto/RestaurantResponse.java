@@ -28,15 +28,16 @@ public class RestaurantResponse {
     ) {}
 
     /**
-     * 목록용 요약. 좌표는 상세에도 있지만 여기에도 둔다 — 지도에 마커를 찍으려면
-     * 목록 응답만으로 위치를 알 수 있어야 하고, 없으면 화면이 식당 수만큼 상세를
-     * 추가로 조회하게 된다.
+     * 목록·카드 표시용 정보. 좌표·전화·지도 링크를 함께 내려 카드별 상세 조회를 생략한다.
+     * 수정에 필요한 버전 등은 사용자가 수정 화면을 열 때 상세 API로 조회한다.
      */
     public record RestaurantSummary(
             Long id,
             String name,
             String address,
             BigDecimal latitude,
-            BigDecimal longitude
+            BigDecimal longitude,
+            String phone,
+            String naverUrl
     ) {}
 }
