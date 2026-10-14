@@ -3,11 +3,13 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import RestaurantsPage from "./RestaurantsPage";
-import { fetchRestaurant, fetchRestaurants, updateRestaurant } from "../api/restaurants";
+import { fetchRestaurant, fetchRestaurants, updateRestaurant, type RestaurantDetail } from "../api/restaurants";
 import { resetKakaoSdkForTest } from "../maps/kakaoSdk";
 import { searchPlacesByKeyword } from "../api/places";
 import { fetchMenus } from "../api/menus";
 import { createMenuRestaurant } from "../api/menuRestaurants";
+import { focusManager, onlineManager } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 
 vi.mock("../api/restaurants", () => ({
   fetchRestaurants: vi.fn(),
@@ -35,6 +37,8 @@ function pendingForever<T>() {
 }
 
 beforeEach(() => {
+  focusManager.setFocused(undefined);
+  onlineManager.setOnline(true);
   resetKakaoSdkForTest();
   delete window.kakao;
   fetchRestaurantsMock.mockReset();
@@ -893,89 +897,59 @@ describe("장소 검색 섹션 랜드마크", () => {
   });
 });
 
-/**
- * 카드의 "수정"은 {@code disabled={!detail}}이었다 — 상세 조회가 끝날 때까지 잠긴다.
- *
- * <p>그 한 줄이 두 가지를 동시에 망가뜨렸다.
- * <ul>
- *   <li>잠긴 이유가 어디에도 없다. disabled 버튼은 Tab 순회에서 통째로 빠지므로
- *       키보드·스크린리더 사용자에게는 "수정" 버튼이 있다는 사실 자체가 전달되지 않고,
- *       잠깐 기다리면 되는 상황인지도 알 수 없다.</li>
- *   <li><b>조회가 실패하면 영구히 잠긴다.</b> detail은 영영 오지 않는데 실패했다는 사실이
- *       화면에 나오지도 않아, 사용자는 이유 없이 죽어 있는 버튼만 보게 된다. 재시도 수단도
- *       없어 새로고침 말고는 이 카드의 수정을 되살릴 방법이 없었다.</li>
- * </ul>
- */
-describe("카드의 수정 버튼", () => {
+describe("수정할 때 상세 조회", () => {
   beforeEach(() => {
     vi.stubEnv("VITE_KAKAO_JS_KEY", "");
     fetchRestaurantsMock.mockResolvedValue([JINJU]);
   });
 
-  it("상세를 기다리는 동안에도 초점을 받고 '사용 불가'와 사유가 함께 읽힌다", async () => {
+  it("수정을 눌렀을 때만 조회하고 대기 중에도 취소할 수 있다", async () => {
+    const user = userEvent.setup();
     fetchRestaurantMock.mockReturnValue(pendingForever<typeof jinjuDetail>());
     renderWithProviders(<RestaurantsPage />);
-
     const edit = await screen.findByRole("button", { name: "진주회관 수정" });
-
-    expect(edit).toHaveAttribute("aria-disabled", "true");
-    // disabled였다면 이 focus()가 조용히 무시되어 초점이 <body>에 남는다.
-    edit.focus();
-    expect(edit).toHaveFocus();
-    expect(edit).toHaveAccessibleDescription(/불러오는 중이라 아직 수정할 수 없어요/);
-  });
-
-  it("상세를 기다리는 동안 누른 것이 나중에 폼을 열어젖히지 않는다", async () => {
-    const user = userEvent.setup();
-    let arriveDetail: (detail: typeof jinjuDetail) => void = () => {};
-    fetchRestaurantMock.mockReturnValue(
-      new Promise<typeof jinjuDetail>((resolve) => {
-        arriveDetail = resolve;
-      }),
-    );
-    renderWithProviders(<RestaurantsPage />);
-
-    const edit = await screen.findByRole("button", { name: "진주회관 수정" });
-    // aria-disabled는 표시일 뿐 클릭을 막지 않는다. 조기 반환이 없으면 이 클릭이 mode를
-    // "edit"으로 바꿔 두고, 화면은 detail이 없어 그대로 카드로 남는다 — 사용자는 "아무 일도
-    // 없었다"고 판단하고 손을 뗀다. 그런데 상세가 도착하는 순간 폼이 저 혼자 열려 카드를
-    // 통째로 갈아치우고, 읽던 자리도 초점도 예고 없이 뒤엎인다.
+    expect(fetchRestaurantMock).not.toHaveBeenCalled();
     await user.click(edit);
-
-    arriveDetail(jinjuDetail);
-    await waitFor(() => expect(edit).not.toHaveAttribute("aria-disabled"));
-    expect(screen.queryByRole("heading", { name: "식당 수정" })).not.toBeInTheDocument();
+    expect(fetchRestaurantMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("수정할 식당 정보를 불러오는 중…")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "수정 취소" }));
+    expect(screen.getByRole("button", { name: "진주회관 수정" })).toHaveFocus();
   });
 
-  it("상세 조회가 실패하면 실패 사실과 재시도 수단이 화면에 나온다", async () => {
+  it("조회 도중 취소하면 늦게 도착한 응답이 수정 폼을 열지 않는다", async () => {
+    const user = userEvent.setup();
+    let arriveDetail!: (detail: typeof jinjuDetail) => void;
+    const loading = new Promise<typeof jinjuDetail>((resolve) => { arriveDetail = resolve; });
+    fetchRestaurantMock.mockReturnValue(loading);
+    renderWithProviders(<RestaurantsPage />);
+    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+    await user.click(screen.getByRole("button", { name: "수정 취소" }));
+    await act(async () => { arriveDetail(jinjuDetail); await loading; });
+    expect(screen.queryByRole("heading", { name: "식당 수정" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "진주회관 수정" })).toHaveFocus();
+  });
+
+  it("조회 실패를 알리고 취소와 재시도를 제공한다", async () => {
+    const user = userEvent.setup();
     fetchRestaurantMock.mockRejectedValue(new Error("상세를 못 가져왔다"));
     renderWithProviders(<RestaurantsPage />);
-
-    // 실패가 화면에 나오지 않으면 사용자는 "수정"이 왜 죽어 있는지 영영 알 수 없다.
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /상세 정보를 불러오지 못해 지금은 수정할 수 없어요/,
-    );
-    const edit = screen.getByRole("button", { name: "진주회관 수정" });
-    expect(edit).toHaveAccessibleDescription(/상세 정보를 불러오지 못해/);
-    expect(
-      screen.getByRole("button", { name: "진주회관 상세 정보 다시 불러오기" }),
-    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("상세를 못 가져왔다");
+    expect(screen.getByRole("button", { name: "진주회관 상세 정보 다시 불러오기" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "수정 취소" }));
+    expect(screen.getByRole("button", { name: "진주회관 수정" })).toHaveFocus();
   });
 
-  it("다시 시도가 성공하면 잠금이 풀리고 수정 폼이 열린다", async () => {
+  it("재시도가 성공하면 상세 정보로 폼을 채운다", async () => {
     const user = userEvent.setup();
-    fetchRestaurantMock.mockRejectedValueOnce(new Error("상세를 못 가져왔다"));
-    fetchRestaurantMock.mockResolvedValue(jinjuDetail);
+    fetchRestaurantMock.mockRejectedValueOnce(new Error("상세를 못 가져왔다")).mockResolvedValue(jinjuDetail);
     renderWithProviders(<RestaurantsPage />);
-
-    await user.click(
-      await screen.findByRole("button", { name: "진주회관 상세 정보 다시 불러오기" }),
-    );
-
-    const edit = await screen.findByRole("button", { name: "진주회관 수정" });
-    await waitFor(() => expect(edit).not.toHaveAttribute("aria-disabled"));
-    await user.click(edit);
+    await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+    await user.click(await screen.findByRole("button", { name: "진주회관 상세 정보 다시 불러오기" }));
     expect(await screen.findByRole("heading", { name: "식당 수정" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "식당 이름" })).toHaveValue("진주회관");
+    expect(fetchRestaurantMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "식당 수정" })).toHaveFocus());
   });
 });
 
@@ -993,10 +967,7 @@ describe("지도 보기 링크", () => {
   });
 
   it("https 주소면 링크를 건다", async () => {
-    fetchRestaurantMock.mockResolvedValue({
-      ...jinjuDetail,
-      naverUrl: "https://place.map.kakao.com/12345",
-    });
+    fetchRestaurantsMock.mockResolvedValue([{ ...JINJU, naverUrl: "https://place.map.kakao.com/12345" }]);
 
     renderWithProviders(<RestaurantsPage />);
 
@@ -1005,17 +976,101 @@ describe("지도 보기 링크", () => {
   });
 
   it("javascript: 주소는 링크로 걸지 않는다", async () => {
-    fetchRestaurantMock.mockResolvedValue({
-      ...jinjuDetail,
-      naverUrl: "javascript:alert(document.cookie)",
-    });
+    fetchRestaurantsMock.mockResolvedValue([{ ...JINJU, naverUrl: "javascript:alert(document.cookie)" }]);
 
     renderWithProviders(<RestaurantsPage />);
 
     // 카드 자체는 그대로 떠야 한다 — 지도 보기는 부가 정보라 없어도 나머지를 쓸 수 있다.
     expect(await screen.findByText("진주회관")).toBeInTheDocument();
-    await waitFor(() => expect(fetchRestaurantMock).toHaveBeenCalled());
+    expect(fetchRestaurantMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: /지도 보기/ })).not.toBeInTheDocument();
     expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
   });
+});
+
+it("저장한 식당 여러 개를 표시할 때 카드별 상세 API를 호출하지 않는다", async () => {
+  fetchRestaurantsMock.mockResolvedValue([1, 2, 3].map((id) => ({
+    id, name: `목록 식당 ${id}`, address: "서울", latitude: 37.5, longitude: 127,
+  })));
+  renderWithProviders(<RestaurantsPage />);
+  await screen.findByText("목록 식당 3");
+  expect(fetchRestaurantsMock).toHaveBeenCalledTimes(1);
+  expect(fetchRestaurantMock).not.toHaveBeenCalled();
+});
+it("수정 화면을 다시 열 때 캐시 대신 최신 상세와 버전을 기다린다", async () => {
+  const user = userEvent.setup();
+  let finish!: (detail: RestaurantDetail) => void;
+  const fresh = new Promise<RestaurantDetail>((resolve) => { finish = resolve; });
+  fetchRestaurantsMock.mockResolvedValue([JINJU]);
+  fetchRestaurantMock.mockResolvedValueOnce({ ...jinjuDetail, version: 3 }).mockReturnValueOnce(fresh);
+  renderWithProviders(<RestaurantsPage />);
+  await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+  await screen.findByRole("textbox", { name: "식당 이름" });
+  await user.click(screen.getByRole("button", { name: "취소" }));
+  await user.click(screen.getByRole("button", { name: "진주회관 수정" }));
+  expect(screen.getByText("수정할 식당 정보를 불러오는 중…")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "식당 이름" })).not.toBeInTheDocument();
+  await act(async () => { finish({ ...jinjuDetail, version: 7, phone: "02-7777" }); await fresh; });
+  expect(await screen.findByRole("textbox", { name: "전화" })).toHaveValue("02-7777");
+  await user.click(screen.getByRole("button", { name: "저장" }));
+  await waitFor(() => expect(updateRestaurantMock).toHaveBeenCalledWith(1, expect.objectContaining({ version: 7 })));
+  expect(fetchRestaurantMock).toHaveBeenCalledTimes(2);
+});
+
+it("창 포커스나 재연결로 편집 초안과 시작 버전이 바뀌지 않는다", async () => {
+  const user = userEvent.setup();
+  fetchRestaurantsMock.mockResolvedValue([JINJU]);
+  fetchRestaurantMock.mockResolvedValue({ ...jinjuDetail, version: 4 });
+  renderWithProviders(<RestaurantsPage />);
+  await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+  const name = await screen.findByRole("textbox", { name: "식당 이름" });
+  await user.clear(name);
+  await user.type(name, "작성 중인 이름");
+  await act(async () => {
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    onlineManager.setOnline(false);
+    onlineManager.setOnline(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(name).toHaveValue("작성 중인 이름");
+  expect(fetchRestaurantMock).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole("button", { name: "저장" }));
+  await waitFor(() => expect(updateRestaurantMock).toHaveBeenCalledWith(1, expect.objectContaining({ name: "작성 중인 이름", version: 4 })));
+  focusManager.setFocused(undefined);
+});
+
+it("수정 충돌에서 초안을 유지하고 상세를 자동 재조회하지 않는다", async () => {
+  const user = userEvent.setup();
+  fetchRestaurantsMock.mockResolvedValue([JINJU]);
+  fetchRestaurantMock.mockResolvedValue({ ...jinjuDetail, version: 4 });
+  updateRestaurantMock.mockRejectedValue(new AxiosError("conflict", undefined, undefined, undefined, {
+    status: 409, data: { errorCode: "CONCURRENT_MODIFICATION", message: "다른 요청에서 수정했습니다." },
+    statusText: "Conflict", headers: {}, config: {} as never,
+  }));
+  renderWithProviders(<RestaurantsPage />);
+  await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+  const name = await screen.findByRole("textbox", { name: "식당 이름" });
+  await user.clear(name);
+  await user.type(name, "보존할 초안");
+  await user.click(screen.getByRole("button", { name: "저장" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("다른 요청에서 수정했습니다.");
+  expect(name).toHaveValue("보존할 초안");
+  expect(fetchRestaurantMock).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(/작성한 내용은 유지했습니다/)).toBeInTheDocument();
+});
+
+it("늦게 도착한 상세 응답이 사용자가 옮긴 초점을 가져가지 않는다", async () => {
+  const user = userEvent.setup();
+  let finish!: (detail: typeof jinjuDetail) => void;
+  const fresh = new Promise<typeof jinjuDetail>((resolve) => { finish = resolve; });
+  fetchRestaurantsMock.mockResolvedValue([JINJU]);
+  fetchRestaurantMock.mockReturnValue(fresh);
+  renderWithProviders(<RestaurantsPage />);
+  await user.click(await screen.findByRole("button", { name: "진주회관 수정" }));
+  const search = screen.getByRole("searchbox", { name: "저장한 식당 검색" });
+  await user.click(search);
+  await act(async () => { finish(jinjuDetail); await fresh; });
+  await screen.findByRole("textbox", { name: "식당 이름" });
+  expect(search).toHaveFocus();
 });

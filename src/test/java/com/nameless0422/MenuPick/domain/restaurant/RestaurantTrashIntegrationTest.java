@@ -190,4 +190,39 @@ class RestaurantTrashIntegrationTest extends AbstractIntegrationTest {
     private String encode(String value) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
+    @Test void listIncludesCardFieldsInOneStatementAndExcludesOtherUsersAndDeletedRows() {
+        User owner = user("cards"), other = user("cards-other");
+        Restaurant first = restaurant(owner, "첫 식당", null);
+        Restaurant second = restaurant(owner, "둘째 식당", null);
+        restaurant(owner, "삭제한 식당", NOW);
+        restaurant(other, "타인 식당", null);
+        var statistics = emf.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        var rows = service.getRestaurants(owner.getId());
+        assertThat(rows).extracting(r -> r.id()).containsExactlyInAnyOrder(first.getId(), second.getId());
+        assertThat(rows).allSatisfy(r -> {
+            assertThat(r.phone()).isEqualTo("02-1234");
+            assertThat(r.naverUrl()).isEqualTo("https://place.map.kakao.com/123");
+        });
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+    }
+
+    @Test void searchReturnsCardFieldsAndNullInformationInOneStatement() {
+        User owner = user("card-search");
+        restaurant(owner, "검색된 식당", null);
+        restaurants.save(Restaurant.builder().user(owner).name("검색된 빈 정보")
+                .latitude(new BigDecimal("37.5")).longitude(new BigDecimal("127")).build());
+        restaurant(owner, "다른 이름", null);
+        var statistics = emf.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        var rows = service.getRestaurants(owner.getId(), "검색된");
+        assertThat(rows).hasSize(2);
+        assertThat(rows.stream().filter(r -> r.name().equals("검색된 식당")).findFirst().orElseThrow().phone()).isEqualTo("02-1234");
+        var empty = rows.stream().filter(r -> r.name().equals("검색된 빈 정보")).findFirst().orElseThrow();
+        assertThat(empty.phone()).isNull();
+        assertThat(empty.naverUrl()).isNull();
+        assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+    }
 }

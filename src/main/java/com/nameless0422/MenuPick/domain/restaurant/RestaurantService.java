@@ -89,7 +89,8 @@ public class RestaurantService {
                 : restaurantRepository.searchSavedRestaurants(userId, pattern);
         return restaurants.stream()
                 .map(r -> new RestaurantResponse.RestaurantSummary(
-                        r.getId(), r.getName(), r.getAddress(), r.getLatitude(), r.getLongitude()))
+                        r.getId(), r.getName(), r.getAddress(), r.getLatitude(), r.getLongitude(),
+                        r.getPhone(), r.getNaverUrl()))
                 .toList();
     }
 

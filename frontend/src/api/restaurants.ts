@@ -9,6 +9,8 @@ export interface RestaurantSummary {
   // 옛 서버(좌표 없는 응답)와 섞여 돌 수 있으므로 화면에서는 없을 수 있다고 보고 다룬다.
   latitude: number;
   longitude: number;
+  phone?: string | null;
+  naverUrl?: string | null;
 }
 
 // RestaurantResponse.RestaurantDetail
