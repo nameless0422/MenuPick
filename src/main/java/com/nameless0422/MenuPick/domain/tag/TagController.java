@@ -45,6 +45,14 @@ public class TagController {
                 .body(ApiResponse.ok(tagService.createTag(userId, request)));
     }
 
+    @PatchMapping("/{tagId}")
+    public ResponseEntity<ApiResponse<TagResponse.TagInfo>> renameTag(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long tagId,
+            @RequestBody @Valid TagRequest.Rename request) {
+        return ResponseEntity.ok(ApiResponse.ok(tagService.renameTag(userId, tagId, request)));
+    }
+
     @DeleteMapping("/{tagId}")
     public ResponseEntity<ApiResponse<Void>> deleteTag(
             @AuthenticationPrincipal Long userId,

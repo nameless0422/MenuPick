@@ -80,7 +80,7 @@ const BIBIM = {
   tags: [],
 };
 
-const HONBAP = { id: 10, name: "혼밥", createdAt: "2026-01-01T00:00:00" };
+const HONBAP = { id: 10, name: "혼밥", createdAt: "2026-01-01T00:00:00", version: 0 };
 
 /** 상세 조회 응답. 목록(MenuSummary)에 없는 memo까지 채워야 수정 폼이 열린다. */
 const detail = (overrides: Partial<MenuDetail> = {}): MenuDetail => ({

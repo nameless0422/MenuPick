@@ -4,6 +4,7 @@ export interface TagInfo {
   id: number;
   name: string;
   createdAt: string;
+  version: number;
 }
 
 export async function searchTags(keyword: string) {
@@ -33,4 +34,9 @@ export async function createTag(name: string) {
 
 export async function deleteTag(tagId: number) {
   await http.delete<ApiResponse<null>>(`/api/v1/tags/${tagId}`);
+}
+
+export async function renameTag(tagId: number, name: string, version: number) {
+  const res = await http.patch<ApiResponse<TagInfo>>(`/api/v1/tags/${tagId}`, { name, version });
+  return unwrap(res);
 }

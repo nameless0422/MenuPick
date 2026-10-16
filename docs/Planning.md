@@ -263,6 +263,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | --- | --- | --- | --- |
 | GET | /tags?keyword=혼밥 | 태그 자동완성 검색 | Y |
 | POST | /tags | 새 태그 생성 | Y |
+| PATCH | /tags/{tagId} | 이름 변경. name·version 필수, 연결·필터 ID 유지, 중복·수정 충돌 409 | Y |
 | DELETE | /tags/{tagId} | 태그 삭제 (연결 메뉴 연쇄 처리) | Y |
 
 

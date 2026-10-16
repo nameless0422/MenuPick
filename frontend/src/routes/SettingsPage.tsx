@@ -13,10 +13,10 @@ import {
   type Me,
   type Provider,
 } from "../api/auth";
-import { deleteTag, fetchAllTags } from "../api/tags";
+import { deleteTag, fetchAllTags, renameTag, type TagInfo } from "../api/tags";
 import { fetchDefaultExcludedTagIds, updateDefaultExcludedTagIds } from "../api/pickPreferences";
 import { linkAuthorizeUrl } from "../auth/oauthUrls";
-import { apiErrorMessage as errorMessage } from "../api/http";
+import { apiErrorMessage as errorMessage, apiErrorCode } from "../api/http";
 import "./SettingsPage.css";
 
 export default function SettingsPage() {
@@ -264,7 +264,7 @@ function DefaultExclusionSection() {
 }
 
 /**
- * 태그 관리 — 만든 태그를 지우는 유일한 자리.
+ * 태그 이름 변경·삭제는 계정 전체에 적용되므로 설정에서 관리한다.
  *
  * <h2>왜 여기인가</h2>
  *
@@ -287,6 +287,15 @@ function TagSection() {
   // 마지막 하나였으면 목록도 함께 사라지므로 섹션으로 보낸다. (이 화면의 다른 절들과 같은 처리)
   const sectionRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState<TagInfo | null>(null);
+  const editOpener = useRef<HTMLButtonElement | null>(null);
+  const closeEditor = (restoreFocus: boolean) => {
+    setEditing(null);
+    if (restoreFocus) {
+      if (editOpener.current?.isConnected) editOpener.current.focus();
+      else sectionRef.current?.focus();
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (tagId: number) => deleteTag(tagId),
@@ -301,6 +310,7 @@ function TagSection() {
   return (
     <section className="card settings-section" aria-labelledby={headingId} ref={sectionRef} tabIndex={-1}>
       <h2 id={headingId}>태그</h2>
+      <p className="settings-desc">이름을 바꿔도 메뉴 연결과 기본 제외·빠른 픽 조건은 유지됩니다.</p>
       <p className="settings-desc">
         태그를 삭제하면 그 태그가 붙어 있던 <strong>모든 메뉴에서 함께 빠집니다.</strong> 메뉴 자체는 지워지지 않아요.
       </p>
@@ -320,28 +330,91 @@ function TagSection() {
       {tags.length > 0 && (
         <div className="chip-row" ref={listRef} tabIndex={-1}>
           {tags.map((tag) => (
+            <span className="tag-manage-item" key={tag.id}>
+            <span>#{tag.name}</span>
+            <button type="button" aria-label={`${tag.name} 태그 이름 변경`}
+              aria-disabled={editing !== null || deleteMutation.isPending || undefined}
+              onClick={(event) => {
+                if (editing || deleteMutation.isPending) return;
+                editOpener.current = event.currentTarget;
+                setEditing(tag);
+              }}>이름 변경</button>
             <button
-              key={tag.id}
               type="button"
               className="chip chip-tag"
               // 이름이 없으면 요소 목록에 "태그 삭제"만 태그 수만큼 반복되어 어느 것인지 알 수 없다.
               aria-label={`${tag.name} 태그 삭제`}
               aria-busy={deleteMutation.isPending}
+              aria-disabled={editing !== null || deleteMutation.isPending || undefined}
               onClick={() => {
-                if (deleteMutation.isPending) return;
+                if (editing || deleteMutation.isPending) return;
                 // 되돌릴 수 없고 다른 메뉴에까지 번지는 동작이라, 무엇이 일어나는지 이름과 함께 확인시킨다.
                 if (window.confirm(`'${tag.name}' 태그를 삭제할까요? 이 태그가 붙은 모든 메뉴에서 빠집니다.`)) {
                   deleteMutation.mutate(tag.id);
                 }
               }}
             >
-              #{tag.name} ✕
+              삭제
             </button>
+            </span>
           ))}
         </div>
       )}
+      {editing && <TagRenameForm tag={editing}
+        onCancel={() => closeEditor(true)} onSaved={(restoreFocus) => closeEditor(restoreFocus)} />}
     </section>
   );
+}
+
+function TagRenameForm({ tag, onCancel, onSaved }: {
+  tag: TagInfo; onCancel: () => void; onSaved: (restoreFocus: boolean) => void;
+}) {
+  const [name, setName] = useState(tag.name);
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const queryClient = useQueryClient();
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  const mutation = useMutation({
+    mutationFn: () => renameTag(tag.id, name.trim(), tag.version),
+    onSuccess: (updated) => {
+      const restoreFocus = formRef.current?.contains(document.activeElement)
+        || document.activeElement === document.body;
+      queryClient.setQueryData<TagInfo[]>(["tags", "all"], (tags) => tags?.map(
+        (current) => current.id === updated.id ? updated : current));
+      for (const key of ["tags", "menus", "menu"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      onSaved(Boolean(restoreFocus));
+    },
+    onError: (error) => {
+      if (apiErrorCode(error) === "CONCURRENT_MODIFICATION") {
+        void queryClient.invalidateQueries({ queryKey: ["tags"] });
+      }
+    },
+  });
+  const valid = name.trim().length > 0 && name.trim().length <= 50;
+  return <form ref={formRef} className="tag-rename-form" aria-label={`${tag.name} 태그 이름 변경`}
+    onSubmit={(event) => {
+      event.preventDefault();
+      if (mutation.isPending) return;
+      if (!valid) { inputRef.current?.focus(); return; }
+      mutation.mutate();
+    }}>
+    <label htmlFor={inputId}>새 태그 이름</label>
+    <input ref={inputRef} id={inputId} value={name} maxLength={50}
+      readOnly={mutation.isPending} onChange={(event) => setName(event.target.value)} />
+    {!valid && <p className="settings-desc">이름은 1~50자로 입력해 주세요.</p>}
+    {mutation.isError && <p role="alert" className="error">{errorMessage(mutation.error)}</p>}
+    {mutation.isError && apiErrorCode(mutation.error) === "CONCURRENT_MODIFICATION" &&
+      <p>입력한 이름은 유지했습니다. 최신 이름을 확인하려면 취소한 뒤 다시 변경해 주세요.</p>}
+    <div className="card-actions">
+      <button type="submit" aria-disabled={!valid || mutation.isPending || undefined}
+        aria-busy={mutation.isPending}>{mutation.isPending ? "저장 중…" : "이름 저장"}</button>
+      <button type="button" aria-disabled={mutation.isPending || undefined}
+        onClick={() => { if (!mutation.isPending) onCancel(); }}>이름 변경 취소</button>
+    </div>
+  </form>;
 }
 
 /**

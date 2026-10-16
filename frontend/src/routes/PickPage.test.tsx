@@ -53,7 +53,7 @@ const fetchAllTagsMock = vi.mocked(fetchAllTags);
 const fetchTrendsMock = vi.mocked(fetchTrends);
 const fetchPickPresetsMock = vi.mocked(fetchPickPresets);
 const executePickPresetMock = vi.mocked(executePickPreset);
-const HONBAP = { id: 7, name: "혼밥", createdAt: "2026-01-01T00:00:00" };
+const HONBAP = { id: 7, name: "혼밥", createdAt: "2026-01-01T00:00:00", version: 0 };
 
 /**
  * 위치 요청을 붙잡아 두는 스텁.
@@ -672,7 +672,7 @@ describe("태그 제안 칩", () => {
   it("검색어를 치면 검색 결과로 바뀐다", async () => {
     const user = userEvent.setup();
     fetchAllTagsMock.mockResolvedValue([HONBAP]);
-    searchTagsMock.mockResolvedValue([{ id: 9, name: "국물", createdAt: "2026-01-01T00:00:00" }]);
+    searchTagsMock.mockResolvedValue([{ id: 9, name: "국물", createdAt: "2026-01-01T00:00:00", version: 0 }]);
     renderWithProviders(<PickPage />);
 
     await screen.findAllByRole("button", { name: "혼밥 태그 추가" });

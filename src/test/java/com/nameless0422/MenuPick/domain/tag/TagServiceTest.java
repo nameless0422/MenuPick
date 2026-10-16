@@ -230,4 +230,31 @@ class TagServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.TAG_DUPLICATE);
     }
+
+    @Test
+    void renameRejectsAnotherOwnersTag() {
+        given(tagRepository.findByIdAndUserId(1L, 999L)).willReturn(Optional.empty());
+        assertThatThrownBy(() -> tagService.renameTag(999L, 1L, new TagRequest.Rename("새 이름", 0L)))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.TAG_NOT_FOUND);
+        verify(tagRepository, never()).flush();
+    }
+
+    @Test
+    void renameRejectsStaleVersionBeforeChangingName() {
+        given(tagRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(tag));
+        assertThatThrownBy(() -> tagService.renameTag(1L, 1L, new TagRequest.Rename("새 이름", 1L)))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.CONCURRENT_MODIFICATION);
+        assertThat(tag.getName()).isEqualTo("혼밥");
+        verify(tagRepository, never()).flush();
+    }
+
+    @Test
+    void renameTranslatesUniqueConstraintRace() {
+        given(tagRepository.findByIdAndUserId(1L, 1L)).willReturn(Optional.of(tag));
+        given(tagRepository.findByUserIdAndName(1L, "새 이름")).willReturn(Optional.empty());
+        org.mockito.Mockito.doThrow(new DataIntegrityViolationException("uq_tags_user_name"))
+                .when(tagRepository).flush();
+        assertThatThrownBy(() -> tagService.renameTag(1L, 1L, new TagRequest.Rename("새 이름", 0L)))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.TAG_DUPLICATE);
+    }
 }

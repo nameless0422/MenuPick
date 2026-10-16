@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { AxiosError } from "axios";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
@@ -12,7 +13,7 @@ import {
   type Me,
 } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
-import { deleteTag, fetchAllTags } from "../api/tags";
+import { deleteTag, fetchAllTags, renameTag } from "../api/tags";
 import { fetchDefaultExcludedTagIds, updateDefaultExcludedTagIds } from "../api/pickPreferences";
 
 // 실제 모듈의 상수(PROVIDERS·PROVIDER_LABELS·PASSWORD_MIN_LENGTH)는 화면이 그대로 쓰므로
@@ -28,7 +29,7 @@ vi.mock("../api/auth", async (importOriginal) => ({
 vi.mock("../auth/AuthContext", () => ({ useAuth: vi.fn() }));
 // 태그 절도 마운트되자마자 목록을 부른다. 갈아 끼우지 않으면 이 화면의 모든 테스트가
 // 실패한 요청의 에러 alert를 하나씩 더 그리게 된다.
-vi.mock("../api/tags", () => ({ fetchAllTags: vi.fn(), deleteTag: vi.fn() }));
+vi.mock("../api/tags", () => ({ fetchAllTags: vi.fn(), deleteTag: vi.fn(), renameTag: vi.fn() }));
 vi.mock("../api/pickPreferences", () => ({
   fetchDefaultExcludedTagIds: vi.fn(), updateDefaultExcludedTagIds: vi.fn(),
 }));
@@ -39,6 +40,7 @@ const changePasswordMock = vi.mocked(changePassword);
 const useAuthMock = vi.mocked(useAuth);
 const fetchAllTagsMock = vi.mocked(fetchAllTags);
 const deleteTagMock = vi.mocked(deleteTag);
+const renameTagMock = vi.mocked(renameTag);
 const fetchPreferencesMock = vi.mocked(fetchDefaultExcludedTagIds);
 const updatePreferencesMock = vi.mocked(updateDefaultExcludedTagIds);
 const loginFn = vi.fn();
@@ -97,6 +99,7 @@ beforeEach(() => {
   });
   fetchAllTagsMock.mockResolvedValue([]);
   deleteTagMock.mockResolvedValue(undefined);
+  renameTagMock.mockReset();
   fetchPreferencesMock.mockResolvedValue([]);
   updatePreferencesMock.mockImplementation(async (ids) => ids);
   // 연동 시작은 브라우저를 통째로 제공자로 보낸다. jsdom은 실제 이동을 못 하므로
@@ -560,7 +563,107 @@ describe("설정 화면의 섹션 구조", () => {
  * 프론트에 호출하는 곳이 하나도 없었다. 오타로 만든 태그가 자동완성에 영영 남았다.
  */
 describe("SettingsPage 태그 관리", () => {
-  const tag = (id: number, name: string) => ({ id, name, createdAt: "2026-01-01T00:00:00" });
+  const tag = (id: number, name: string) => ({ id, name, createdAt: "2026-01-01T00:00:00", version: 0 });
+
+  it("연결을 유지하면서 이름과 화면에서 받은 버전을 저장한다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    const original = { ...tag(1, "혼밥오타"), version: 4 };
+    const updated = { ...original, name: "혼밥", version: 5 };
+    fetchAllTagsMock.mockResolvedValue([original]);
+    renameTagMock.mockImplementation(async () => {
+      fetchAllTagsMock.mockResolvedValue([updated]);
+      return updated;
+    });
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "혼밥오타 태그 이름 변경" }));
+    const input = screen.getByRole("textbox", { name: "새 태그 이름" });
+    expect(input).toHaveFocus();
+    await user.clear(input);
+    await user.type(input, "  혼밥  ");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    await waitFor(() => expect(renameTagMock).toHaveBeenCalledWith(1, "혼밥", 4));
+    await waitFor(() => expect(screen.getByRole("button", { name: "혼밥 태그 이름 변경" })).toHaveFocus());
+    expect(deleteTagMock).not.toHaveBeenCalled();
+  });
+
+  it("취소하면 저장하지 않고 원래 이름 변경 버튼으로 돌아간다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+    renderSettings();
+    const opener = await screen.findByRole("button", { name: "혼밥 태그 이름 변경" });
+    await user.click(opener);
+    await user.click(screen.getByRole("button", { name: "이름 변경 취소" }));
+    expect(opener).toHaveFocus();
+    expect(renameTagMock).not.toHaveBeenCalled();
+  });
+
+  it("공백 이름과 저장 중 중복 제출을 막는다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+    renameTagMock.mockReturnValue(pendingForever());
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 이름 변경" }));
+    const input = screen.getByRole("textbox", { name: "새 태그 이름" });
+    await user.clear(input);
+    await user.type(input, "   ");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    expect(renameTagMock).not.toHaveBeenCalled();
+    await user.type(input, "식사");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    await user.click(screen.getByRole("button", { name: "저장 중…" }));
+    await user.click(screen.getByRole("button", { name: "이름 변경 취소" }));
+    expect(renameTagMock).toHaveBeenCalledTimes(1);
+    expect(input).toHaveAttribute("readonly");
+    expect(input).toBeInTheDocument();
+  });
+
+  it("중복 오류는 초안을 유지하고 입력을 고쳐 다시 저장할 수 있다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+    renameTagMock.mockRejectedValue(new Error("이미 같은 이름의 태그가 있습니다."));
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 이름 변경" }));
+    const input = screen.getByRole("textbox", { name: "새 태그 이름" });
+    await user.clear(input);
+    await user.type(input, "점심");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("이미 같은 이름");
+    expect(input).toHaveValue("점심");
+    await user.type(input, " 식사");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    await waitFor(() => expect(renameTagMock).toHaveBeenLastCalledWith(1, "점심 식사", 0));
+  });
+
+  it("충돌 후에도 초안과 시작 버전을 유지하고 다시 열면 최신 값을 쓴다", async () => {
+    const user = userEvent.setup();
+    fetchMeMock.mockResolvedValue(me());
+    fetchAllTagsMock.mockResolvedValue([tag(1, "혼밥")]);
+    renameTagMock.mockImplementation(async () => {
+      fetchAllTagsMock.mockResolvedValue([{ ...tag(1, "다른 탭 이름"), version: 1 }]);
+      throw new AxiosError("conflict", "ERR_BAD_REQUEST", undefined, undefined, {
+        status: 409, data: { errorCode: "CONCURRENT_MODIFICATION" }, headers: {},
+      } as never);
+    });
+    renderSettings();
+    await user.click(await screen.findByRole("button", { name: "혼밥 태그 이름 변경" }));
+    const input = screen.getByRole("textbox", { name: "새 태그 이름" });
+    await user.clear(input);
+    await user.type(input, "내 초안");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    expect(await screen.findByText(/입력한 이름은 유지했습니다/)).toBeInTheDocument();
+    expect(input).toHaveValue("내 초안");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    await waitFor(() => expect(renameTagMock).toHaveBeenLastCalledWith(1, "내 초안", 0));
+    await user.click(screen.getByRole("button", { name: "이름 변경 취소" }));
+    await user.click(await screen.findByRole("button", { name: "다른 탭 이름 태그 이름 변경" }));
+    expect(screen.getByRole("textbox", { name: "새 태그 이름" })).toHaveValue("다른 탭 이름");
+    await user.click(screen.getByRole("button", { name: "이름 저장" }));
+    await waitFor(() => expect(renameTagMock).toHaveBeenLastCalledWith(1, "다른 탭 이름", 1));
+  });
 
   it("내가 만든 태그를 보여준다", async () => {
     fetchMeMock.mockResolvedValue(me());
