@@ -1,12 +1,38 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-10-10 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-16 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-16 태그 이름 변경
+
+- 설정에서 태그 이름을 변경한다. 같은 ID와 생성일, 메뉴 연결, 기본 제외, 빠른 픽의
+  포함·제외 조건을 유지한다. 중복 이름으로 태그를 합치지 않고, 과거 픽의 필터 이름은
+  당시 값으로 남긴다. 이름은 앞뒤 공백을 제거한 1~50자다.
+- `PATCH /api/v1/tags/{tagId}`는 이름과 필수 비음수 버전을 받는다. 타인·없는 태그는
+  404, 중복 이름·오래된 버전·실제 동시 UPDATE는 409다. 응답 전에 flush해 새 버전을
+  반환한다. 같은 이름 저장은 버전을 올리지 않는다. 편집 중 초안과 시작 버전을 고정하고
+  충돌 시 초안을 보존한다. 취소 후 최신 이름으로 다시 열 수 있으며 저장 중 중복 요청을 막는다.
+- V20은 `tags.version BIGINT NOT NULL DEFAULT 0`을 추가한다. 기존 태그와 참조 행을
+  다시 만들지 않는다. 로컬 백엔드 `check` 987개와 커버리지 기준, 프론트 빌드·린트·Vitest
+  540개·Playwright 13개가 통과했다. 실제 MySQL에서 참조 유지·대소문자 중복·사용자 격리·
+  동시 수정의 단일 승자와 기존 행의 V20 적용을 검증했다. PR #346과 배포 main의
+  frontend·test·docker-build CI가 모두 통과했다. 설계 비교와 운영 관찰 항목은 D-063에 있다.
+- `main` SHA `3124950cdef1452c4900dfb2e9f62d29c7ac630f`로 운영 배포했다. 배포 전 백업
+  `menupick-20261016-002937Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다.
+  배포 전후 users 3·menus 45·restaurants 1·menu_restaurants 1·histories 10·tags 12·
+  menu_tags 76개를 유지했다. pick_presets·pick_preset_tags·user_default_excluded_tags는
+  모두 0개로 유지됐다. 기존 태그의 ID·이름·생성일 해시가 같고 버전은 모두 0이다.
+- Flyway V20 `success=1`, 버전 컬럼의 NOT NULL·기본값 0, 다섯 컨테이너 healthy,
+  readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 이름 변경 API 401을 확인했다.
+  새 UI 번들과 app/web의 배포 SHA·ARM64 이미지, 앱 ERROR 로그 0건도 확인했다.
+  이후 app·web·mysql·redis·mailpit을 모두 중지했다. MySQL·Redis 데이터 볼륨은 유지했고
+  서버 루트 디스크 사용률은 51%다. 마지막 배포 이후 머지한 식당 저장 경합 수정·목록 중복
+  요청 제거·의존성 보안 업데이트도 이 배포에 포함됐다.
 
 ### 2026-10-10 식당 휴지통과 복원
 
