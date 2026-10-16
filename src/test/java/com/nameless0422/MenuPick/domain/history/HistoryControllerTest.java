@@ -32,6 +32,42 @@ class HistoryControllerTest extends AbstractControllerTest {
     @MockitoBean private HistoryService historyService;
     @MockitoBean private HistoryPlaceService historyPlaceService;
     @MockitoBean private EatingSummaryService eatingSummaryService;
+    @MockitoBean private HistoryExportService historyExportService;
+
+    @Test void exportsAnAttachmentWithoutCaching() throws Exception {
+        byte[] csv = "\uFEFF메뉴\r\n국수\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        given(historyExportService.export(1L, 30, true, "국수"))
+                .willReturn(new HistoryExportService.ExportFile("menupick-history-2026-10-16.csv", csv));
+        mockMvc.perform(get("/api/v1/history/export").with(authentication(AUTH))
+                        .param("days", "30").param("visited", "true").param("keyword", "국수"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("text/csv;charset=UTF-8"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"menupick-history-2026-10-16.csv\""))
+                .andExpect(content().bytes(csv));
+    }
+
+    @Test void exportRequiresAuthenticationAndValidatesFilters() throws Exception {
+        mockMvc.perform(get("/api/v1/history/export")).andExpect(status().isUnauthorized());
+        for (String days : List.of("0", "-1", "3651")) {
+            mockMvc.perform(get("/api/v1/history/export").with(authentication(AUTH)).param("days", days))
+                    .andExpect(status().isBadRequest());
+        }
+        mockMvc.perform(get("/api/v1/history/export").with(authentication(AUTH)).param("keyword", "가".repeat(101)))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/history/export").with(authentication(AUTH)).param("visited", "invalid"))
+                .andExpect(status().isBadRequest());
+        verify(historyExportService, never()).export(any(), any(), any(), any());
+    }
+
+    @Test void exportLimitIsAJsonErrorInsteadOfACsvFile() throws Exception {
+        given(historyExportService.export(1L, null, null, null))
+                .willThrow(new BusinessException(ErrorCode.HISTORY_EXPORT_LIMIT_EXCEEDED));
+        mockMvc.perform(get("/api/v1/history/export").with(authentication(AUTH)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("HISTORY_EXPORT_LIMIT_EXCEEDED"))
+                .andExpect(header().doesNotExist("Content-Disposition"));
+    }
 
     @Test void getMemo_returnsTextAndVersion() throws Exception {
         given(historyService.getMemo(1L, 5L)).willReturn(new HistoryResponse.MemoResponse(5L, "덜 맵게", 3L));

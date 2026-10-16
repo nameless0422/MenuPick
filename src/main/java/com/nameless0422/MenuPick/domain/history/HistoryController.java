@@ -10,6 +10,10 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +27,20 @@ public class HistoryController {
     private final HistoryService historyService;
     private final HistoryPlaceService historyPlaceService;
     private final EatingSummaryService eatingSummaryService;
+    private final HistoryExportService historyExportService;
+
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) @Min(1) @Max(3650) Integer days,
+            @RequestParam(required = false) Boolean visited,
+            @RequestParam(required = false) @Size(max = 100) String keyword) {
+        var file = historyExportService.export(userId, days, visited, keyword);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(file.filename()).build().toString())
+                .body(file.content());
+    }
 
     @GetMapping("/{historyId}/memo")
     public ResponseEntity<ApiResponse<HistoryResponse.MemoResponse>> getMemo(
