@@ -16,6 +16,7 @@ import "./HistoryPage.css";
 import VisitCalendar from "./VisitCalendar";
 import EatingSummary from "./EatingSummary";
 import HistoryMemo from "./HistoryMemo";
+import HistoryExport from "./HistoryExport";
 
 // "전체" 필터는 백엔드에 별도 옵션이 없어 충분히 큰 값을 넘겨 사실상 전체 기간을 조회한다.
 // days를 아예 생략하면 백엔드가 7일로 대체하고(HistoryService), 0 이하는 @Min(1)에 걸려 400이다.
@@ -189,6 +190,8 @@ export default function HistoryPage() {
         ))}
       </div>
 
+      <HistoryExport days={days} visited={visited} keyword={keyword} />
+
       {historyQuery.isError && <>
         <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>
         <button type="button" aria-disabled={historyQuery.isFetching || undefined}
@@ -210,7 +213,7 @@ export default function HistoryPage() {
       {/* 기간 필터를 바꾸면 목록이 통째로 갈리는데 화면 아래가 조용히 다시 그려질 뿐이다.
           리전은 마운트 시점부터(비어 있더라도) DOM에 있어야 한다 — 내용과 함께 뒤늦게
           삽입되는 라이브 리전은 통지되지 않는다. */}
-      <div role="status">
+      <div role="status" aria-label="픽 기록 목록 상태">
         {historyQuery.isPending && <p>불러오는 중…</p>}
         {historyQuery.isSuccess && histories.length === 0 && (
           <p>

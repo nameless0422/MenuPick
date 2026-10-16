@@ -8,6 +8,7 @@ import { fetchMenus } from "../api/menus";
 
 vi.mock("../api/history", () => ({
   fetchHistories: vi.fn(),
+  fetchHistoryCsv: vi.fn(),
   fetchHistoryMemo: vi.fn(),
   updateHistoryMemo: vi.fn(),
   // 요약 절도 마운트되자마자 부른다. 빈 요약이면 이 파일이 보는 화면은 그대로다
@@ -265,7 +266,7 @@ describe("방문 처리 취소", () => {
     await waitFor(() => expect(unmarkVisitedMock).toHaveBeenCalledWith(10));
     await waitFor(() => expect(fetchHistoriesMock).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("button", { name: "김치찌개 방문했어요" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("방문 처리를 취소했습니다.");
+    expect(screen.getByRole("status", { name: "픽 기록 목록 상태" })).toHaveTextContent("방문 처리를 취소했습니다.");
   });
 });
 
@@ -327,7 +328,7 @@ describe("목록 상태 통지", () => {
   it("몇 개인지 알린다", async () => {
     renderWithProviders(<HistoryPage />);
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("픽 기록 1개"));
+    await waitFor(() => expect(screen.getByRole("status", { name: "픽 기록 목록 상태" })).toHaveTextContent("픽 기록 1개"));
   });
 
   it("삭제 성공을 이름과 함께 알린다", async () => {
@@ -338,7 +339,7 @@ describe("목록 상태 통지", () => {
     await user.click(await screen.findByRole("button", { name: /김치찌개 픽 기록 삭제/ }));
 
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent("'김치찌개' 픽 기록을 삭제했습니다."),
+      expect(screen.getByRole("status", { name: "픽 기록 목록 상태" })).toHaveTextContent("'김치찌개' 픽 기록을 삭제했습니다."),
     );
     confirmSpy.mockRestore();
   });
@@ -348,7 +349,7 @@ describe("목록 상태 통지", () => {
 
     renderWithProviders(<HistoryPage />);
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/아직 픽 기록이 없어요/));
+    await waitFor(() => expect(screen.getByRole("status", { name: "픽 기록 목록 상태" })).toHaveTextContent(/아직 픽 기록이 없어요/));
     // 빈 <ul>이 남으면 "목록, 항목 0개"로 읽혀 위 안내와 어긋난다.
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });

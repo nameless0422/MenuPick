@@ -132,6 +132,7 @@ public enum ErrorCode {
 
     // --- History ---
     HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "히스토리를 찾을 수 없습니다."),
+    HISTORY_EXPORT_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "내려받을 기록이 1,000건을 넘습니다. 기간이나 검색 조건을 좁혀주세요."),
 
     // --- Pick: 여럿이 같이 뽑기 (domain/room) ---
     /** 없는 방과 만료된 방은 같은 404다 — 링크가 유효했는지를 바깥에서 알아낼 이유가 없다. */

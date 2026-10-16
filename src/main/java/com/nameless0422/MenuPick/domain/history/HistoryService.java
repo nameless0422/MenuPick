@@ -25,7 +25,6 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class HistoryService {
 
-    private static final int DEFAULT_DAYS = 7;
     private static final int VISIT_CALENDAR_LIMIT = 500;
     private static final YearMonth EARLIEST_CALENDAR_MONTH = YearMonth.of(2000, 1);
 
@@ -40,17 +39,13 @@ public class HistoryService {
 
     public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, Boolean visited,
                                                            int size, String keyword) {
-        // days는 컨트롤러에서 @Min(1)로 검증되므로 여기서는 미지정(null) 여부만 판단한다.
-        int effectiveDays = (days != null) ? days : DEFAULT_DAYS;
-        LocalDateTime after = LocalDateTime.now(clock).minusDays(effectiveDays);
+        HistoryFilters filters = HistoryFilters.of(clock, days, keyword);
+        LocalDateTime after = filters.after();
         PageRequest pageable = PageRequest.of(0, size + 1);
 
         List<History> histories;
-        String search = keyword == null ? "" : keyword.trim();
-        if (!search.isEmpty()) {
-            String pattern = "%" + search.replace("!", "!!").replace("%", "!%")
-                    .replace("_", "!_") + "%";
-            histories = historyRepository.searchByNames(userId, after, cursor, visited, pattern, pageable);
+        if (filters.pattern() != null) {
+            histories = historyRepository.searchByNames(userId, after, cursor, visited, filters.pattern(), pageable);
         } else if (visited != null && cursor != null) {
             histories = historyRepository.findByUserIdAndIsVisitedAndRecommendedAtAfterAndIdLessThanOrderByIdDesc(
                     userId, visited, after, cursor, pageable);

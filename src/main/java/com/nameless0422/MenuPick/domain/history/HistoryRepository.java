@@ -85,6 +85,32 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
         LocalDateTime getVisitedAt();
     }
 
+    /** CSV에 필요한 값만 한 번에 읽어 컬렉션 추가 조회와 COUNT를 생략한다. */
+    @Query("""
+            select h.id as id, h.recommendedAt as recommendedAt, m.name as menuName,
+                   r.name as restaurantName, h.isVisited as visited, h.visitedAt as visitedAt,
+                   h.recommendationFeedback as feedback, h.memo as memo
+            from History h left join h.menu m left join h.restaurant r
+            where h.user.id = :userId and h.recommendedAt > :after
+              and (:visited is null or h.isVisited = :visited)
+              and (:pattern is null or m.name like :pattern escape '!' or r.name like :pattern escape '!')
+            order by h.id desc
+            """)
+    List<ExportRow> findExportRows(@Param("userId") Long userId, @Param("after") LocalDateTime after,
+                                   @Param("visited") Boolean visited, @Param("pattern") String pattern,
+                                   Pageable pageable);
+
+    interface ExportRow {
+        Long getId();
+        LocalDateTime getRecommendedAt();
+        String getMenuName();
+        String getRestaurantName();
+        boolean getVisited();
+        LocalDateTime getVisitedAt();
+        RecommendationFeedback getFeedback();
+        String getMemo();
+    }
+
     /**
      * 개인화에 필요한 최근 추천 시각과 피드백 합계를 메뉴별 한 행으로 돌려준다.
      * 이벤트를 전부 애플리케이션으로 올리지 않고 DB에서 먼저 상쇄해 요청당 조회를 한 번으로

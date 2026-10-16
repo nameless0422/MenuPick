@@ -1,6 +1,7 @@
 import { http, unwrap, type ApiResponse } from "./http";
 import { fetchMenuRestaurants as fetchMenuRestaurantList } from "./menuRestaurants";
 import type { KakaoPlace } from "./places";
+import { isAxiosError } from "axios";
 
 // 백엔드 PickService가 실제로 기록하는 filterType 값 (History.java / PickService.java 참고).
 // CATEGORY: 카테고리명 그대로, TAG_INCLUDE/TAG_EXCLUDE: 태그 "이름"(조회 실패 시에만 ID 문자열
@@ -98,6 +99,25 @@ export async function fetchHistories(cursor?: number, days?: number, size = 20, 
     params: { cursor, days, size, visited, keyword },
   });
   return unwrap(res);
+}
+
+export async function fetchHistoryCsv(days: number, visited?: boolean, keyword?: string): Promise<Blob> {
+  try {
+    const res = await http.get<Blob>("/api/v1/history/export", {
+      params: { days, visited, keyword }, responseType: "blob",
+    });
+    const contentType = res.headers["content-type"];
+    if (typeof contentType !== "string" || contentType.split(";")[0].trim().toLowerCase() !== "text/csv") {
+      throw new Error("기록 파일을 받지 못했습니다. 다시 시도해 주세요.");
+    }
+    return res.data;
+  } catch (error) {
+    // 파일 요청의 JSON 오류도 Blob으로 도착하므로 공통 오류 메시지가 읽을 수 있게 변환한다.
+    if (isAxiosError(error) && error.response?.data instanceof Blob) {
+      try { error.response.data = JSON.parse(await error.response.data.text()); } catch { /* 공통 오류 처리 */ }
+    }
+    throw error;
+  }
 }
 
 // restaurantId를 함께 보내면 기록된 식당을 실제 방문한 식당으로 덮어쓴다 (HistoryService.markVisited).
