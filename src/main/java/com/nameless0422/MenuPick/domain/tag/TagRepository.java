@@ -13,6 +13,8 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
 
     Optional<Tag> findByUserIdAndName(Long userId, String name);
 
+    Optional<Tag> findByIdAndUserId(Long id, Long userId);
+
     /**
      * 이름 접두사로 자기 태그를 찾는다. {@code prefix}는 <b>이미 이스케이프되어 % 가 붙은</b>
      * LIKE 패턴이어야 한다({@code TagService.searchTags} 참고).

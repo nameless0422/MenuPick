@@ -33,6 +33,10 @@ public class Tag {
     @Column(nullable = false, length = 50)
     private String name;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -40,6 +44,10 @@ public class Tag {
     @Builder
     public Tag(User user, String name) {
         this.user = user;
+        this.name = name;
+    }
+
+    public void rename(String name) {
         this.name = name;
     }
 }

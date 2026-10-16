@@ -31,8 +31,8 @@ class TagControllerTest extends AbstractControllerTest {
     void searchTags_success() throws Exception {
         given(tagService.searchTags(1L, "혼"))
                 .willReturn(List.of(
-                        new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now()),
-                        new TagResponse.TagInfo(2L, "혼술", LocalDateTime.now())));
+                        new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now(), 0L),
+                        new TagResponse.TagInfo(2L, "혼술", LocalDateTime.now(), 0L)));
 
         mockMvc.perform(get("/api/v1/tags")
                         .param("keyword", "혼")
@@ -47,7 +47,7 @@ class TagControllerTest extends AbstractControllerTest {
     @DisplayName("GET /api/v1/tags?all=true - 태그 관리 화면용 전체 목록")
     void listTags_success() throws Exception {
         given(tagService.listTags(1L))
-                .willReturn(List.of(new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now())));
+                .willReturn(List.of(new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now(), 0L)));
 
         mockMvc.perform(get("/api/v1/tags")
                         .param("all", "true")
@@ -86,7 +86,7 @@ class TagControllerTest extends AbstractControllerTest {
     @DisplayName("POST /api/v1/tags - 태그 생성 성공 (201)")
     void createTag_success() throws Exception {
         given(tagService.createTag(eq(1L), any(TagRequest.Create.class)))
-                .willReturn(new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now()));
+                .willReturn(new TagResponse.TagInfo(1L, "혼밥", LocalDateTime.now(), 0L));
 
         mockMvc.perform(post("/api/v1/tags")
                         .with(authentication(AUTH))
@@ -121,6 +121,37 @@ class TagControllerTest extends AbstractControllerTest {
     @DisplayName("DELETE /api/v1/tags/{tagId} - 미인증 시 401")
     void deleteTag_unauthorized() throws Exception {
         mockMvc.perform(delete("/api/v1/tags/1"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void renameReturnsNewVersionAndTrimsName() throws Exception {
+        given(tagService.renameTag(1L, 7L, new TagRequest.Rename("혼밥", 3L)))
+                .willReturn(new TagResponse.TagInfo(7L, "혼밥", LocalDateTime.now(), 4L));
+        mockMvc.perform(patch("/api/v1/tags/7").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  혼밥  \",\"version\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(7))
+                .andExpect(jsonPath("$.data.version").value(4));
+    }
+
+    @Test
+    void renameValidatesNameAndVersion() throws Exception {
+        for (String body : List.of("{\"name\":\" \",\"version\":0}",
+                "{\"name\":\"혼밥\"}", "{\"name\":\"혼밥\",\"version\":-1}",
+                "{\"name\":\"" + "가".repeat(51) + "\",\"version\":0}")) {
+            mockMvc.perform(patch("/api/v1/tags/7").with(authentication(AUTH))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        verify(tagService, never()).renameTag(any(), any(), any());
+    }
+
+    @Test
+    void renameRequiresAuthentication() throws Exception {
+        mockMvc.perform(patch("/api/v1/tags/7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"혼밥\",\"version\":0}"))
                 .andExpect(status().isUnauthorized());
     }
 }

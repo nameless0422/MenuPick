@@ -33,7 +33,7 @@ class OptimisticLockMigrationTest extends AbstractIntegrationTest {
 
     /** V9의 메뉴·식당·연결과 V19의 이력 메모가 사용하는 버전 컬럼. */
     private static final List<String> VERSIONED_TABLES =
-            List.of("menus", "restaurants", "menu_restaurants", "histories");
+            List.of("menus", "restaurants", "menu_restaurants", "histories", "tags");
 
     @Autowired
     private EntityManager em;
@@ -79,7 +79,7 @@ class OptimisticLockMigrationTest extends AbstractIntegrationTest {
     @DisplayName("버전 컬럼을 넣지 않기로 한 테이블에는 생기지 않는다")
     void unversionedTablesAreUntouched() {
         // histories에는 V19에서 편집 가능한 메모를 추가했다. 나머지 테이블은 기존 정책을 유지한다.
-        for (String table : List.of("tags", "history_filter_conditions", "users")) {
+        for (String table : List.of("history_filter_conditions", "users")) {
             Number count = (Number) em.createNativeQuery("""
                             SELECT COUNT(*) FROM information_schema.columns
                             WHERE table_schema = DATABASE()

@@ -4,5 +4,5 @@ import java.time.LocalDateTime;
 
 public class TagResponse {
 
-    public record TagInfo(Long id, String name, LocalDateTime createdAt) {}
+    public record TagInfo(Long id, String name, LocalDateTime createdAt, long version) {}
 }

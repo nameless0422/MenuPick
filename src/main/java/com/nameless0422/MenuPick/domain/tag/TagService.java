@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.tag;
 
 import com.nameless0422.MenuPick.common.exception.BusinessException;
+import com.nameless0422.MenuPick.common.domain.VersionGuard;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.pick.PickPresetRepository;
 import com.nameless0422.MenuPick.domain.tag.dto.TagRequest;
@@ -49,7 +50,7 @@ public class TagService {
     public List<TagResponse.TagInfo> listTags(Long userId) {
         return tagRepository.findAllByUserIdOrderByName(userId, PageRequest.of(0, MAX_MANAGED_TAGS))
                 .stream()
-                .map(t -> new TagResponse.TagInfo(t.getId(), t.getName(), t.getCreatedAt()))
+                .map(TagService::toInfo)
                 .toList();
     }
 
@@ -60,7 +61,7 @@ public class TagService {
         String pattern = escapeLike(keyword.trim()) + "%";
         return tagRepository
                 .searchByNamePattern(userId, pattern, PageRequest.of(0, MAX_SUGGESTIONS)).stream()
-                .map(t -> new TagResponse.TagInfo(t.getId(), t.getName(), t.getCreatedAt()))
+                .map(TagService::toInfo)
                 .toList();
     }
 
@@ -98,7 +99,30 @@ public class TagService {
             throw new BusinessException(ErrorCode.TAG_DUPLICATE);
         }
 
-        return new TagResponse.TagInfo(tag.getId(), tag.getName(), tag.getCreatedAt());
+        return toInfo(tag);
+    }
+
+    /** ID를 유지해 메뉴 연결·기본 제외·빠른 픽 조건은 그대로 둔다. */
+    @Transactional
+    public TagResponse.TagInfo renameTag(Long userId, Long tagId, TagRequest.Rename request) {
+        Tag tag = tagRepository.findByIdAndUserId(tagId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TAG_NOT_FOUND));
+        VersionGuard.requireCurrentVersion(tag.getVersion(), request.version());
+        tagRepository.findByUserIdAndName(userId, request.name())
+                .filter(existing -> !existing.getId().equals(tagId))
+                .ifPresent(existing -> { throw new BusinessException(ErrorCode.TAG_DUPLICATE); });
+        tag.rename(request.name());
+        try {
+            // 버전 증가와 유니크 충돌을 응답을 만들기 전에 확정한다.
+            tagRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.TAG_DUPLICATE);
+        }
+        return toInfo(tag);
+    }
+
+    private static TagResponse.TagInfo toInfo(Tag tag) {
+        return new TagResponse.TagInfo(tag.getId(), tag.getName(), tag.getCreatedAt(), tag.getVersion());
     }
 
     @Transactional
