@@ -8,6 +8,33 @@
 
 ## 제품 완성도
 
+### 2026-10-16 픽 기록 CSV 내려받기
+
+- 픽 기록에서 적용한 기간·방문 상태·메뉴 또는 식당 검색어로 CSV를 내려받는다.
+  화면에서 아직 더 보기로 읽지 않은 기록도 포함한다. 최대 1,000건이며 초과하면
+  일부만 내려받지 않고 조건을 좁히라는 오류를 표시한다. 빈 결과는 헤더만 반환한다.
+  내려받는 동안 중복 요청을 막고 요청 시점의 필터를 고정하며, 오류 응답은 파일로 저장하지 않는다.
+- `GET /api/v1/history/export`는 인증 사용자 범위에서 스칼라 열만 조회한다. ID 역순과
+  `LIMIT 1001`을 적용해 COUNT와 컬렉션 조회를 생략하며 실제 MySQL에서 JDBC 구문 1개를
+  확인했다. UTF-8 BOM·CRLF·따옴표 이스케이프와 메모 줄바꿈, KST 시각, 수식 시작 문자
+  방어를 적용한다. 응답은 첨부 CSV와 `Cache-Control: no-store`이며 초과 오류는 JSON이다.
+  DB·인덱스·인프라 변경은 없다. 대안 비교와 한계·운영 관찰 항목은 D-064를 따른다.
+- 로컬 백엔드 `check` 1,011개와 커버리지 검증, 프런트 lint·build·Vitest 547개·
+  Playwright 14개가 통과했다. 실제 MySQL에서 사용자 격리·기간·방문·검색·삭제된 이름과
+  1,000건/1,001건 경계, 브라우저에서 미조회 기록 포함 다운로드와 실패 재시도를 검증했다.
+  PR #348과 배포 `main`의 frontend·test·docker-build CI가 모두 통과했다.
+- `main` SHA `2b31dc1acbed8cc26cd0f239c7af8500690cfa3f`로 운영 배포했다. 배포 전 백업
+  `menupick-20261016-125406Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다.
+  배포 전후 users 3·menus 45·restaurants 1·menu_restaurants 1·histories 10·tags 12·
+  menu_tags 76개를 유지했다. pick_presets·pick_preset_tags·user_default_excluded_tags도
+  모두 0개로 유지됐으며 기존 이력 내용 해시가 같고 Flyway는 V20 `success=1`을 유지했다.
+- 운영 계정의 전체·미방문 조건으로 각각 CSV 9건을 읽어 DB의 ID·순서와 대조하고
+  8개 열·BOM·첨부 헤더·캐시 금지를 확인했다. 운영 데이터 변경은 없었다. 다섯 컨테이너
+  healthy, readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 CSV API 401,
+  새 UI 번들과 app/web의 배포 SHA·ARM64 이미지, app ERROR 로그 0건도 확인했다.
+  이후 app·web·mysql·redis·mailpit을 모두 중지하고 중지 상태를 다시 조회했다.
+  MySQL·Redis 데이터 볼륨을 유지했으며 서버 루트 디스크 사용률은 52%다.
+
 ### 2026-10-16 태그 이름 변경
 
 - 설정에서 태그 이름을 변경한다. 같은 ID와 생성일, 메뉴 연결, 기본 제외, 빠른 픽의
