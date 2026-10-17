@@ -1,12 +1,41 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-10-16 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-17 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-17 내 메뉴 카테고리별 조회
+
+- 내 메뉴에서 이름과 카테고리를 함께 검색한다. 프리셋과 직접 만든 분류를 지원하며
+  제출할 때만 조회한다. 적용한 분류를 표시하고 더 보기·수정 후 재조회에도 유지한다.
+  초기화는 두 조건을 지운다. 빈 결과는 조건 변경을 안내한다.
+- `GET /api/v1/menus`의 선택 `category`는 최대 20자이며 앞뒤 공백을 제거한다.
+  생략·빈 값·공백이면 전체이며 값이 있으면 대소문자를 포함해 정확히 비교한다.
+  소유자·삭제 상태·이름·커서를 함께 적용하고 EXISTS로 다중 카테고리의 메뉴 중복을 막는다.
+  ID 역순과 `size+1` SQL LIMIT을 유지하며 COUNT는 없다. 태그·분류가 있는 메뉴 21개에서
+  첫 20개와 다음 페이지 여부를 JDBC 구문 3개로 읽었다. DB·인덱스·인프라 변경은 없다.
+  대안 비교와 관찰 조건은 D-065를 따른다.
+- 로컬 백엔드 `check` 1,014개와 커버리지 검증, 프런트 lint·build·Vitest 549개와
+  새 Playwright 여정이 통과했다. PR #350과 배포 `main`의 frontend·test·docker-build CI도
+  모두 통과했으며 CI에서 전체 Vitest 549개·Playwright 15개를 확인했다. 실제 MySQL에서
+  사용자 격리·삭제·커서·다중 분류·특수문자·직접 만든 분류·대소문자·빈 조건을 검증했다.
+- `main` SHA `614d15f4b59a022445b949e62b3c28623dcbfc2b`로 운영 배포했다. 배포 전 백업
+  `menupick-20261017-132341Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다.
+  배포 전후 users 3·menus 45·restaurants 1·menu_restaurants 1·histories 10·tags 12·
+  menu_tags 76개를 유지했다. pick_presets·pick_preset_tags·user_default_excluded_tags도
+  모두 0개로 유지됐으며 이력·메뉴 내용·카테고리·태그 연결의 해시가 같았다. Flyway는
+  V20 `success=1`을 유지했다. 운영 데이터 변경은 없었다.
+- 운영 계정으로 카테고리 첫 5건·다음 페이지·이름 검색 조합을 DB의 ID·순서와 대조했다.
+  없는 분류와 공백 조건도 확인했다. 공백·생략 응답의 카테고리와 태그는 순서가 보장되지
+  않으므로 정렬해 비교했다. 첫 검증의 배열 순서 비교를 수정한 뒤 전체 배포 검증을 다시 통과했다.
+  다섯 컨테이너 healthy, readiness·전체 health UP, HTTPS 200, HTTP 301, 미인증 목록
+  API 401, 새 UI 번들·app/web 배포 SHA·ARM64 이미지, app ERROR 로그 0건을 확인했다.
+  이후 app·web·mysql·redis·mailpit을 모두 중지하고 중지 상태를 다시 조회했다.
+  MySQL·Redis 데이터 볼륨을 유지했으며 서버 루트 디스크 사용률은 54%다.
 
 ### 2026-10-16 픽 기록 CSV 내려받기
 
