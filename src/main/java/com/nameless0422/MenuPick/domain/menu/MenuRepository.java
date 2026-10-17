@@ -15,6 +15,21 @@ import java.util.Set;
 
 public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificationExecutor<Menu>, MenuRepositoryCustom {
 
+    /** EXISTS로 메뉴 행 중복 없이 SQL LIMIT을 적용한다. 카테고리는 추천 조건처럼 정확히 비교한다. */
+    @Query(value = """
+            SELECT m.* FROM menus m
+             WHERE m.user_id = :userId AND m.deleted_at IS NULL
+               AND (:cursor IS NULL OR m.id < :cursor)
+               AND (:pattern IS NULL OR m.name LIKE :pattern ESCAPE '!')
+               AND EXISTS (SELECT 1 FROM menu_categories mc
+                            WHERE mc.menu_id = m.id AND BINARY mc.category = BINARY :category)
+             ORDER BY m.id DESC
+            """, nativeQuery = true)
+    List<Menu> searchActiveByCategory(@Param("userId") Long userId,
+                                    @Param("cursor") Long cursor,
+                                    @Param("pattern") String pattern,
+                                    @Param("category") String category, Pageable pageable);
+
     /** 방에 복사할 최대 100개만 읽는다. 바이너리 정렬은 기존 Java 이름 정렬과 대소문자를 맞춘다. */
     @Query(value = """
             SELECT m.id AS id, m.name AS name, m.weight AS weight

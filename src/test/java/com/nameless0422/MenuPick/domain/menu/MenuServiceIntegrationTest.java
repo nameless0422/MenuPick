@@ -54,6 +54,63 @@ class MenuServiceIntegrationTest extends AbstractIntegrationTest {
     @Autowired private RestaurantRepository restaurantRepository;
     @Autowired private RestaurantService restaurantService;
     @Autowired private MenuRestaurantRepository menuRestaurantRepository;
+    @Autowired private jakarta.persistence.EntityManagerFactory entityManagerFactory;
+
+    @Test
+    void categorySearchCombinesNameCursorOwnershipAndExactCategory() {
+        User owner = trashUser("category");
+        User other = trashUser("category-other");
+        var first = menuService.createMenu(owner.getId(), new MenuRequest.Create(
+                "기본 국수", null, 1, java.util.Set.of("한식", "면"), java.util.Set.of()));
+        var second = menuService.createMenu(owner.getId(), new MenuRequest.Create(
+                "100%_! 국수", null, 1, java.util.Set.of("한식", "면"), java.util.Set.of()));
+        menuService.createMenu(owner.getId(), new MenuRequest.Create(
+                "중국 국수", null, 1, java.util.Set.of("중식"), java.util.Set.of()));
+        var removed = menuService.createMenu(owner.getId(), new MenuRequest.Create(
+                "삭제 국수", null, 1, java.util.Set.of("한식"), java.util.Set.of()));
+        menuService.deleteMenu(owner.getId(), removed.id());
+        menuService.createMenu(other.getId(), new MenuRequest.Create(
+                "타인 국수", null, 1, java.util.Set.of("한식"), java.util.Set.of()));
+
+        var page = menuService.getMenus(owner.getId(), null, 1, " 국수 ", " 한식 ");
+        assertThat(page.menus()).extracting(MenuResponse.MenuSummary::id).containsExactly(second.id());
+        assertThat(page.menus().get(0).categories()).containsExactlyInAnyOrder("한식", "면");
+        assertThat(page.hasNext()).isTrue();
+        var next = menuService.getMenus(owner.getId(), page.nextCursor(), 1, "국수", "한식");
+        assertThat(next.menus()).extracting(MenuResponse.MenuSummary::id).containsExactly(first.id());
+        assertThat(next.hasNext()).isFalse();
+        assertThat(menuService.getMenus(owner.getId(), null, 20, "%_!", "한식").menus())
+                .extracting(MenuResponse.MenuSummary::id).containsExactly(second.id());
+        assertThat(menuService.getMenus(owner.getId(), null, 20, null, "한").menus()).isEmpty();
+        assertThat(menuService.getMenus(owner.getId(), null, 20, null, "미등록").menus()).isEmpty();
+        assertThat(menuService.getMenus(owner.getId(), null, 20, null, "  ").menus()).hasSize(3);
+    }
+
+    @Test
+    void customCategoryIsCaseSensitiveAndDoesNotGrowQueriesPerMenu() {
+        User owner = trashUser("category-batch");
+        Tag tag = tagRepository.save(Tag.builder().user(owner).name("점심").build());
+        for (int i = 0; i < 21; i++) {
+            menuService.createMenu(owner.getId(), new MenuRequest.Create(
+                    "Soup " + i, null, 1, java.util.Set.of("Lunch", "직접 만든 분류"), java.util.Set.of(tag.getId())));
+        }
+        assertThat(menuService.getMenus(owner.getId(), null, 20, null, "lunch").menus()).isEmpty();
+        var statistics = entityManagerFactory.unwrap(org.hibernate.SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        try {
+            var result = menuService.getMenus(owner.getId(), null, 20, null, "직접 만든 분류");
+            assertThat(result.menus()).hasSize(20);
+            assertThat(result.hasNext()).isTrue();
+            assertThat(result.menus()).allSatisfy(menu -> {
+                assertThat(menu.categories()).contains("Lunch", "직접 만든 분류");
+                assertThat(menu.tags()).extracting(MenuResponse.TagSummary::id).containsExactly(tag.getId());
+            });
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
+        } finally {
+            statistics.setStatisticsEnabled(false);
+        }
+    }
 
     @Test
     void restoreMenu_preservesIdentitySettingsAndLinksAndAllowsRetry() {

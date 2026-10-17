@@ -205,7 +205,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 
 | Method | Endpoint | 설명 | 인증 필요 |
 | --- | --- | --- | --- |
-| GET | /menus | 메뉴 목록 조회 (커서 페이지네이션) | Y |
+| GET | /menus | 메뉴 목록 조회. 이름 포함 검색 `keyword`·정확한 카테고리 `category`·커서 페이지네이션 | Y |
 | POST | /menus | 메뉴 생성 | Y |
 | GET | /menus/{menuId} | 메뉴 상세 조회 | Y |
 | PUT | /menus/{menuId} | 메뉴 수정 | Y |

@@ -93,7 +93,7 @@ class MenuControllerTest extends AbstractControllerTest {
     void getMenus_success() throws Exception {
         var summary = new MenuResponse.MenuSummary(1L, "김치찌개", 3, false, Set.of("한식"), List.of());
         var response = new MenuResponse.MenuListResponse(List.of(summary), null, false);
-        given(menuService.getMenus(1L, null, 20, null)).willReturn(response);
+        given(menuService.getMenus(1L, null, 20, null, null)).willReturn(response);
 
         mockMvc.perform(get("/api/v1/menus")
                         .with(authentication(AUTH)))
@@ -105,7 +105,7 @@ class MenuControllerTest extends AbstractControllerTest {
 
     @Test
     void getMenus_forwardsSearchAndCursor() throws Exception {
-        given(menuService.getMenus(1L, 10L, 5, "국수"))
+        given(menuService.getMenus(1L, 10L, 5, "국수", null))
                 .willReturn(new MenuResponse.MenuListResponse(List.of(), null, false));
 
         mockMvc.perform(get("/api/v1/menus")
@@ -114,7 +114,20 @@ class MenuControllerTest extends AbstractControllerTest {
                         .param("size", "5")
                         .param("keyword", "국수"))
                 .andExpect(status().isOk());
-        verify(menuService).getMenus(1L, 10L, 5, "국수");
+        verify(menuService).getMenus(1L, 10L, 5, "국수", null);
+    }
+
+    @Test
+    void getMenus_forwardsCategoryAndValidatesLength() throws Exception {
+        given(menuService.getMenus(1L, null, 20, "국수", "한식"))
+                .willReturn(new MenuResponse.MenuListResponse(List.of(), null, false));
+        mockMvc.perform(get("/api/v1/menus").with(authentication(AUTH))
+                        .param("keyword", "국수").param("category", "한식"))
+                .andExpect(status().isOk());
+        verify(menuService).getMenus(1L, null, 20, "국수", "한식");
+        mockMvc.perform(get("/api/v1/menus").with(authentication(AUTH))
+                        .param("category", "가".repeat(21)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

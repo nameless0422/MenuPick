@@ -117,6 +117,37 @@ const editButton = () => screen.getByRole("button", { name: "김치찌개 수정
 const newMenuButton = () => screen.getByRole("button", { name: "+ 새 메뉴" });
 
 describe("메뉴 이름 검색", () => {
+  it("직접 만든 카테고리와 이름을 제출할 때만 적용하고 다음 페이지에도 유지한다", async () => {
+    const user = userEvent.setup();
+    fetchMenusMock.mockImplementation(async (cursor, _size, _keyword, category) => {
+      if (!category) return { menus: [BIBIM], nextCursor: null, hasNext: false };
+      return { menus: [{ ...KIMCHI, id: cursor ? 1 : 3 }], nextCursor: cursor ? null : 3, hasNext: !cursor };
+    });
+    renderWithProviders(<MenusPage />);
+    await screen.findByText("비빔밥");
+    const calls = fetchMenusMock.mock.calls.length;
+    await user.type(screen.getByLabelText("조회 카테고리"), " 직접 분류 ");
+    await user.type(screen.getByRole("searchbox", { name: "내 메뉴 검색" }), " 찌개 ");
+    expect(fetchMenusMock).toHaveBeenCalledTimes(calls);
+    await user.click(screen.getByRole("button", { name: "검색" }));
+    await screen.findByText("적용한 카테고리: 직접 분류");
+    expect(fetchMenusMock).toHaveBeenLastCalledWith(undefined, 20, "찌개", "직접 분류");
+    await user.click(screen.getByRole("button", { name: "더 보기" }));
+    await waitFor(() => expect(fetchMenusMock).toHaveBeenLastCalledWith(3, 20, "찌개", "직접 분류"));
+    await user.click(screen.getByRole("button", { name: "초기화" }));
+    await screen.findByText("비빔밥");
+    expect(screen.getByLabelText("조회 카테고리")).toHaveValue("");
+    expect(screen.queryByText(/적용한 카테고리:/)).not.toBeInTheDocument();
+  });
+
+  it("빈 카테고리 결과에서 조건 변경을 안내한다", async () => {
+    const user = userEvent.setup();
+    fetchMenusMock.mockResolvedValue({ menus: [], nextCursor: null, hasNext: false });
+    renderWithProviders(<MenusPage />);
+    await user.type(screen.getByLabelText("조회 카테고리"), "없는 분류");
+    await user.click(screen.getByRole("button", { name: "검색" }));
+    await screen.findByText("조건에 맞는 메뉴가 없습니다. 이름·카테고리를 바꾸거나 초기화해보세요.");
+  });
   it("검색어를 다음 페이지에도 유지하고 초기화하면 전체 목록을 보여준다", async () => {
     const user = userEvent.setup();
     const noodle = { ...KIMCHI, id: 3, name: "비빔국수" };
@@ -133,15 +164,15 @@ describe("메뉴 이름 검색", () => {
     await user.type(screen.getByRole("searchbox", { name: "내 메뉴 검색" }), "  국수  ");
     await user.click(screen.getByRole("button", { name: "검색" }));
     await screen.findByText("비빔국수");
-    expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, "국수");
+    expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, "국수", undefined);
 
     await user.click(screen.getByRole("button", { name: "더 보기" }));
     await screen.findByText("잔치국수");
-    expect(fetchMenusMock).toHaveBeenCalledWith(3, 20, "국수");
+    expect(fetchMenusMock).toHaveBeenCalledWith(3, 20, "국수", undefined);
 
     await user.click(screen.getByRole("button", { name: "초기화" }));
     await screen.findByText("김치찌개");
-    expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, undefined);
+    expect(fetchMenusMock).toHaveBeenCalledWith(undefined, 20, undefined, undefined);
   });
 
   it("검색 결과가 없으면 전체 메뉴가 비었다는 안내 대신 검색 안내를 보여준다", async () => {
