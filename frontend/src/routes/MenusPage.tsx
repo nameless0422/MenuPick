@@ -43,7 +43,11 @@ export default function MenusPage() {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [categoryInput, setCategoryInput] = useState("");
+  const [category, setCategory] = useState("");
   const searchId = useId();
+  const categoryId = useId();
+  const categoryOptionsId = useId();
 
   // 폼을 닫을 때 초점을 돌려줄 곳. 수정 폼은 카드를 통째로 대체하므로, 폼이 닫히면
   // "수정" 버튼이 새로 마운트된다 — 닫기 전에 잡아 둔 DOM 참조로는 돌아갈 수 없어
@@ -82,8 +86,8 @@ export default function MenusPage() {
   const focusAfterDelete = () => (menus.length <= 1 ? headingRef : listRef).current?.focus();
 
   const menusQuery = useInfiniteQuery({
-    queryKey: ["menus", keyword],
-    queryFn: ({ pageParam }) => fetchMenus(pageParam, 20, keyword || undefined),
+    queryKey: ["menus", keyword, category],
+    queryFn: ({ pageParam }) => fetchMenus(pageParam, 20, keyword || undefined, category || undefined),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => (last.hasNext && last.nextCursor != null ? last.nextCursor : undefined),
   });
@@ -139,7 +143,7 @@ export default function MenusPage() {
     ? "메뉴를 더 불러오는 중…"
     : deleteMutation.isSuccess
       ? `'${deleteMutation.variables.name}' 메뉴를 삭제했습니다. 메뉴 ${menus.length}개.`
-      : `${keyword ? "검색 결과 " : ""}메뉴 ${menus.length}개`;
+      : `${keyword || category ? "검색 결과 " : ""}메뉴 ${menus.length}개`;
 
   return (
     <div className="page">
@@ -166,6 +170,7 @@ export default function MenusPage() {
           event.preventDefault();
           setEditing(null);
           setKeyword(searchInput.trim());
+          setCategory(categoryInput.trim());
         }}
       >
         <label htmlFor={searchId}>내 메뉴 검색</label>
@@ -177,12 +182,22 @@ export default function MenusPage() {
           onChange={(event) => setSearchInput(event.target.value)}
           placeholder="이름에 들어간 단어"
         />
+        <label htmlFor={categoryId}>조회 카테고리</label>
+        <input id={categoryId} value={categoryInput} maxLength={20} list={categoryOptionsId}
+          placeholder="비우면 전체 카테고리" onChange={(event) => setCategoryInput(event.target.value)} />
+        <datalist id={categoryOptionsId}>
+          {CATEGORY_PRESETS.map((value) => <option key={value} value={value}>{value}</option>)}
+        </datalist>
         <button type="submit">검색</button>
-        {(keyword || searchInput) && (
-          <button type="button" onClick={() => { setSearchInput(""); setKeyword(""); }}>
+        {(keyword || searchInput || category || categoryInput) && (
+          <button type="button" onClick={() => {
+            setSearchInput(""); setKeyword(""); setCategoryInput(""); setCategory("");
+          }}>
             초기화
           </button>
         )}
+        <p>이름과 카테고리를 함께 검색합니다. 직접 만든 카테고리도 입력할 수 있으며, 비워두면 전체를 조회합니다.</p>
+        {category && <p>적용한 카테고리: {category}</p>}
       </form>
 
       {editing === "new" && (
@@ -211,7 +226,7 @@ export default function MenusPage() {
       <div role="status">
         {menusQuery.isPending && <p>불러오는 중…</p>}
         {menusQuery.isSuccess && menus.length === 0 && (
-          <p>{keyword
+          <p>{category ? "조건에 맞는 메뉴가 없습니다. 이름·카테고리를 바꾸거나 초기화해보세요." : keyword
             ? "검색 결과가 없습니다. 다른 이름으로 검색해보세요."
             : "등록된 메뉴가 없습니다. 자주 먹는 메뉴를 등록하면 랜덤 픽을 시작할 수 있어요."}</p>
         )}

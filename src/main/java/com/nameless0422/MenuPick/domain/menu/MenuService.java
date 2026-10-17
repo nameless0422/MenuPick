@@ -40,17 +40,24 @@ public class MenuService {
     }
 
     public MenuResponse.MenuListResponse getMenus(Long userId, Long cursor, int size, String keyword) {
+        return getMenus(userId, cursor, size, keyword, null);
+    }
+
+    public MenuResponse.MenuListResponse getMenus(Long userId, Long cursor, int size, String keyword, String category) {
         var pageable = PageRequest.of(0, size + 1);
         String search = keyword == null ? "" : keyword.trim();
+        String categoryFilter = category == null ? "" : category.trim();
+        String pattern = search.isEmpty() ? null : "%" + search.replace("!", "!!")
+                .replace("%", "!%").replace("_", "!_") + "%";
         List<Menu> menus;
-        if (search.isEmpty()) {
+        if (!categoryFilter.isEmpty()) {
+            menus = menuRepository.searchActiveByCategory(userId, cursor, pattern, categoryFilter, pageable);
+        } else if (search.isEmpty()) {
             menus = (cursor == null)
                     ? menuRepository.findAllByUserIdAndDeletedAtIsNullOrderByIdDesc(userId, pageable)
                     : menuRepository.findAllByUserIdAndDeletedAtIsNullAndIdLessThanOrderByIdDesc(userId, cursor, pageable);
         } else {
             // LIKE의 특수문자는 이름에 들어간 글자 그대로 찾는다.
-            String pattern = "%" + search.replace("!", "!!").replace("%", "!%")
-                    .replace("_", "!_") + "%";
             menus = menuRepository.searchActiveByName(userId, cursor, pattern, pageable);
         }
 
