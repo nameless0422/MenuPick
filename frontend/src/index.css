@@ -873,3 +873,19 @@ input[type='radio'] {
   border: 2px solid var(--accent);
   background: var(--accent-bg);
 }
+
+.pick-preset-edit > fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.pick-preset-edit label {
+  display: block;
+  margin-top: 8px;
+}
+.pick-preset-edit input,
+.pick-preset-edit textarea,
+.pick-preset-edit select {
+  box-sizing: border-box;
+  max-width: 100%;
+}
