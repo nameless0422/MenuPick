@@ -8,6 +8,7 @@ import {
   type PickPresetExecutionResult,
 } from "../api/pickPresets";
 import { apiErrorMessage as errorMessage } from "../api/http";
+import EditPickPreset from "./EditPickPreset";
 
 /**
  * 상황별 빠른 픽 — 저장해 둔 조건으로 바로 뽑는다(docs/PickPresetDesign.md 9절).
@@ -57,6 +58,23 @@ export default function PickPresets({
 
   const listRef = useRef<HTMLUListElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const restoreEditFocus = useRef(false);
+  const editButtonRef = (node: HTMLButtonElement | null) => {
+    if (node && restoreEditFocus.current) {
+      restoreEditFocus.current = false;
+      if (document.activeElement === document.body) node.focus();
+    }
+  };
+  const closeEditor = () => {
+    restoreEditFocus.current = true;
+    setEditingId(null);
+    setTimeout(() => {
+      restoreEditFocus.current = false;
+      if (document.activeElement === document.body) (listRef.current ?? headingRef.current)?.focus();
+    }, 0);
+  };
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["pick-presets"] });
 
@@ -93,14 +111,14 @@ export default function PickPresets({
     },
   });
 
-  const busy = executeMutation.isPending || deleteMutation.isPending;
+  const busy = executeMutation.isPending || deleteMutation.isPending || editingId !== null;
   useEffect(() => {
     onBusyChange?.(busy);
   }, [busy, onBusyChange]);
 
   return (
     <section className="card pick-presets" aria-labelledby={headingId}>
-      <h2 id={headingId}>빠른 픽</h2>
+      <h2 id={headingId} ref={headingRef} tabIndex={-1}>빠른 픽</h2>
 
       {presetsQuery.isPending && <p className="settings-desc">불러오는 중…</p>}
       {presetsQuery.isError && (
@@ -122,15 +140,17 @@ export default function PickPresets({
                 type="button"
                 className="chip chip-tag"
                 aria-pressed={preset.id === selectedId}
-                onClick={() =>
+                aria-disabled={busy || undefined}
+                onClick={() => {
+                  if (busy) return;
                   setSelection((current) => {
                     const currentId = current.resetKey === resetSelectionKey ? current.id : null;
                     return {
                       resetKey: resetSelectionKey,
                       id: currentId === preset.id ? null : preset.id,
                     };
-                  })
-                }
+                  });
+                }}
               >
                 {preset.name}
                 {preset.needsReview && <span aria-hidden="true"> ⚠</span>}
@@ -142,7 +162,8 @@ export default function PickPresets({
       )}
 
       {/* 고른 뒤에도 자동으로 돌지 않는다 — 조건을 먼저 보여주고 사용자가 누른다. */}
-      {selected && (
+      {editingId !== null && <EditPickPreset id={editingId} onClose={closeEditor} />}
+      {selected && editingId === null && (
         <div className="pick-preset-preview" ref={previewRef} tabIndex={-1} role="group"
              aria-label={`${selected.name} 조건 미리보기`}>
           <strong>{selected.name}</strong>
@@ -190,6 +211,10 @@ export default function PickPresets({
           )}
 
           <div className="card-actions">
+            <button type="button" ref={editButtonRef} aria-label={`${selected.name} 조건 수정`}
+              aria-disabled={busy || undefined} onClick={() => { if (!busy) setEditingId(selected.id); }}>
+              조건 수정
+            </button>
             <button
               type="button"
               aria-busy={executeMutation.isPending}

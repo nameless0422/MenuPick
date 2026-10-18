@@ -92,6 +92,11 @@ export async function createPickPreset(request: PickPresetSaveRequest) {
   return unwrap(res);
 }
 
+export async function fetchPickPreset(id: number) {
+  const res = await http.get<ApiResponse<PickPreset>>(`/api/v1/pick/presets/${id}`);
+  return unwrap(res);
+}
+
 export async function updatePickPreset(id: number, request: PickPresetUpdateRequest) {
   const res = await http.put<ApiResponse<PickPreset>>(`/api/v1/pick/presets/${id}`, request);
   return unwrap(res);
