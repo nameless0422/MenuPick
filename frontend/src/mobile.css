@@ -1,0 +1,422 @@
+/* 모바일은 작업 순서와 정보량을 따로 구성한다. 공통 팔레트는 index.css를 사용한다. */
+.mobile-sheet {
+  --sheet-height: 100dvh;
+  --sheet-bottom: 0px;
+  position: fixed;
+  inset: auto 0 0;
+  bottom: var(--sheet-bottom);
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(var(--sheet-height) - 16px);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  background: var(--surface);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.mobile-sheet[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-sheet::backdrop {
+  background: rgb(12 24 19 / 48%);
+}
+
+.mobile-sheet-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mobile-sheet-header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.mobile-sheet-header button {
+  width: 44px;
+  min-width: 44px;
+  padding: 8px;
+}
+
+.mobile-sheet-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  min-height: 0;
+}
+
+.mobile-sheet-footer {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mobile-sheet-footer .primary-action {
+  flex: 1;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.sheet-hint {
+  font-size: .8125rem;
+  margin-bottom: 24px;
+}
+
+.mobile-sheet .pick-filters {
+  margin: 0;
+  gap: 24px;
+}
+
+.mobile-sheet .pick-filters fieldset {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0 0 20px;
+}
+
+.mobile-sheet .pick-filters fieldset:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.mobile-sheet .pick-filters legend {
+  padding: 0;
+  margin-bottom: 12px;
+}
+
+.mobile-sheet fieldset {
+  min-width: 0;
+}
+
+.mobile-sheet .chip {
+  min-height: 44px;
+}
+
+.mobile-sheet input:not([type='checkbox']):not([type='radio']) {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.account-actions a {
+  padding: 12px;
+  text-align: center;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+}
+
+.mobile-section > div[hidden] {
+  display: none;
+}
+
+.mobile-section-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  font-size: .8125rem;
+  min-height: 48px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+
+.mobile-section-toggle > span {
+  font-size: 1.125rem;
+}
+
+.mobile-section > div > .card-actions {
+  margin-top: 0;
+}
+
+.pick-decision > .mobile-section {
+  margin-top: 14px;
+}
+
+.pick-decision > .mobile-section > div {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pick-decision > .mobile-section > div[hidden] {
+  display: none;
+}
+
+.result-secondary > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-secondary > div[hidden] {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .app-bar nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .app-bar nav a {
+    font-size: .75rem;
+    min-height: 56px;
+  }
+  .app-bar .app-bar-inner {
+    padding: 12px 20px;
+  }
+  .account-trigger {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    min-width: 44px;
+    padding: 8px;
+    background: var(--surface);
+  }
+  .app-shell .page {
+    padding-top: 24px;
+  }
+  .app-shell .page h1 {
+    font-size: 1.625rem;
+  }
+  .pick-page .page-header {
+    margin-bottom: 18px;
+    padding-bottom: 0;
+    border: 0;
+  }
+  .pick-page .page-header .eyebrow {
+    display: none;
+  }
+  .pick-page .page-intro {
+    margin-top: 8px;
+  }
+  .has-pick-result .quick-categories, .has-pick-result .page-intro {
+    display: none;
+  }
+  .mobile-pick-conditions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+    min-width: 0;
+  }
+  .quick-categories, .applied-conditions {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    padding: 3px 3px 8px;
+    scroll-padding-inline: 3px;
+  }
+  .quick-categories button, .applied-conditions button {
+    flex-shrink: 0;
+    min-height: 44px;
+    font-size: .8125rem;
+  }
+  .filter-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--surface);
+    padding: 12px 16px;
+    font-size: .875rem;
+  }
+  .filter-trigger span {
+    font-size: .75rem;
+    color: var(--text);
+    font-weight: 400;
+  }
+  .applied-conditions button {
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: .75rem;
+  }
+  .pick-workspace {
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .pick-decision {
+    padding: 12px 20px 20px;
+    border-radius: 20px;
+  }
+  .pick-decision .meal-plate {
+    max-width: 140px;
+    margin: 0 auto -6px;
+  }
+  .decision-copy .eyebrow, .decision-copy > p:last-child {
+    display: none;
+  }
+  .decision-copy h2 {
+    font-size: 1.0625rem;
+    margin: 0;
+  }
+  .pick-decision .pick-stage {
+    margin-top: 18px;
+    gap: 12px;
+  }
+  .pick-decision .pick-button {
+    min-height: 56px;
+  }
+  .pick-decision > .mobile-section {
+    width: 100%;
+  }
+  .pick-decision > .mobile-section > .mobile-section-toggle {
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    padding: 12px 0;
+  }
+  .pick-decision > .mobile-section > div {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: left;
+  }
+  .pick-decision > .mobile-section > div[hidden] {
+    display: none;
+  }
+  .pick-stage > .card-muted-hint {
+    display: none;
+  }
+  .pick-decision.has-result {
+    padding-top: 20px;
+  }
+  .has-result .decision-copy {
+    display: none;
+  }
+  .has-result .pick-stage > .pick-button {
+    min-height: 44px;
+    font-size: .875rem;
+  }
+  .has-result .pick-stage {
+    margin-top: 0;
+  }
+  .app-shell .pick-decision .pick-result {
+    margin-top: 16px;
+  }
+  .pick-result .pick-ticket-body > .card-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pick-result .card-actions > button:first-child {
+    color: var(--on-accent);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .pick-result .result-secondary {
+    min-width: 0;
+  }
+  .result-secondary > div {
+    padding-top: 12px;
+  }
+  .pick-controls:has(> .pick-presets.is-empty) {
+    display: none;
+  }
+  .pick-controls .pick-presets {
+    margin: 0;
+    padding: 18px;
+  }
+  .pick-result .mobile-section > div:not([hidden]) {
+    margin-top: 12px;
+  }
+  .pick-presets > .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 4px 3px 8px;
+  }
+  .pick-presets > .chip-row > li {
+    flex-shrink: 0;
+  }
+  .menus-page .page-header {
+    gap: 12px;
+  }
+  .menus-page .page-header > div {
+    flex: 1 1 100%;
+  }
+  .menus-page .page-header > button {
+    font-size: .8125rem;
+  }
+  .app-shell .menus-page .card-list {
+    gap: 0;
+    border-top: 1px solid var(--border);
+  }
+  .app-shell .menus-page .card-list > .card {
+    position: relative;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 20px 0;
+    background: transparent;
+    gap: 10px;
+  }
+  .menus-page .card-main {
+    padding-right: 90px;
+  }
+  .app-shell .menus-page .card-main strong {
+    font-size: 1.0625rem;
+  }
+  .menus-page .menu-management > .mobile-section-toggle {
+    position: absolute;
+    top: 16px;
+    right: 0;
+    width: auto;
+    min-height: 44px;
+    font-size: .75rem;
+    padding: 8px 10px;
+  }
+  .menu-management > div:not([hidden]) {
+    padding-top: 12px;
+  }
+  .menu-management .card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .menu-management .card-actions button {
+    font-size: .8125rem;
+    padding-inline: 8px;
+  }
+  .history-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .history-overview .eating-summary, .history-overview .visit-calendar {
+    margin: 12px 0 0;
+  }
+  .history-export-section {
+    margin: 16px 0;
+  }
+  .history-export-section .history-export {
+    margin-top: 12px;
+  }
+  .history-page > .menu-search p {
+    font-size: .75rem;
+  }
+}

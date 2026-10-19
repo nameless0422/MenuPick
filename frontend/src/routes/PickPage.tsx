@@ -30,6 +30,9 @@ import NearbyPlaces from "./NearbyPlaces";
 import SharePickButton from "./SharePickButton";
 import StartPickRoom from "./StartPickRoom";
 import MealPlate from "../components/MealPlate";
+import MobileSheet from "../components/MobileSheet";
+import MobileSection from "../components/MobileSection";
+import { useCompactLayout } from "../a11y/useCompactLayout";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -43,6 +46,15 @@ type GeoState =
   | { status: "loading" }
   | { status: "ready"; latitude: number; longitude: number }
   | { status: "error" };
+
+type FilterDraft = {
+  categories: string[];
+  includeTags: TagSummary[];
+  excludeTags: TagSummary[];
+  geo: GeoState;
+  maxDistance: number;
+  excludeRecentDays: number | null;
+};
 
 /**
  * "최근에 뽑은 메뉴 빼기" 기간 후보. null은 끄기다.
@@ -121,6 +133,7 @@ const EMPTY_REASONS: Record<
 };
 
 export default function PickPage() {
+  const compact = useCompactLayout();
   // 필터 <section>을 랜드마크로 세우려면 이름이 필요하다 — 그 이름을 주는 제목의 id.
   const filtersHeadingId = useId();
 
@@ -151,15 +164,34 @@ export default function PickPage() {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
   const [excludeRecentDays, setExcludeRecentDays] = useState<number | null>(null);
+  const [filterDraft, setFilterDraft] = useState<FilterDraft | null>(null);
+  const geoGeneration = useRef(0);
+  const editing = filterDraft ?? { categories, includeTags, excludeTags, geo, maxDistance, excludeRecentDays };
+  const editCategories = (value: string[]) => filterDraft
+    ? setFilterDraft({ ...filterDraft, categories: value }) : setCategories(value);
+  const editIncludeTags = (value: TagSummary[]) => filterDraft
+    ? setFilterDraft({ ...filterDraft, includeTags: value }) : setIncludeTags(value);
+  const editExcludeTags = (value: TagSummary[]) => filterDraft
+    ? setFilterDraft({ ...filterDraft, excludeTags: value }) : setExcludeTags(value);
+  const editMaxDistance = (value: number) => filterDraft
+    ? setFilterDraft({ ...filterDraft, maxDistance: value }) : setMaxDistance(value);
+  const editRecentDays = (value: number | null) => filterDraft
+    ? setFilterDraft({ ...filterDraft, excludeRecentDays: value }) : setExcludeRecentDays(value);
+  useEffect(() => {
+    if (!compact && filterDraft) {
+      geoGeneration.current += 1;
+      setFilterDraft(null);
+    }
+  }, [compact, filterDraft]);
   // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
   // 별도 요소라 legend가 자동으로 붙지 않는다.
   const distanceLabelId = useId();
-  const distanceGroup = useRadioGroup(DISTANCE_OPTIONS, maxDistance, setMaxDistance);
+  const distanceGroup = useRadioGroup(DISTANCE_OPTIONS, editing.maxDistance, editMaxDistance);
   const recentLabelId = useId();
   const recentGroup = useRadioGroup(
     RECENT_EXCLUSION_OPTIONS,
-    excludeRecentDays,
-    setExcludeRecentDays,
+    editing.excludeRecentDays,
+    editRecentDays,
   );
 
   // ---- 슬롯머신 연출 상태 ----
@@ -286,29 +318,32 @@ export default function PickPage() {
   //    다음 픽에 조용히 적용된다.
   //  - 껐다 켜기를 반복하면 먼저 보낸 요청이 나중에 끝나면서 오래된 좌표가 최신 좌표를 덮어쓴다.
   //  - 껐는데 뒤늦게 실패 콜백이 도착해, 쓰지도 않는 필터의 권한 오류 안내가 뜬다.
-  const geoGeneration = useRef(0);
 
   // 언마운트된 뒤 도착하는 콜백도 같은 방식으로 무효화한다.
   useEffect(() => () => { geoGeneration.current += 1; }, []);
 
   const toggleDistanceFilter = () => {
+    const updateGeo = (next: GeoState) => {
+      if (filterDraft) setFilterDraft((current) => current ? { ...current, geo: next } : current);
+      else setGeo(next);
+    };
     // 끄는 경우에도 세대를 올려야 진행 중이던 요청의 결과가 되살아나지 않는다.
     const generation = ++geoGeneration.current;
     const isCurrent = () => geoGeneration.current === generation;
 
-    if (geo.status === "ready" || geo.status === "loading") {
-      setGeo({ status: "idle" });
+    if (editing.geo.status === "ready" || editing.geo.status === "loading") {
+      updateGeo({ status: "idle" });
       return;
     }
     if (!("geolocation" in navigator)) {
-      setGeo({ status: "error" });
+      updateGeo({ status: "error" });
       return;
     }
-    setGeo({ status: "loading" });
+    updateGeo({ status: "loading" });
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         if (!isCurrent()) return;
-        setGeo({
+        updateGeo({
           status: "ready",
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
@@ -316,7 +351,7 @@ export default function PickPage() {
       },
       () => {
         if (!isCurrent()) return;
-        setGeo({ status: "error" });
+        updateGeo({ status: "error" });
       },
       { timeout: 10_000 },
     );
@@ -372,8 +407,109 @@ export default function PickPage() {
     pickMutation.mutate(nextRequest);
   };
 
+  const dismissFilters = () => {
+    geoGeneration.current += 1;
+    setFilterDraft(null);
+  };
+  const openFilters = () => {
+    geoGeneration.current += 1;
+    if (geo.status === "loading") setGeo({ status: "idle" });
+    setFilterDraft({ categories, includeTags, excludeTags, maxDistance, excludeRecentDays,
+      geo: geo.status === "loading" ? { status: "idle" } : geo });
+  };
+  const applyFilters = () => {
+    if (!filterDraft || filterDraft.geo.status === "loading") return;
+    setCategories(filterDraft.categories);
+    setIncludeTags(filterDraft.includeTags);
+    setExcludeTags(filterDraft.excludeTags);
+    setGeo(filterDraft.geo);
+    setMaxDistance(filterDraft.maxDistance);
+    setExcludeRecentDays(filterDraft.excludeRecentDays);
+    dismissFilters();
+  };
+  const conditionCount = categories.length + includeTags.length + excludeTags.length
+    + Number(geo.status === "ready") + Number(excludeRecentDays !== null);
+
+  const filtersContent = (
+    <section className="pick-filters" aria-labelledby={filtersHeadingId}>
+      <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
+      <CategoryFilter ref={categoryFieldset} selected={editing.categories} onChange={editCategories} />
+      <TagFilter
+        legend="포함 태그"
+        placeholder="이 태그가 모두 있는 메뉴만 (예: 혼밥)"
+        selected={editing.includeTags}
+        disabledTags={editing.excludeTags}
+        onChange={editIncludeTags}
+      />
+      <TagFilter
+        legend="제외 태그"
+        placeholder="이 태그가 있는 메뉴는 제외 (예: 느끼함)"
+        selected={editing.excludeTags}
+        disabledTags={editing.includeTags}
+        onChange={editExcludeTags}
+      />
+
+      <fieldset>
+        <legend id={distanceLabelId}>거리</legend>
+        <label className="pick-distance-toggle">
+          <input
+            type="checkbox"
+            checked={editing.geo.status === "ready" || editing.geo.status === "loading"}
+            onChange={toggleDistanceFilter}
+          />
+          내 위치 기준으로 가까운 곳만
+          {editing.geo.status === "loading" && <small>위치 확인 중…</small>}
+        </label>
+        {/* 최대 10초 뒤에 비동기로 나타나고, 그때 체크박스가 스스로 꺼진다. 알리지 않으면
+            스크린리더 사용자에게는 이유 없이 되돌아간 것으로만 보인다. */}
+        {editing.geo.status === "error" && (
+          <p className="pick-geo-error" role="alert">
+            위치를 가져오지 못해 거리 필터를 쓸 수 없어요. 브라우저의 위치 권한을 확인해 주세요.
+          </p>
+        )}
+        {editing.geo.status === "ready" && (
+          /* 여기는 토글 버튼 무리가 아니라 단일 선택 그룹이다 — 항상 정확히 하나가
+             선택돼 있고 해제할 수단이 없다. aria-pressed로 두면 스크린리더가
+             "500m 이내, 눌림"만 읽고 방금 300m가 풀렸다는 사실은 전달되지 않아,
+             선택이 옮겨 간 것이 아니라 하나가 더 켜진 것처럼 들린다.
+             역할과 함께 화살표 키 이동·roving tabindex도 온다 — 근거는 useRadioGroup. */
+          <div className="chip-row" {...distanceGroup.groupProps} aria-labelledby={distanceLabelId}>
+            {DISTANCE_OPTIONS.map((meters, index) => (
+              <button
+                key={meters}
+                type="button"
+                className={chipClass(editing.maxDistance === meters)}
+                {...distanceGroup.radioProps(meters, index)}
+              >
+                {formatDistance(meters)} 이내
+              </button>
+            ))}
+          </div>
+        )}
+      </fieldset>
+
+      {/* 거리와 같은 단일 선택 그룹이다 — 항상 정확히 하나가 켜져 있고(끄기도 하나의 값),
+          해제할 수단이 없다. 근거는 위 거리 칩의 주석과 같다. */}
+      <fieldset>
+        <legend id={recentLabelId}>최근에 뽑은 메뉴 빼기</legend>
+        <div className="chip-row" {...recentGroup.groupProps} aria-labelledby={recentLabelId}>
+          {RECENT_EXCLUSION_OPTIONS.map((days, index) => (
+            <button
+              key={days ?? "off"}
+              type="button"
+              className={chipClass(editing.excludeRecentDays === days)}
+              {...recentGroup.radioProps(days, index)}
+            >
+              {days == null ? "빼지 않기" : `${days}일 안에 뽑은 건 빼기`}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+    </section>
+  );
+
   return (
-    <div className="page pick-page">
+    <div className={`page pick-page${result || presetResult ? " has-pick-result" : ""}`}>
       <header className="page-header">
         <div>
           <p className="eyebrow" lang="en">A LITTLE LESS THINKING, A LITTLE MORE EATING</p>
@@ -389,6 +525,43 @@ export default function PickPage() {
       {/* 지난번 픽을 먹었는지 묻는다. 맨 위에 두는 이유는 돌아온 직후가 대답을 받을 유일한
           때이기 때문이다 — 뽑기를 시작하면 "지난번"이 바뀌므로 질문을 거둔다. */}
       <VisitPrompt hidden={interactionBusy || !pickMutation.isIdle || presetResult != null} />
+
+      {compact && <div className="mobile-pick-conditions">
+        <div className="quick-categories" role="group" aria-label="빠른 카테고리">
+          {[...new Set([...CATEGORY_PRESETS, ...categories])].map((category) =>
+            <button key={category} type="button" {...chipToggle(categories.includes(category))}
+              onClick={() => setCategories(categories.includes(category)
+                ? categories.filter((value) => value !== category) : [...categories, category])}>{category}</button>)}
+        </div>
+        <button type="button" className="filter-trigger" aria-haspopup="dialog"
+          aria-expanded={filterDraft !== null} disabled={defaultsQuery.isPending} onClick={openFilters}>
+          조건 설정 <span>{conditionCount > 0 ? `${conditionCount}개 적용 중` : "전체 메뉴에서"}</span>
+        </button>
+        {(includeTags.length > 0 || excludeTags.length > 0 || geo.status === "ready" || excludeRecentDays !== null) &&
+          <div className="applied-conditions" aria-label="적용한 상세 조건">
+            {includeTags.map((tag) => <button key={`include-${tag.id}`} className="chip" type="button"
+              aria-label={`포함 태그 ${tag.name} 해제`} onClick={() => setIncludeTags(includeTags.filter((value) => value.id !== tag.id))}>#{tag.name} ×</button>)}
+            {excludeTags.map((tag) => <button key={`exclude-${tag.id}`} className="chip" type="button"
+              aria-label={`제외 태그 ${tag.name} 해제`} onClick={() => setExcludeTags(excludeTags.filter((value) => value.id !== tag.id))}>제외 #{tag.name} ×</button>)}
+            {geo.status === "ready" && <button type="button" className="chip" onClick={() => setGeo({ status: "idle" })}>{formatDistance(maxDistance)} 이내 해제 ×</button>}
+            {excludeRecentDays !== null && <button type="button" className="chip" onClick={() => setExcludeRecentDays(null)}>최근 {excludeRecentDays}일 제외 해제 ×</button>}
+          </div>}
+      </div>}
+
+      <MobileSheet open={compact && filterDraft !== null} title="픽 조건 설정" onDismiss={dismissFilters}
+        footer={<>
+          <button type="button" onClick={() => {
+            geoGeneration.current += 1;
+            setFilterDraft({ categories: [], includeTags: [],
+              excludeTags: (defaultsQuery.data ?? []).map(({ id, name }) => ({ id, name })),
+              geo: { status: "idle" }, maxDistance: 500, excludeRecentDays: null });
+          }}>초기화</button>
+          <button type="button" className="primary-action" disabled={filterDraft?.geo.status === "loading"}
+            onClick={applyFilters}>{filterDraft?.geo.status === "loading" ? "위치 확인 중…" : "조건 적용"}</button>
+        </>}>
+        <p className="sheet-hint">적용을 눌러야 다음 뽑기에 반영돼요. 초기화해도 기본 제외 태그는 유지해요.</p>
+        {filtersContent}
+      </MobileSheet>
 
       {/* 이름 없는 <section>은 랜드마크로 노출되지 않는다 — 스크린리더의 랜드마크 목록에
           잡히지 않아 실질적으로 <div>였고, 필터 뭉치를 건너뛰어 뽑기 버튼으로 가거나
@@ -428,15 +601,7 @@ export default function PickPage() {
 
             {/* 같이 뽑기 입구. 저장 폼 옆에 두는 이유는 둘 다 "지금 고른 조건으로 무언가를 더 한다"이기
                 때문이다 — 뽑기 버튼과 결과 사이를 가르지 않는다. */}
-            <StartPickRoom categories={categories} />
 
-            <SavePickPresetForm
-              categories={categories}
-              includeTagIds={includeTags.map((t) => t.id)}
-              excludeTagIds={excludeTags.map((t) => t.id)}
-              defaultExcludedTagIds={(defaultsQuery.data ?? []).map((t) => t.id)}
-              maxDistance={geo.status === "ready" ? maxDistance : null}
-            />
 
             {pickMutation.isIdle && (
               <p className="card-muted-hint">
@@ -484,6 +649,18 @@ export default function PickPage() {
           )}
           {error && !emptyReason && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
 
+          <MobileSection title="함께 뽑기 · 조건 저장">
+            <StartPickRoom categories={categories} />
+
+            <SavePickPresetForm
+              categories={categories}
+              includeTagIds={includeTags.map((t) => t.id)}
+              excludeTagIds={excludeTags.map((t) => t.id)}
+              defaultExcludedTagIds={(defaultsQuery.data ?? []).map((t) => t.id)}
+              maxDistance={geo.status === "ready" ? maxDistance : null}
+            />
+          </MobileSection>
+
         </section>
         <div className="pick-controls">
           <PickPresets
@@ -503,81 +680,7 @@ export default function PickPage() {
             }}
           />
 
-          <section className="pick-filters" aria-labelledby={filtersHeadingId}>
-            <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
-            <CategoryFilter ref={categoryFieldset} selected={categories} onChange={setCategories} />
-            <TagFilter
-              legend="포함 태그"
-              placeholder="이 태그가 모두 있는 메뉴만 (예: 혼밥)"
-              selected={includeTags}
-              disabledTags={excludeTags}
-              onChange={setIncludeTags}
-            />
-            <TagFilter
-              legend="제외 태그"
-              placeholder="이 태그가 있는 메뉴는 제외 (예: 느끼함)"
-              selected={excludeTags}
-              disabledTags={includeTags}
-              onChange={setExcludeTags}
-            />
-
-            <fieldset>
-              <legend id={distanceLabelId}>거리</legend>
-              <label className="pick-distance-toggle">
-                <input
-                  type="checkbox"
-                  checked={geo.status === "ready" || geo.status === "loading"}
-                  onChange={toggleDistanceFilter}
-                />
-                내 위치 기준으로 가까운 곳만
-                {geo.status === "loading" && <small>위치 확인 중…</small>}
-              </label>
-              {/* 최대 10초 뒤에 비동기로 나타나고, 그때 체크박스가 스스로 꺼진다. 알리지 않으면
-                  스크린리더 사용자에게는 이유 없이 되돌아간 것으로만 보인다. */}
-              {geo.status === "error" && (
-                <p className="pick-geo-error" role="alert">
-                  위치를 가져오지 못해 거리 필터를 쓸 수 없어요. 브라우저의 위치 권한을 확인해 주세요.
-                </p>
-              )}
-              {geo.status === "ready" && (
-                /* 여기는 토글 버튼 무리가 아니라 단일 선택 그룹이다 — 항상 정확히 하나가
-                   선택돼 있고 해제할 수단이 없다. aria-pressed로 두면 스크린리더가
-                   "500m 이내, 눌림"만 읽고 방금 300m가 풀렸다는 사실은 전달되지 않아,
-                   선택이 옮겨 간 것이 아니라 하나가 더 켜진 것처럼 들린다.
-                   역할과 함께 화살표 키 이동·roving tabindex도 온다 — 근거는 useRadioGroup. */
-                <div className="chip-row" {...distanceGroup.groupProps} aria-labelledby={distanceLabelId}>
-                  {DISTANCE_OPTIONS.map((meters, index) => (
-                    <button
-                      key={meters}
-                      type="button"
-                      className={chipClass(maxDistance === meters)}
-                      {...distanceGroup.radioProps(meters, index)}
-                    >
-                      {formatDistance(meters)} 이내
-                    </button>
-                  ))}
-                </div>
-              )}
-            </fieldset>
-
-            {/* 거리와 같은 단일 선택 그룹이다 — 항상 정확히 하나가 켜져 있고(끄기도 하나의 값),
-                해제할 수단이 없다. 근거는 위 거리 칩의 주석과 같다. */}
-            <fieldset>
-              <legend id={recentLabelId}>최근에 뽑은 메뉴 빼기</legend>
-              <div className="chip-row" {...recentGroup.groupProps} aria-labelledby={recentLabelId}>
-                {RECENT_EXCLUSION_OPTIONS.map((days, index) => (
-                  <button
-                    key={days ?? "off"}
-                    type="button"
-                    className={chipClass(excludeRecentDays === days)}
-                    {...recentGroup.radioProps(days, index)}
-                  >
-                    {days == null ? "빼지 않기" : `${days}일 안에 뽑은 건 빼기`}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          </section>
+          {!compact && filtersContent}
 
         </div>
       </div>
@@ -642,12 +745,14 @@ function PickResultCard({
       {menu.memo && <p className="pick-result-memo">{menu.memo}</p>}
 
       {reasons.length > 0 && (
+        <MobileSection title="추천 이유">
         <div className="pick-reasons" aria-label="추천 이유">
           <strong>이 메뉴를 고른 이유</strong>
           <ul>
             {reasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>
         </div>
+        </MobileSection>
       )}
 
       {(menu.categories.length > 0 || menu.tags.length > 0) && (
@@ -694,13 +799,15 @@ function PickResultCard({
           disabled={feedbackMutation.isPending} aria-pressed={feedback === "ACCEPTED"}>
           👍 이걸로 먹을래요
         </button>
+        <button onClick={onRetry}>🔁 다시 돌리기</button>
+        <MobileSection title="다른 의견 · 공유" className="result-secondary">
         <button onClick={() => feedbackMutation.mutate("REJECTED")}
           disabled={feedbackMutation.isPending} aria-pressed={feedback === "REJECTED"}>
           👎 별로예요
         </button>
-        <button onClick={onRetry}>🔁 다시 돌리기</button>
         <SharePickButton menuName={menu.name} />
         <Link to="/history">히스토리 보기 →</Link>
+        </MobileSection>
       </div>
       {feedback && <p className="card-muted-hint" role="status">의견을 저장했어요.</p>}
       </div>

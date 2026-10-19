@@ -18,6 +18,8 @@ import EatingSummary from "./EatingSummary";
 import HistoryMemo from "./HistoryMemo";
 import HistoryVisitTime from "./HistoryVisitTime";
 import HistoryExport from "./HistoryExport";
+import { useCompactLayout } from "../a11y/useCompactLayout";
+import MobileSection from "../components/MobileSection";
 
 // "전체" 필터는 백엔드에 별도 옵션이 없어 충분히 큰 값을 넘겨 사실상 전체 기간을 조회한다.
 // days를 아예 생략하면 백엔드가 7일로 대체하고(HistoryService), 0 이하는 @Min(1)에 걸려 400이다.
@@ -63,6 +65,7 @@ function filterChipClass(condition: HistoryFilterCondition): string {
 }
 
 export default function HistoryPage() {
+  const compact = useCompactLayout();
   const queryClient = useQueryClient();
   const [days, setDays] = useState(7);
   const [visited, setVisited] = useState<boolean | undefined>(undefined);
@@ -122,8 +125,13 @@ export default function HistoryPage() {
         ? "방문 처리를 취소했습니다."
       : `${keyword ? "검색 결과 " : ""}픽 기록 ${histories.length}개`;
 
+  const overview = <div className="history-overview">
+    <MobileSection title="식사 통계"><EatingSummary /></MobileSection>
+    <MobileSection title="방문 달력"><VisitCalendar /></MobileSection>
+  </div>;
+
   return (
-    <div className="page">
+    <div className="page history-page">
       <header className="page-header">
         {/* 마지막 기록을 지우면 <ul>이 사라져 초점을 둘 곳이 없다 — 제목이 그 폴백이다.
             제목은 원래 초점을 받지 않는 요소라 tabIndex={-1}이 없으면 focus()가 조용히
@@ -131,9 +139,7 @@ export default function HistoryPage() {
         <h1 ref={headingRef} tabIndex={-1}>픽 히스토리</h1>
       </header>
 
-      <EatingSummary />
-
-      <VisitCalendar />
+      {!compact && overview}
 
       <form className="menu-search" role="search" aria-label="픽 기록 검색"
         onSubmit={(event) => { event.preventDefault(); setKeyword(searchInput.trim()); }}>
@@ -191,7 +197,9 @@ export default function HistoryPage() {
         ))}
       </div>
 
-      <HistoryExport days={days} visited={visited} keyword={keyword} />
+      <MobileSection title="기록 내려받기" className="history-export-section">
+        <HistoryExport days={days} visited={visited} keyword={keyword} />
+      </MobileSection>
 
       {historyQuery.isError && <>
         <p className="error" role="alert">{errorMessage(historyQuery.error)}</p>
@@ -328,6 +336,7 @@ export default function HistoryPage() {
           {historyQuery.isFetchingNextPage ? "불러오는 중…" : "더 보기"}
         </button>
       )}
+      {compact && overview}
     </div>
   );
 }

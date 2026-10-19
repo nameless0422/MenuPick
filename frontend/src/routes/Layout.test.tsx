@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -38,6 +39,11 @@ function renderShell(initial = "/pick") {
  * 링크에 남아 다음 Tab이 본문을 통째로 지나친다. 화면만 보면 멀쩡해 보인다.
  */
 describe("Layout 라우트 전환", () => {
+  it("StrictMode로 효과를 두 번 실행해도 첫 진입의 초점을 빼앗지 않는다", async () => {
+    render(<StrictMode><MemoryRouter><Layout /></MemoryRouter></StrictMode>);
+    await waitFor(() => expect(document.title).toBe("메뉴픽"));
+    expect(screen.getByRole("main")).not.toHaveFocus();
+  });
   it("라우트마다 문서 제목이 다르다", async () => {
     const user = userEvent.setup();
     renderShell();

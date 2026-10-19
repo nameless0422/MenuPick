@@ -54,13 +54,24 @@ for (const viewport of [{ width: 320, height: 740 }, { width: 390, height: 844 }
     await pick.click({ trial: true });
     await pick.click();
     await expect(page.getByText("김치찌개", { exact: true })).toBeInViewport({ ratio: 1 });
-    await expect(page.getByRole("link", { name: "오늘 뭐 먹지", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("link", { name: viewport.width <= 760 ? "오늘" : "오늘 뭐 먹지", exact: true })).toHaveAttribute("aria-current", "page");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole("button", { name: "한식", exact: true }).scrollIntoViewIfNeeded();
-    await page.getByRole("button", { name: "한식", exact: true }).click();
-    await expect(page.getByRole("button", { name: "한식", exact: true })).toHaveAttribute("aria-pressed", "true");
+    if (viewport.width <= 760) {
+      await page.getByRole("button", { name: /조건 설정/ }).click();
+      await page.getByRole("dialog").getByRole("button", { name: "한식", exact: true }).click();
+      await page.getByRole("button", { name: "조건 적용" }).click();
+    } else {
+      await page.getByRole("button", { name: "한식", exact: true }).click();
+      await expect(page.getByRole("button", { name: "한식", exact: true })).toHaveAttribute("aria-pressed", "true");
+    }
     // 긴 조건 목록의 끝에서도 탐색 링크와 로그아웃 경로가 사라지지 않는다.
-    await page.getByRole("navigation", { name: "주요 메뉴" }).getByRole("link", { name: "설정", exact: true }).click({ trial: true });
+    if (viewport.width <= 760) {
+      await expect(page.getByRole("navigation").getByRole("link")).toHaveCount(4);
+      await page.getByRole("button", { name: "계정 메뉴" }).click();
+      await page.getByRole("link", { name: "설정 열기", exact: true }).click({ trial: true });
+    } else {
+      await page.getByRole("navigation", { name: "주요 메뉴" }).getByRole("link", { name: "설정", exact: true }).click({ trial: true });
+    }
     await page.getByRole("button", { name: "로그아웃" }).click({ trial: true });
   });
 }
