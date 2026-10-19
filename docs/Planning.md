@@ -307,6 +307,8 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | --- | --- | --- | --- |
 | GET | /history | 추천 히스토리 조회 (커서 페이지네이션, days 필터). 항목에 `recommendationFeedback` 포함 | Y |
 | GET | /history/export | 기간·방문·이름 검색 조건의 픽 기록 CSV. 최대 1,000건, 초과 시 조건 조정 안내 | Y |
+| GET | /history/{id}/visit-time | 방문 완료 기록의 일시·수정 범위·버전 조회 | Y |
+| PUT | /history/{id}/visit-time | 한국 시간 방문 일시 수정. 버전 검사, 추천일~현재 시각 범위 | Y |
 | PATCH | /menus/exclusions | 추천 제외 일괄 변경 (담긴 메뉴만 변경, 전체 교체 아님) | Y |
 | GET | /onboarding | 첫 사용자 안내 필요 여부와 기본 메뉴 목록 | Y |
 | GET | /history/summary | 내 식사 기록 요약 (최근 N일 픽·먹은 수, 카테고리·메뉴 상위, 오래 안 뽑힌 메뉴). days 범위 밖은 기본 30일 | Y |

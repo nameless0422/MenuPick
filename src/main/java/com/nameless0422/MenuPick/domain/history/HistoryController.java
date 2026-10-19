@@ -48,6 +48,21 @@ public class HistoryController {
         return ResponseEntity.ok(ApiResponse.ok(historyService.getMemo(userId, historyId)));
     }
 
+    @GetMapping("/{historyId}/visit-time")
+    public ResponseEntity<ApiResponse<HistoryResponse.VisitTimeResponse>> getVisitTime(
+            @AuthenticationPrincipal Long userId, @PathVariable Long historyId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(ApiResponse.ok(historyService.getVisitTime(userId, historyId)));
+    }
+
+    @PutMapping("/{historyId}/visit-time")
+    public ResponseEntity<ApiResponse<HistoryResponse.VisitTimeResponse>> updateVisitTime(
+            @AuthenticationPrincipal Long userId, @PathVariable Long historyId,
+            @Valid @RequestBody HistoryRequest.VisitTimeRequest request) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(ApiResponse.ok(historyService.updateVisitTime(userId, historyId, request)));
+    }
+
     @PutMapping("/{historyId}/memo")
     public ResponseEntity<ApiResponse<HistoryResponse.MemoResponse>> updateMemo(
             @AuthenticationPrincipal Long userId, @PathVariable Long historyId,

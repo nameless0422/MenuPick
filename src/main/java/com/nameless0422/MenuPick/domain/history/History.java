@@ -3,6 +3,8 @@ package com.nameless0422.MenuPick.domain.history;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
 import com.nameless0422.MenuPick.domain.user.User;
+import com.nameless0422.MenuPick.common.exception.BusinessException;
+import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -104,6 +106,14 @@ public class History {
 
     public void updateMemo(String memo) {
         this.memo = memo;
+    }
+
+    /** 방문 여부와 식당·피드백·메모를 유지하고 방문 시각만 바꾼다. */
+    public void changeVisitedAt(LocalDateTime visitedAt) {
+        if (!isVisited || this.visitedAt == null) {
+            throw new BusinessException(ErrorCode.HISTORY_NOT_VISITED);
+        }
+        this.visitedAt = Objects.requireNonNull(visitedAt);
     }
 
     public void addFilterCondition(String filterType, String filterValue) {

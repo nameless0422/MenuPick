@@ -99,6 +99,42 @@ public class HistoryService {
         return new HistoryResponse.MemoResponse(history.getId(), history.getMemo(), history.getVersion());
     }
 
+    public HistoryResponse.VisitTimeResponse getVisitTime(Long userId, Long historyId) {
+        History history = findVisitedHistory(userId, historyId);
+        return visitTimeResponse(history);
+    }
+
+    @Transactional
+    public HistoryResponse.VisitTimeResponse updateVisitTime(Long userId, Long historyId,
+                                                             HistoryRequest.VisitTimeRequest request) {
+        History history = historyRepository.findByIdAndUserId(historyId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        VersionGuard.requireCurrentVersion(history.getVersion(), request.version());
+        LocalDateTime at = request.visitedAt().withNano(0);
+        // 추천일의 한국 시간 00:00부터 현재 시각까지 초 단위로 수정한다.
+        if (at.isBefore(history.getRecommendedAt().toLocalDate().atStartOfDay())
+                || at.isAfter(LocalDateTime.now(clock).withNano(0))) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "방문 일시는 추천일 이후부터 현재 시각까지 지정해주세요.");
+        }
+        history.changeVisitedAt(at);
+        historyRepository.flush();
+        return visitTimeResponse(history);
+    }
+
+    private History findVisitedHistory(Long userId, Long historyId) {
+        History history = historyRepository.findByIdAndUserId(historyId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HISTORY_NOT_FOUND));
+        if (!history.isVisited() || history.getVisitedAt() == null) {
+            throw new BusinessException(ErrorCode.HISTORY_NOT_VISITED);
+        }
+        return history;
+    }
+
+    private HistoryResponse.VisitTimeResponse visitTimeResponse(History history) {
+        return new HistoryResponse.VisitTimeResponse(history.getId(), history.getVisitedAt(),
+                history.getRecommendedAt().toLocalDate().atStartOfDay(), LocalDateTime.now(clock).withNano(0), history.getVersion());
+    }
+
     @Transactional
     public HistoryResponse.MemoResponse updateMemo(Long userId, Long historyId, HistoryRequest.MemoRequest request) {
         History history = historyRepository.findByIdAndUserId(historyId, userId)

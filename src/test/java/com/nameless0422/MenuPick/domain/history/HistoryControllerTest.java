@@ -28,6 +28,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(HistoryController.class)
 class HistoryControllerTest extends AbstractControllerTest {
+    @Test void visitTimeReturnsBoundsAndUpdatedVersion() throws Exception {
+        var at = LocalDateTime.of(2026, 10, 20, 12, 0);
+        var data = new HistoryResponse.VisitTimeResponse(5L, at, at.toLocalDate().atStartOfDay(), at, 3L);
+        given(historyService.getVisitTime(1L, 5L)).willReturn(data);
+        given(historyService.updateVisitTime(eq(1L), eq(5L), any())).willReturn(data);
+        mockMvc.perform(get("/api/v1/history/5/visit-time").with(authentication(AUTH)))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.version").value(3));
+        mockMvc.perform(put("/api/v1/history/5/visit-time").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"visitedAt\":\"2026-10-20T12:00:00\",\"version\":2}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.visitedAt").value("2026-10-20T12:00:00"));
+    }
+
+    @Test void visitTimeRequiresAuthenticationAndNonnegativeVersionAndTime() throws Exception {
+        mockMvc.perform(get("/api/v1/history/5/visit-time")).andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/history/5/visit-time").contentType(MediaType.APPLICATION_JSON)
+                .content("{}" )).andExpect(status().isUnauthorized());
+        for (String body : List.of("{}", "{\"visitedAt\":\"2026-10-20T12:00:00\"}",
+                "{\"visitedAt\":\"2026-10-20T12:00:00\",\"version\":-1}", "{\"visitedAt\":\"bad\",\"version\":0}",
+                "{\"visitedAt\":\"2026-02-30T12:00:00\",\"version\":0}",
+                "{\"visitedAt\":\"2026-10-20T12:00:00Z\",\"version\":0}",
+                "{\"visitedAt\":\"2026-10-20T12:00:00+09:00\",\"version\":0}")) {
+            mockMvc.perform(put("/api/v1/history/5/visit-time").with(authentication(AUTH))
+                            .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+        }
+        verify(historyService, never()).updateVisitTime(any(), any(), any());
+    }
 
     @MockitoBean private HistoryService historyService;
     @MockitoBean private HistoryPlaceService historyPlaceService;
