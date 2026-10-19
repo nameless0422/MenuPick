@@ -8,6 +8,9 @@ import java.util.List;
 
 public class HistoryResponse {
 
+    public record VisitTimeResponse(Long historyId, LocalDateTime visitedAt,
+                                    LocalDateTime earliestVisitAt, LocalDateTime latestVisitAt, Long version) {}
+
     public record HistorySummary(
             Long id,
             /** 연결 식당을 조회할 활성 메뉴 ID. 삭제된 메뉴이거나 참조가 없으면 null이다. */

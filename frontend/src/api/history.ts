@@ -37,6 +37,16 @@ export interface HistorySummary {
 
 export interface HistoryMemoResponse { historyId: number; memo: string | null; version: number; }
 
+export interface HistoryVisitTimeResponse {
+  historyId: number; visitedAt: string; earliestVisitAt: string; latestVisitAt: string; version: number;
+}
+export async function fetchHistoryVisitTime(historyId: number) {
+  return unwrap(await http.get<ApiResponse<HistoryVisitTimeResponse>>(`/api/v1/history/${historyId}/visit-time`));
+}
+export async function updateHistoryVisitTime(historyId: number, visitedAt: string, version: number) {
+  return unwrap(await http.put<ApiResponse<HistoryVisitTimeResponse>>(`/api/v1/history/${historyId}/visit-time`, { visitedAt, version }));
+}
+
 export async function fetchHistoryMemo(historyId: number) {
   const res = await http.get<ApiResponse<HistoryMemoResponse>>(`/api/v1/history/${historyId}/memo`);
   return unwrap(res);

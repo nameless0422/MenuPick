@@ -75,6 +75,84 @@ class HistoryMemoIntegrationTest extends AbstractIntegrationTest {
         return histories.save(history);
     }
 
+    @Test void correctedVisitMovesCalendarMonthAndPreservesOtherFields() {
+        User owner = user("visit-time");
+        History row = History.builder().user(owner).recommendedAt(NOW.minusMonths(1)).build();
+        row.markVisited(NOW); row.updateMemo("보존"); row.recordFeedback(RecommendationFeedback.ACCEPTED);
+        row.addFilterCondition("CATEGORY", "한식");
+        row = histories.save(row);
+        var before = service.getVisitTime(owner.getId(), row.getId());
+        var corrected = NOW.minusMonths(1).withDayOfMonth(30).withHour(23).withMinute(59).withSecond(59);
+        var result = service.updateVisitTime(owner.getId(), row.getId(), new HistoryRequest.VisitTimeRequest(corrected, before.version()));
+        assertThat(result.visitedAt()).isEqualTo(corrected);
+        assertThat(result.version()).isGreaterThan(before.version());
+        assertThat(service.getVisitCalendar(owner.getId(), "2026-09").entries())
+                .extracting(com.nameless0422.MenuPick.domain.history.dto.HistoryResponse.VisitCalendarEntry::id).containsExactly(row.getId());
+        assertThat(service.getVisitCalendar(owner.getId(), "2026-10").entries()).isEmpty();
+        var saved = histories.findById(row.getId()).orElseThrow();
+        assertThat(saved.isVisited()).isTrue(); assertThat(saved.getMemo()).isEqualTo("보존");
+        assertThat(saved.getRecommendationFeedback()).isEqualTo(RecommendationFeedback.ACCEPTED);
+        assertThat(saved.getRecommendedAt()).isEqualTo(NOW.minusMonths(1));
+        assertThat(service.getHistories(owner.getId(), null, 3650, null, 20).histories().get(0).filterConditions()).hasSize(1);
+        assertThat(histories.findExportRows(owner.getId(), NOW.minusYears(1), true, null,
+                org.springframework.data.domain.PageRequest.of(0, 20)).get(0).getVisitedAt()).isEqualTo(corrected);
+        var repeated = service.updateVisitTime(owner.getId(), row.getId(), new HistoryRequest.VisitTimeRequest(corrected, result.version()));
+        assertThat(repeated.version()).isEqualTo(result.version());
+    }
+
+    @Test void visitTimeRejectsStaleMemoAndUndoAndEnforcesOwnerScope() {
+        User owner = user("visit-conflict"); User other = user("visit-foreign");
+        History row = history(owner);
+        service.markVisited(owner.getId(), row.getId(), null);
+        var first = service.getVisitTime(owner.getId(), row.getId());
+        service.updateMemo(owner.getId(), row.getId(), new HistoryRequest.MemoRequest("새 메모", first.version()));
+        assertThatThrownBy(() -> service.updateVisitTime(owner.getId(), row.getId(), new HistoryRequest.VisitTimeRequest(NOW, first.version())))
+                .isInstanceOf(BusinessException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.CONCURRENT_MODIFICATION);
+        assertThatThrownBy(() -> service.getVisitTime(other.getId(), row.getId()))
+                .isInstanceOf(BusinessException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.HISTORY_NOT_FOUND);
+        assertThatThrownBy(() -> service.updateVisitTime(other.getId(), row.getId(), new HistoryRequest.VisitTimeRequest(NOW, 0L)))
+                .isInstanceOf(BusinessException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.HISTORY_NOT_FOUND);
+        var beforeUndo = service.getVisitTime(owner.getId(), row.getId());
+        service.unmarkVisited(owner.getId(), row.getId());
+        assertThatThrownBy(() -> service.updateVisitTime(owner.getId(), row.getId(), new HistoryRequest.VisitTimeRequest(NOW, beforeUndo.version())))
+                .isInstanceOf(BusinessException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.CONCURRENT_MODIFICATION);
+        assertThatThrownBy(() -> service.getVisitTime(owner.getId(), row.getId()))
+                .isInstanceOf(BusinessException.class).hasFieldOrPropertyWithValue("errorCode", ErrorCode.HISTORY_NOT_VISITED);
+        assertThat(histories.findById(row.getId()).orElseThrow().isVisited()).isFalse();
+    }
+
+    @Test void concurrentVisitTimeCannotResurrectUndoneVisit() {
+        User owner = user("visit-race"); History row = history(owner);
+        service.markVisited(owner.getId(), row.getId(), null);
+        var first = emf.createEntityManager(); var second = emf.createEntityManager();
+        try {
+            first.getTransaction().begin(); second.getTransaction().begin();
+            first.find(History.class, row.getId()).unmarkVisited();
+            second.find(History.class, row.getId()).changeVisitedAt(NOW.minusMinutes(1));
+            first.getTransaction().commit();
+            assertThatThrownBy(second::flush).isInstanceOf(OptimisticLockException.class);
+        } finally {
+            if (first.getTransaction().isActive()) first.getTransaction().rollback();
+            if (second.getTransaction().isActive()) second.getTransaction().rollback();
+            first.close(); second.close();
+        }
+        assertThat(histories.findById(row.getId()).orElseThrow().getVisitedAt()).isNull();
+    }
+
+    @Test void visitTimeReadsOneStatementAndUpdatesWithTwoStatements() {
+        User owner = user("visit-statements"); History row = history(owner);
+        service.markVisited(owner.getId(), row.getId(), null);
+        var statistics = emf.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true); statistics.clear();
+        try {
+            var initial = service.getVisitTime(owner.getId(), row.getId());
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(1);
+            statistics.clear();
+            service.updateVisitTime(owner.getId(), row.getId(), new HistoryRequest.VisitTimeRequest(NOW.minusMinutes(10), initial.version()));
+            assertThat(statistics.getPrepareStatementCount()).isEqualTo(2);
+        } finally { statistics.setStatisticsEnabled(false); }
+    }
+
     @Test void saveReturnsCommittedVersionAndListIncludesMemo() {
         User user = user("save");
         History history = history(user);

@@ -16,6 +16,7 @@ import "./HistoryPage.css";
 import VisitCalendar from "./VisitCalendar";
 import EatingSummary from "./EatingSummary";
 import HistoryMemo from "./HistoryMemo";
+import HistoryVisitTime from "./HistoryVisitTime";
 import HistoryExport from "./HistoryExport";
 
 // "전체" 필터는 백엔드에 별도 옵션이 없어 충분히 큰 값을 넘겨 사실상 전체 기간을 조회한다.
@@ -265,6 +266,8 @@ export default function HistoryPage() {
 
             <HistoryMemo historyId={history.id} label={`${label} (${formatDateTime(history.recommendedAt)})`}
               memo={history.memo ?? null} />
+            {history.isVisited && <HistoryVisitTime historyId={history.id}
+              label={`${label} (${formatDateTime(history.recommendedAt)})`} />}
 
             <div className="card-actions">
               {history.isVisited ? (
