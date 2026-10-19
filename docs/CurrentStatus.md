@@ -1,12 +1,44 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-10-19 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-20 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-20 방문 기록의 날짜·시각 수정
+
+- 방문 완료한 픽 기록의 실제 방문 일시를 수정한다. 최신 일시·수정 범위·버전을 읽고
+  한국 시간의 초 단위 문자열을 저장한다. 추천일 00시부터 서버 현재 시각까지 허용하며
+  잘못된 날짜·UTC 또는 오프셋 접미사·미래 시각·필수값 누락을 거부한다. 화면 상한은
+  편집을 열어 조회한 시점이며 브라우저 시간대로 변환하지 않는다.
+- `GET/PUT /api/v1/history/{id}/visit-time`은 본인 기록에만 접근한다. 미방문은 409,
+  타인·없는 기록은 404다. 메모·방문 취소와 같은 이력 버전을 공유하고 응답 전에 flush한다.
+  오래된 버전과 실제 UPDATE 경합은 409이며 취소된 방문을 시각 수정으로 되살리지 않는다.
+  식당·메모·피드백·추천 시각·필터는 유지하고 같은 값은 버전을 올리지 않는다.
+  충돌 시 초안을 보존하고 재저장을 막으며 취소 후 다시 열어 최신 상태를 확인한다.
+  저장 후 목록·식사 요약·달력을 갱신하고 CSV도 새 시각을 사용한다. DB·인프라 변경은 없다.
+- 로컬 백엔드 `check` 1,026개와 커버리지 검증, 프런트 lint·build·Vitest 561개와
+  새 브라우저 여정이 통과했다. 실제 MySQL에서 월 경계 이동·CSV 반영·다른 필드 보존·
+  동일 값 재시도·사용자 격리·메모 버전 충돌·동시 방문 취소를 확인했다. 정상 읽기는 JDBC
+  구문 1개, 수정은 조회와 UPDATE 2개다. PR #354와 배포 `main`의 frontend·test·docker-build
+  CI가 모두 통과했으며 CI 전체 Vitest 561개·Playwright 17개를 확인했다.
+  대안과 운영 관찰 조건은 D-067에 기록했다.
+- `main` SHA `26ebe8766d9979e73cfe2808423f5a5d612bd2c5`로 운영 배포했다. 배포 전 백업
+  `menupick-20261019-203355Z.sql.gz`의 압축 무결성과 덤프 완료 표지를 확인했다.
+  배포 전후 users 3·menus 45·restaurants 1·menu_restaurants 1·histories 10·tags 12·
+  menu_tags 76개를 유지했다. pick_presets·pick_preset_tags·user_default_excluded_tags도
+  모두 0개로 유지됐으며 전체 DB 데이터 덤프 해시와 이력 해시가 같았다.
+  Flyway는 V20 `success=1`을 유지했다.
+- 운영 계정으로 미방문 기록의 409 `HISTORY_NOT_VISITED`와 타인·없는 기록의 404,
+  미인증 GET·PUT의 401을 확인했다. 운영 기록을 수정하지 않았으며 정상 수정·월 이동은
+  MySQL·브라우저 테스트에서 검증했다. 다섯 컨테이너 healthy, readiness·전체 health UP,
+  HTTPS 200, HTTP 301, 새 수정 UI 번들·app/web 배포 SHA·ARM64 이미지와 app ERROR 로그
+  0건을 확인했다. 이후 app·web·mysql·redis·mailpit을 모두 중지하고 중지 상태를 재조회했다.
+  MySQL·Redis 데이터 볼륨을 유지했고 서버 루트 디스크 사용률은 55%다.
+  로컬 실행 컨테이너도 없다.
 
 ### 2026-10-19 빠른 픽 조건 수정과 검토 복구
 
