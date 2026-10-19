@@ -146,12 +146,16 @@ export default function MenusPage() {
       : `${keyword || category ? "검색 결과 " : ""}메뉴 ${menus.length}개`;
 
   return (
-    <div className="page">
+    <div className="page menus-page">
       <header className="page-header">
         {/* 마지막 메뉴를 지우면 <ul>까지 사라져 돌아갈 목록이 없다 — 그때의 폴백 목적지다.
             제목은 원래 초점을 받지 않으므로 tabIndex={-1}이 필요하고, 음수라 Tab 순서에는
             끼지 않는다. */}
-        <h1 ref={headingRef} tabIndex={-1}>내 메뉴</h1>
+        <div>
+          <p className="eyebrow" lang="en">MY EVERYDAY FAVORITES</p>
+          <h1 ref={headingRef} tabIndex={-1}>내 메뉴</h1>
+          <p className="page-intro">좋아하는 맛을 모아둔 나만의 메뉴판.</p>
+        </div>
         <button
           ref={opener("new")}
           onClick={() => setEditing("new")}
