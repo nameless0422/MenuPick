@@ -6,6 +6,8 @@ import "./index.css";
 import App from "./App.tsx";
 import ErrorBoundary from "./ErrorBoundary";
 import { AuthProvider } from "./auth/AuthContext";
+import "./design.css";
+import "./mobile.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

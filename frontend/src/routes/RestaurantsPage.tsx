@@ -19,8 +19,11 @@ import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import KakaoMap from "../maps/KakaoMap";
 import { safeExternalUrl } from "../externalUrl";
 import RestaurantTrash from "./RestaurantTrash";
+import MobileSection from "../components/MobileSection";
+import { useCompactLayout } from "../a11y/useCompactLayout";
 
 export default function RestaurantsPage() {
+  const compact = useCompactLayout();
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -67,7 +70,7 @@ export default function RestaurantsPage() {
   const handleDeleted = () => (restaurants.length <= 1 ? headingRef : listRef).current?.focus();
 
   return (
-    <div className="page">
+    <div className="page restaurants-page">
       <header className="page-header">
         {/* 마지막 식당을 지우면 목록이 비어 초점을 둘 곳이 없다 — 제목이 그 폴백이다.
             제목은 원래 초점을 받지 않는 요소라 tabIndex={-1}이 없으면 focus()가 조용히
@@ -75,9 +78,11 @@ export default function RestaurantsPage() {
         <h1 ref={headingRef} tabIndex={-1}>내 식당</h1>
       </header>
 
-      <PlaceSearch onSaved={invalidate} />
+      <MobileSection title="새 식당 추가" className="restaurant-add-section">
+        <PlaceSearch onSaved={invalidate} />
+      </MobileSection>
 
-      <RestaurantTrash />
+      {!compact && <RestaurantTrash />}
 
       <h2>저장한 식당</h2>
       <form
@@ -145,7 +150,9 @@ export default function RestaurantsPage() {
 
       {/* 지도는 목록을 대체하지 않고 위에 얹는다 — 좌표가 없거나 지도를 못 띄우는
           상황에서도 식당을 보고 고칠 수 있어야 한다. */}
-      <KakaoMap points={restaurants} ariaLabel="저장한 식당 위치" />
+      {restaurants.length > 0 && <MobileSection title="지도에서 보기" className="restaurant-map-section">
+        <KakaoMap points={restaurants} ariaLabel="저장한 식당 위치" />
+      </MobileSection>}
 
       {/* 0건일 때 빈 <ul>을 남기면 "목록, 항목 0개"로 읽혀 위 안내("저장한 식당이 없습니다")와
           어긋난다. Safari + VoiceOver는 list-style: none이 걸린 <ul>의 목록 시맨틱을 지우므로
@@ -165,6 +172,7 @@ export default function RestaurantsPage() {
           ))}
         </ul>
       )}
+      {compact && <RestaurantTrash />}
     </div>
   );
 }
@@ -344,6 +352,7 @@ function RestaurantCard({
   // 초점을 옮겨야 할 때와 아닐 때가 구분되지 않으므로 삭제 경로에만 별도 신호를 준다.
   onDeleted: () => void;
 }) {
+  const compact = useCompactLayout();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"edit" | "link" | null>(null);
   const cardRef = useRef<HTMLLIElement>(null);
@@ -365,6 +374,12 @@ function RestaurantCard({
   const closeForm = () => {
     focusAfterClose.current = cardRef.current?.contains(document.activeElement) ? mode : null;
     setMode(null);
+  };
+  const managementOpener = (node: HTMLButtonElement | null) => {
+    if (node && focusAfterClose.current) {
+      focusAfterClose.current = null;
+      node.focus();
+    }
   };
 
   const mapUrl = safeExternalUrl(summary.naverUrl);
@@ -422,9 +437,11 @@ function RestaurantCard({
 
       {/* 버튼 이름에 식당 이름을 넣는다. 없으면 NVDA 요소 목록에서 "수정, 메뉴 연결, 삭제"만
           반복되어 어느 카드의 것인지 알 수 없다. "수정"과 "메뉴 연결"은 확인 단계도 없다. */}
+      <MobileSection title="관리" label={`${summary.name} 관리`} className="restaurant-management"
+        triggerRef={compact ? managementOpener : undefined}>
       <div className="card-actions">
         <button
-          ref={opener("edit")}
+          ref={compact ? undefined : opener("edit")}
           aria-label={`${summary.name} 수정`}
           onClick={() => {
             setMode("edit");
@@ -433,7 +450,7 @@ function RestaurantCard({
           수정
         </button>
         <button
-          ref={opener("link")}
+          ref={compact ? undefined : opener("link")}
           aria-label={`${summary.name} ${mode === "link" ? "메뉴 연결 닫기" : "메뉴 연결"}`}
           onClick={() => (mode === "link" ? closeForm() : setMode("link"))}
         >
@@ -454,6 +471,7 @@ function RestaurantCard({
       {mode === "link" && (
         <MenuLinkForm restaurantId={summary.id} onClose={closeForm} />
       )}
+      </MobileSection>
     </li>
   );
 }

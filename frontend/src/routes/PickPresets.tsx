@@ -117,7 +117,7 @@ export default function PickPresets({
   }, [busy, onBusyChange]);
 
   return (
-    <section className="card pick-presets" aria-labelledby={headingId}>
+    <section className={`card pick-presets${presetsQuery.isSuccess && presets.length === 0 ? " is-empty" : ""}`} aria-labelledby={headingId}>
       <h2 id={headingId} ref={headingRef} tabIndex={-1}>빠른 픽</h2>
 
       {presetsQuery.isPending && <p className="settings-desc">불러오는 중…</p>}
@@ -127,7 +127,7 @@ export default function PickPresets({
 
       {presetsQuery.isSuccess && presets.length === 0 && (
         <p className="settings-desc">
-          저장해 둔 빠른 픽이 없어요. 아래에서 조건을 고른 뒤 <strong>현재 조건 저장</strong>을
+          저장해 둔 빠른 픽이 없어요. 조건을 고른 뒤 <strong>현재 조건 저장</strong>을
           누르면 다음부터 한 번에 뽑을 수 있어요.
         </p>
       )}

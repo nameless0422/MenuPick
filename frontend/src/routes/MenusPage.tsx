@@ -32,6 +32,8 @@ import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import LinkedRestaurants from "./LinkedRestaurants";
 import MenuTrash from "./MenuTrash";
 import { CATEGORY_PRESETS } from "../constants";
+import { useCompactLayout } from "../a11y/useCompactLayout";
+import MobileSection from "../components/MobileSection";
 
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
 
@@ -39,6 +41,7 @@ const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
 type Editing = "new" | "bulk" | number;
 
 export default function MenusPage() {
+  const compact = useCompactLayout();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Editing | null>(null);
   const [searchInput, setSearchInput] = useState("");
@@ -146,12 +149,16 @@ export default function MenusPage() {
       : `${keyword || category ? "검색 결과 " : ""}메뉴 ${menus.length}개`;
 
   return (
-    <div className="page">
+    <div className="page menus-page">
       <header className="page-header">
         {/* 마지막 메뉴를 지우면 <ul>까지 사라져 돌아갈 목록이 없다 — 그때의 폴백 목적지다.
             제목은 원래 초점을 받지 않으므로 tabIndex={-1}이 필요하고, 음수라 Tab 순서에는
             끼지 않는다. */}
-        <h1 ref={headingRef} tabIndex={-1}>내 메뉴</h1>
+        <div>
+          <p className="eyebrow" lang="en">MY EVERYDAY FAVORITES</p>
+          <h1 ref={headingRef} tabIndex={-1}>내 메뉴</h1>
+          <p className="page-intro">좋아하는 맛을 모아둔 나만의 메뉴판.</p>
+        </div>
         <button
           ref={opener("new")}
           onClick={() => setEditing("new")}
@@ -281,6 +288,8 @@ export default function MenusPage() {
                   ))}
                 </div>
               )}
+              <MobileSection title="관리" label={`${menu.name} 관리`} className="menu-management"
+                triggerRef={compact ? opener(menu.id) : undefined}>
               <div className="card-actions">
                 {/* 버튼 이름에 메뉴 이름을 넣는다. 이게 없으면 NVDA 요소 목록이나 JAWS의 B 키
                     순회에서 "수정, 추천에서 제외, 삭제"만 끝없이 반복되어 어느 항목의 것인지
@@ -288,7 +297,7 @@ export default function MenusPage() {
                     항목 단위로 건너뛸 수도 없다. 특히 "수정"과 "추천에서 제외"는 확인 단계가
                     없어 잘못 누르면 그대로 실행된다. */}
                 <button
-                  ref={opener(menu.id)}
+                  ref={compact ? undefined : opener(menu.id)}
                   aria-label={`${menu.name} 수정`}
                   onClick={() => setEditing(menu.id)}
                 >
@@ -353,6 +362,7 @@ export default function MenusPage() {
                   ))}
                 </div>
               )}
+              </MobileSection>
             </li>
           ),
         )}

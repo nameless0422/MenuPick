@@ -29,6 +29,10 @@ import { formatDistance } from "./formatDistance";
 import NearbyPlaces from "./NearbyPlaces";
 import SharePickButton from "./SharePickButton";
 import StartPickRoom from "./StartPickRoom";
+import MealPlate from "../components/MealPlate";
+import MobileSheet from "../components/MobileSheet";
+import MobileSection from "../components/MobileSection";
+import { useCompactLayout } from "../a11y/useCompactLayout";
 import "./PickPage.css";
 
 const SLOT_EMOJIS = ["🍚", "🍜", "🍕", "🍣", "🍔", "🥘", "🍝", "🌮", "🍗", "🥟", "🍛", "🥗"];
@@ -42,6 +46,15 @@ type GeoState =
   | { status: "loading" }
   | { status: "ready"; latitude: number; longitude: number }
   | { status: "error" };
+
+type FilterDraft = {
+  categories: string[];
+  includeTags: TagSummary[];
+  excludeTags: TagSummary[];
+  geo: GeoState;
+  maxDistance: number;
+  excludeRecentDays: number | null;
+};
 
 /**
  * "최근에 뽑은 메뉴 빼기" 기간 후보. null은 끄기다.
@@ -120,6 +133,7 @@ const EMPTY_REASONS: Record<
 };
 
 export default function PickPage() {
+  const compact = useCompactLayout();
   // 필터 <section>을 랜드마크로 세우려면 이름이 필요하다 — 그 이름을 주는 제목의 id.
   const filtersHeadingId = useId();
 
@@ -150,15 +164,34 @@ export default function PickPage() {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
   const [excludeRecentDays, setExcludeRecentDays] = useState<number | null>(null);
+  const [filterDraft, setFilterDraft] = useState<FilterDraft | null>(null);
+  const geoGeneration = useRef(0);
+  const editing = filterDraft ?? { categories, includeTags, excludeTags, geo, maxDistance, excludeRecentDays };
+  const editCategories = (value: string[]) => filterDraft
+    ? setFilterDraft({ ...filterDraft, categories: value }) : setCategories(value);
+  const editIncludeTags = (value: TagSummary[]) => filterDraft
+    ? setFilterDraft({ ...filterDraft, includeTags: value }) : setIncludeTags(value);
+  const editExcludeTags = (value: TagSummary[]) => filterDraft
+    ? setFilterDraft({ ...filterDraft, excludeTags: value }) : setExcludeTags(value);
+  const editMaxDistance = (value: number) => filterDraft
+    ? setFilterDraft({ ...filterDraft, maxDistance: value }) : setMaxDistance(value);
+  const editRecentDays = (value: number | null) => filterDraft
+    ? setFilterDraft({ ...filterDraft, excludeRecentDays: value }) : setExcludeRecentDays(value);
+  useEffect(() => {
+    if (!compact && filterDraft) {
+      geoGeneration.current += 1;
+      setFilterDraft(null);
+    }
+  }, [compact, filterDraft]);
   // 거리 선택지는 <legend>거리</legend>가 이름을 준다 — radiogroup은 fieldset 밖의
   // 별도 요소라 legend가 자동으로 붙지 않는다.
   const distanceLabelId = useId();
-  const distanceGroup = useRadioGroup(DISTANCE_OPTIONS, maxDistance, setMaxDistance);
+  const distanceGroup = useRadioGroup(DISTANCE_OPTIONS, editing.maxDistance, editMaxDistance);
   const recentLabelId = useId();
   const recentGroup = useRadioGroup(
     RECENT_EXCLUSION_OPTIONS,
-    excludeRecentDays,
-    setExcludeRecentDays,
+    editing.excludeRecentDays,
+    editRecentDays,
   );
 
   // ---- 슬롯머신 연출 상태 ----
@@ -285,29 +318,32 @@ export default function PickPage() {
   //    다음 픽에 조용히 적용된다.
   //  - 껐다 켜기를 반복하면 먼저 보낸 요청이 나중에 끝나면서 오래된 좌표가 최신 좌표를 덮어쓴다.
   //  - 껐는데 뒤늦게 실패 콜백이 도착해, 쓰지도 않는 필터의 권한 오류 안내가 뜬다.
-  const geoGeneration = useRef(0);
 
   // 언마운트된 뒤 도착하는 콜백도 같은 방식으로 무효화한다.
   useEffect(() => () => { geoGeneration.current += 1; }, []);
 
   const toggleDistanceFilter = () => {
+    const updateGeo = (next: GeoState) => {
+      if (filterDraft) setFilterDraft((current) => current ? { ...current, geo: next } : current);
+      else setGeo(next);
+    };
     // 끄는 경우에도 세대를 올려야 진행 중이던 요청의 결과가 되살아나지 않는다.
     const generation = ++geoGeneration.current;
     const isCurrent = () => geoGeneration.current === generation;
 
-    if (geo.status === "ready" || geo.status === "loading") {
-      setGeo({ status: "idle" });
+    if (editing.geo.status === "ready" || editing.geo.status === "loading") {
+      updateGeo({ status: "idle" });
       return;
     }
     if (!("geolocation" in navigator)) {
-      setGeo({ status: "error" });
+      updateGeo({ status: "error" });
       return;
     }
-    setGeo({ status: "loading" });
+    updateGeo({ status: "loading" });
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         if (!isCurrent()) return;
-        setGeo({
+        updateGeo({
           status: "ready",
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
@@ -315,7 +351,7 @@ export default function PickPage() {
       },
       () => {
         if (!isCurrent()) return;
-        setGeo({ status: "error" });
+        updateGeo({ status: "error" });
       },
       { timeout: 10_000 },
     );
@@ -371,10 +407,115 @@ export default function PickPage() {
     pickMutation.mutate(nextRequest);
   };
 
+  const dismissFilters = () => {
+    geoGeneration.current += 1;
+    setFilterDraft(null);
+  };
+  const openFilters = () => {
+    geoGeneration.current += 1;
+    if (geo.status === "loading") setGeo({ status: "idle" });
+    setFilterDraft({ categories, includeTags, excludeTags, maxDistance, excludeRecentDays,
+      geo: geo.status === "loading" ? { status: "idle" } : geo });
+  };
+  const applyFilters = () => {
+    if (!filterDraft || filterDraft.geo.status === "loading") return;
+    setCategories(filterDraft.categories);
+    setIncludeTags(filterDraft.includeTags);
+    setExcludeTags(filterDraft.excludeTags);
+    setGeo(filterDraft.geo);
+    setMaxDistance(filterDraft.maxDistance);
+    setExcludeRecentDays(filterDraft.excludeRecentDays);
+    dismissFilters();
+  };
+  const conditionCount = categories.length + includeTags.length + excludeTags.length
+    + Number(geo.status === "ready") + Number(excludeRecentDays !== null);
+
+  const filtersContent = (
+    <section className="pick-filters" aria-labelledby={filtersHeadingId}>
+      <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
+      <CategoryFilter ref={categoryFieldset} selected={editing.categories} onChange={editCategories} />
+      <TagFilter
+        legend="포함 태그"
+        placeholder="이 태그가 모두 있는 메뉴만 (예: 혼밥)"
+        selected={editing.includeTags}
+        disabledTags={editing.excludeTags}
+        onChange={editIncludeTags}
+      />
+      <TagFilter
+        legend="제외 태그"
+        placeholder="이 태그가 있는 메뉴는 제외 (예: 느끼함)"
+        selected={editing.excludeTags}
+        disabledTags={editing.includeTags}
+        onChange={editExcludeTags}
+      />
+
+      <fieldset>
+        <legend id={distanceLabelId}>거리</legend>
+        <label className="pick-distance-toggle">
+          <input
+            type="checkbox"
+            checked={editing.geo.status === "ready" || editing.geo.status === "loading"}
+            onChange={toggleDistanceFilter}
+          />
+          내 위치 기준으로 가까운 곳만
+          {editing.geo.status === "loading" && <small>위치 확인 중…</small>}
+        </label>
+        {/* 최대 10초 뒤에 비동기로 나타나고, 그때 체크박스가 스스로 꺼진다. 알리지 않으면
+            스크린리더 사용자에게는 이유 없이 되돌아간 것으로만 보인다. */}
+        {editing.geo.status === "error" && (
+          <p className="pick-geo-error" role="alert">
+            위치를 가져오지 못해 거리 필터를 쓸 수 없어요. 브라우저의 위치 권한을 확인해 주세요.
+          </p>
+        )}
+        {editing.geo.status === "ready" && (
+          /* 여기는 토글 버튼 무리가 아니라 단일 선택 그룹이다 — 항상 정확히 하나가
+             선택돼 있고 해제할 수단이 없다. aria-pressed로 두면 스크린리더가
+             "500m 이내, 눌림"만 읽고 방금 300m가 풀렸다는 사실은 전달되지 않아,
+             선택이 옮겨 간 것이 아니라 하나가 더 켜진 것처럼 들린다.
+             역할과 함께 화살표 키 이동·roving tabindex도 온다 — 근거는 useRadioGroup. */
+          <div className="chip-row" {...distanceGroup.groupProps} aria-labelledby={distanceLabelId}>
+            {DISTANCE_OPTIONS.map((meters, index) => (
+              <button
+                key={meters}
+                type="button"
+                className={chipClass(editing.maxDistance === meters)}
+                {...distanceGroup.radioProps(meters, index)}
+              >
+                {formatDistance(meters)} 이내
+              </button>
+            ))}
+          </div>
+        )}
+      </fieldset>
+
+      {/* 거리와 같은 단일 선택 그룹이다 — 항상 정확히 하나가 켜져 있고(끄기도 하나의 값),
+          해제할 수단이 없다. 근거는 위 거리 칩의 주석과 같다. */}
+      <fieldset>
+        <legend id={recentLabelId}>최근에 뽑은 메뉴 빼기</legend>
+        <div className="chip-row" {...recentGroup.groupProps} aria-labelledby={recentLabelId}>
+          {RECENT_EXCLUSION_OPTIONS.map((days, index) => (
+            <button
+              key={days ?? "off"}
+              type="button"
+              className={chipClass(editing.excludeRecentDays === days)}
+              {...recentGroup.radioProps(days, index)}
+            >
+              {days == null ? "빼지 않기" : `${days}일 안에 뽑은 건 빼기`}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+    </section>
+  );
+
   return (
-    <div className="page">
+    <div className={`page pick-page${result || presetResult ? " has-pick-result" : ""}`}>
       <header className="page-header">
-        <h1>오늘 뭐 먹지</h1>
+        <div>
+          <p className="eyebrow" lang="en">A LITTLE LESS THINKING, A LITTLE MORE EATING</p>
+          <h1>오늘 뭐 먹지</h1>
+          <p className="page-intro">고민은 가볍게, 한 끼는 맛있게. 내 메뉴에서 골라볼까요?</p>
+        </div>
       </header>
 
       {/* 첫 사용자 안내. 방문 확인 질문보다 위에 둔다 — 둘 다 뜨는 경우는 없지만
@@ -385,185 +526,165 @@ export default function PickPage() {
           때이기 때문이다 — 뽑기를 시작하면 "지난번"이 바뀌므로 질문을 거둔다. */}
       <VisitPrompt hidden={interactionBusy || !pickMutation.isIdle || presetResult != null} />
 
+      {compact && <div className="mobile-pick-conditions">
+        <div className="quick-categories" role="group" aria-label="빠른 카테고리">
+          {[...new Set([...CATEGORY_PRESETS, ...categories])].map((category) =>
+            <button key={category} type="button" {...chipToggle(categories.includes(category))}
+              onClick={() => setCategories(categories.includes(category)
+                ? categories.filter((value) => value !== category) : [...categories, category])}>{category}</button>)}
+        </div>
+        <button type="button" className="filter-trigger" aria-haspopup="dialog"
+          aria-expanded={filterDraft !== null} disabled={defaultsQuery.isPending} onClick={openFilters}>
+          조건 설정 <span>{conditionCount > 0 ? `${conditionCount}개 적용 중` : "전체 메뉴에서"}</span>
+        </button>
+        {(includeTags.length > 0 || excludeTags.length > 0 || geo.status === "ready" || excludeRecentDays !== null) &&
+          <div className="applied-conditions" aria-label="적용한 상세 조건">
+            {includeTags.map((tag) => <button key={`include-${tag.id}`} className="chip" type="button"
+              aria-label={`포함 태그 ${tag.name} 해제`} onClick={() => setIncludeTags(includeTags.filter((value) => value.id !== tag.id))}>#{tag.name} ×</button>)}
+            {excludeTags.map((tag) => <button key={`exclude-${tag.id}`} className="chip" type="button"
+              aria-label={`제외 태그 ${tag.name} 해제`} onClick={() => setExcludeTags(excludeTags.filter((value) => value.id !== tag.id))}>제외 #{tag.name} ×</button>)}
+            {geo.status === "ready" && <button type="button" className="chip" onClick={() => setGeo({ status: "idle" })}>{formatDistance(maxDistance)} 이내 해제 ×</button>}
+            {excludeRecentDays !== null && <button type="button" className="chip" onClick={() => setExcludeRecentDays(null)}>최근 {excludeRecentDays}일 제외 해제 ×</button>}
+          </div>}
+      </div>}
+
+      <MobileSheet open={compact && filterDraft !== null} title="픽 조건 설정" onDismiss={dismissFilters}
+        footer={<>
+          <button type="button" onClick={() => {
+            geoGeneration.current += 1;
+            setFilterDraft({ categories: [], includeTags: [],
+              excludeTags: (defaultsQuery.data ?? []).map(({ id, name }) => ({ id, name })),
+              geo: { status: "idle" }, maxDistance: 500, excludeRecentDays: null });
+          }}>초기화</button>
+          <button type="button" className="primary-action" disabled={filterDraft?.geo.status === "loading"}
+            onClick={applyFilters}>{filterDraft?.geo.status === "loading" ? "위치 확인 중…" : "조건 적용"}</button>
+        </>}>
+        <p className="sheet-hint">적용을 눌러야 다음 뽑기에 반영돼요. 초기화해도 기본 제외 태그는 유지해요.</p>
+        {filtersContent}
+      </MobileSheet>
+
       {/* 이름 없는 <section>은 랜드마크로 노출되지 않는다 — 스크린리더의 랜드마크 목록에
           잡히지 않아 실질적으로 <div>였고, 필터 뭉치를 건너뛰어 뽑기 버튼으로 가거나
           반대로 필터로 되돌아오려면 fieldset 네 개를 Tab으로 헤집는 수밖에 없었다.
           제목은 화면에 내지 않는다 — 눈으로 보는 사람에게는 각 fieldset의 legend
           (카테고리·포함 태그·제외 태그·거리)가 이미 구조를 보여주고 있어, 그 위에
           "픽 조건"을 한 줄 더 세우면 같은 말을 두 번 하는 셈이 된다. */}
-      <PickPresets
-        resetSelectionKey={presetSelectionResetKey}
-        onBusyChange={setPresetBusy}
-        tagNameOf={(id) =>
-          defaultsQuery.data?.find((t) => t.id === id)?.name
-            ?? includeTags.find((t) => t.id === id)?.name
-            ?? excludeTags.find((t) => t.id === id)?.name
-            ?? `#${id}`
-        }
-        onResult={(executed) => {
-          alternativesAbort.current?.abort();
-          setAlternatives([]);
-          setPresetResult(executed);
-          setSpinning(false);
-        }}
-      />
-
-      <section className="pick-filters" aria-labelledby={filtersHeadingId}>
-        <h2 className="sr-only" id={filtersHeadingId}>픽 조건</h2>
-        <CategoryFilter ref={categoryFieldset} selected={categories} onChange={setCategories} />
-        <TagFilter
-          legend="포함 태그"
-          placeholder="이 태그가 모두 있는 메뉴만 (예: 혼밥)"
-          selected={includeTags}
-          disabledTags={excludeTags}
-          onChange={setIncludeTags}
-        />
-        <TagFilter
-          legend="제외 태그"
-          placeholder="이 태그가 있는 메뉴는 제외 (예: 느끼함)"
-          selected={excludeTags}
-          disabledTags={includeTags}
-          onChange={setExcludeTags}
-        />
-
-        <fieldset>
-          <legend id={distanceLabelId}>거리</legend>
-          <label className="pick-distance-toggle">
-            <input
-              type="checkbox"
-              checked={geo.status === "ready" || geo.status === "loading"}
-              onChange={toggleDistanceFilter}
-            />
-            내 위치 기준으로 가까운 곳만
-            {geo.status === "loading" && <small>위치 확인 중…</small>}
-          </label>
-          {/* 최대 10초 뒤에 비동기로 나타나고, 그때 체크박스가 스스로 꺼진다. 알리지 않으면
-              스크린리더 사용자에게는 이유 없이 되돌아간 것으로만 보인다. */}
-          {geo.status === "error" && (
-            <p className="pick-geo-error" role="alert">
-              위치를 가져오지 못해 거리 필터를 쓸 수 없어요. 브라우저의 위치 권한을 확인해 주세요.
-            </p>
-          )}
-          {geo.status === "ready" && (
-            /* 여기는 토글 버튼 무리가 아니라 단일 선택 그룹이다 — 항상 정확히 하나가
-               선택돼 있고 해제할 수단이 없다. aria-pressed로 두면 스크린리더가
-               "500m 이내, 눌림"만 읽고 방금 300m가 풀렸다는 사실은 전달되지 않아,
-               선택이 옮겨 간 것이 아니라 하나가 더 켜진 것처럼 들린다.
-               역할과 함께 화살표 키 이동·roving tabindex도 온다 — 근거는 useRadioGroup. */
-            <div className="chip-row" {...distanceGroup.groupProps} aria-labelledby={distanceLabelId}>
-              {DISTANCE_OPTIONS.map((meters, index) => (
-                <button
-                  key={meters}
-                  type="button"
-                  className={chipClass(maxDistance === meters)}
-                  {...distanceGroup.radioProps(meters, index)}
-                >
-                  {formatDistance(meters)} 이내
-                </button>
-              ))}
-            </div>
-          )}
-        </fieldset>
-
-        {/* 거리와 같은 단일 선택 그룹이다 — 항상 정확히 하나가 켜져 있고(끄기도 하나의 값),
-            해제할 수단이 없다. 근거는 위 거리 칩의 주석과 같다. */}
-        <fieldset>
-          <legend id={recentLabelId}>최근에 뽑은 메뉴 빼기</legend>
-          <div className="chip-row" {...recentGroup.groupProps} aria-labelledby={recentLabelId}>
-            {RECENT_EXCLUSION_OPTIONS.map((days, index) => (
-              <button
-                key={days ?? "off"}
-                type="button"
-                className={chipClass(excludeRecentDays === days)}
-                {...recentGroup.radioProps(days, index)}
-              >
-                {days == null ? "빼지 않기" : `${days}일 안에 뽑은 건 빼기`}
-              </button>
-            ))}
+      <div className="pick-workspace">
+        <section className={`pick-decision${result || presetResult ? " has-result" : ""}`} aria-labelledby="decision-heading">
+          <MealPlate />
+          <div className="decision-copy">
+            <p className="eyebrow" lang="en">YOUR NEXT GOOD MEAL</p>
+            <h2 id="decision-heading">오늘의 한 끼를 맡겨보세요.</h2>
+            <p>조건 없이 바로 뽑아도 좋아요.<br />원하는 맛이 있다면 픽 조건을 골라주세요.</p>
           </div>
-        </fieldset>
-      </section>
+          <div className="pick-stage">
+            {/* 돌리는 동안 유일한 자식이 aria-hidden이라 접근 가능한 이름이 빈 문자열이 됐다.
+                이름은 "지금 무엇을 하는 버튼인가"이므로 상태에 따라 바뀌면 안 된다 — 눈에만
+                안 보이게 남겨 두면 돌아가는 중에도 같은 버튼으로 읽힌다. 진행 여부는 이름이
+                아니라 aria-busy가 알린다. */}
+            <button
+              ref={pickButton}
+              className="pick-button"
+              onClick={spin}
+              aria-busy={busy}
+              aria-disabled={interactionBusy}
+            >
+              {busy ? (
+                <>
+                  <span className="pick-slot" aria-hidden="true">{reduceMotion ? "🎲" : slot}</span>
+                  <span className="sr-only">오늘의 메뉴 뽑기</span>
+                </>
+              ) : (
+                <>🎲 오늘의 메뉴 뽑기</>
+              )}
+            </button>
 
-      <div className="pick-stage">
-        {/* 돌리는 동안 유일한 자식이 aria-hidden이라 접근 가능한 이름이 빈 문자열이 됐다.
-            이름은 "지금 무엇을 하는 버튼인가"이므로 상태에 따라 바뀌면 안 된다 — 눈에만
-            안 보이게 남겨 두면 돌아가는 중에도 같은 버튼으로 읽힌다. 진행 여부는 이름이
-            아니라 aria-busy가 알린다. */}
-        <button
-          ref={pickButton}
-          className="pick-button"
-          onClick={spin}
-          aria-busy={busy}
-          aria-disabled={interactionBusy}
-        >
-          {busy ? (
-            <>
-              <span className="pick-slot" aria-hidden="true">{reduceMotion ? "🎲" : slot}</span>
-              <span className="sr-only">오늘의 메뉴 뽑기</span>
-            </>
-          ) : (
-            <>🎲 오늘의 메뉴 뽑기</>
-          )}
-        </button>
+            {/* 같이 뽑기 입구. 저장 폼 옆에 두는 이유는 둘 다 "지금 고른 조건으로 무언가를 더 한다"이기
+                때문이다 — 뽑기 버튼과 결과 사이를 가르지 않는다. */}
 
-        {/* 같이 뽑기 입구. 저장 폼 옆에 두는 이유는 둘 다 "지금 고른 조건으로 무언가를 더 한다"이기
-            때문이다 — 뽑기 버튼과 결과 사이를 가르지 않는다. */}
-        <StartPickRoom categories={categories} />
 
-        <SavePickPresetForm
-          categories={categories}
-          includeTagIds={includeTags.map((t) => t.id)}
-          excludeTagIds={excludeTags.map((t) => t.id)}
-          defaultExcludedTagIds={(defaultsQuery.data ?? []).map((t) => t.id)}
-          maxDistance={geo.status === "ready" ? maxDistance : null}
-        />
-
-        {pickMutation.isIdle && (
-          <p className="card-muted-hint">
-            아직 메뉴가 없다면 <Link to="/menus">내 메뉴</Link>에서 자주 먹는 메뉴부터 등록해 보세요.
-          </p>
-        )}
-      </div>
-
-      {/* 픽 결과는 화면 일부만 조용히 바뀐다 — 알림이 없으면 스크린리더 사용자는
-          버튼을 눌러도 무엇이 뽑혔는지 알 수 없다. 이 앱의 핵심 동작이라 반드시 필요하다. */}
-      <div role="status" aria-live="polite">
-        {/* 뽑는 동안 이 리전이 비어 있으면 Enter를 친 뒤 최소 1.2초가 완전한 무음이 된다.
-            돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다. */}
-        {(spinning || pickMutation.isPending) && <p className="sr-only">메뉴를 뽑는 중…</p>}
-        {presetResult && (
-          <>
-            <PickResultCard result={presetResult.pick} onRetry={spin} />
-            {/* 미리보기 뒤 기본 제외가 바뀌었을 수 있다 — 서버가 실제로 쓴 조건이 권위 있다. */}
-            <p className="settings-desc">
-              빠른 픽으로 뽑았어요. 실제 적용된 제외 태그{" "}
-              {presetResult.appliedFilters.effectiveExcludeTagIds.length}개
-              {presetResult.appliedFilters.maxDistance != null &&
-                `, ${presetResult.appliedFilters.maxDistance}m 이내`}
-            </p>
-          </>
-        )}
-        {!presetResult && result && <PickResultCard result={result} onRetry={spin} />}
-
-        {emptyReason && (
-          <div className="card pick-empty">
-            <p>{emptyReason.message}</p>
-            {emptyReason.to && emptyReason.cta && (
-              <Link to={emptyReason.to}>{emptyReason.cta} →</Link>
+            {pickMutation.isIdle && (
+              <p className="card-muted-hint">
+                아직 메뉴가 없다면 <Link to="/menus">내 메뉴</Link>에서 자주 먹는 메뉴부터 등록해 보세요.
+              </p>
             )}
           </div>
-        )}
+          {/* 픽 결과는 화면 일부만 조용히 바뀐다 — 알림이 없으면 스크린리더 사용자는
+              버튼을 눌러도 무엇이 뽑혔는지 알 수 없다. 이 앱의 핵심 동작이라 반드시 필요하다. */}
+          <div role="status" aria-live="polite">
+            {/* 뽑는 동안 이 리전이 비어 있으면 Enter를 친 뒤 최소 1.2초가 완전한 무음이 된다.
+                돌아가는 이모지는 aria-hidden이라 들리는 것이 하나도 없다. */}
+            {(spinning || pickMutation.isPending) && <p className="sr-only">메뉴를 뽑는 중…</p>}
+            {presetResult && (
+              <>
+                <PickResultCard result={presetResult.pick} onRetry={spin} />
+                {/* 미리보기 뒤 기본 제외가 바뀌었을 수 있다 — 서버가 실제로 쓴 조건이 권위 있다. */}
+                <p className="settings-desc">
+                  빠른 픽으로 뽑았어요. 실제 적용된 제외 태그{" "}
+                  {presetResult.appliedFilters.effectiveExcludeTagIds.length}개
+                  {presetResult.appliedFilters.maxDistance != null &&
+                    `, ${presetResult.appliedFilters.maxDistance}m 이내`}
+                </p>
+              </>
+            )}
+            {!presetResult && result && <PickResultCard result={result} onRetry={spin} />}
+
+            {emptyReason && (
+              <div className="card pick-empty">
+                <p>{emptyReason.message}</p>
+                {emptyReason.to && emptyReason.cta && (
+                  <Link to={emptyReason.to}>{emptyReason.cta} →</Link>
+                )}
+              </div>
+            )}
+          </div>
+          {ALTERNATIVE_CODES.has(apiErrorCode(error) ?? "") && (
+            <PickAlternatives
+              ref={alternativesPanel}
+              alternatives={alternatives}
+              loading={alternativesLoading}
+              applying={alternativesApplying}
+              onApply={applyAlternative}
+            />
+          )}
+          {error && !emptyReason && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
+
+          <MobileSection title="함께 뽑기 · 조건 저장">
+            <StartPickRoom categories={categories} />
+
+            <SavePickPresetForm
+              categories={categories}
+              includeTagIds={includeTags.map((t) => t.id)}
+              excludeTagIds={excludeTags.map((t) => t.id)}
+              defaultExcludedTagIds={(defaultsQuery.data ?? []).map((t) => t.id)}
+              maxDistance={geo.status === "ready" ? maxDistance : null}
+            />
+          </MobileSection>
+
+        </section>
+        <div className="pick-controls">
+          <PickPresets
+            resetSelectionKey={presetSelectionResetKey}
+            onBusyChange={setPresetBusy}
+            tagNameOf={(id) =>
+              defaultsQuery.data?.find((t) => t.id === id)?.name
+                ?? includeTags.find((t) => t.id === id)?.name
+                ?? excludeTags.find((t) => t.id === id)?.name
+                ?? `#${id}`
+            }
+            onResult={(executed) => {
+              alternativesAbort.current?.abort();
+              setAlternatives([]);
+              setPresetResult(executed);
+              setSpinning(false);
+            }}
+          />
+
+          {!compact && filtersContent}
+
+        </div>
       </div>
-      {ALTERNATIVE_CODES.has(apiErrorCode(error) ?? "") && (
-        <PickAlternatives
-          ref={alternativesPanel}
-          alternatives={alternatives}
-          loading={alternativesLoading}
-          applying={alternativesApplying}
-          onApply={applyAlternative}
-        />
-      )}
-      {error && !emptyReason && <p className="error" role="alert">{apiErrorMessage(error)}</p>}
+
 
       {/* 맨 아래에 둔다. 곁다리 정보라 뽑기 버튼과 결과를 밀어내면 안 되고, 표본이 모이기
           전까지는 "아직 없어요" 한 줄만 있는 패널이라 더욱 그렇다. 누르면 위 픽 조건에
@@ -624,12 +745,14 @@ function PickResultCard({
       {menu.memo && <p className="pick-result-memo">{menu.memo}</p>}
 
       {reasons.length > 0 && (
+        <MobileSection title="추천 이유">
         <div className="pick-reasons" aria-label="추천 이유">
           <strong>이 메뉴를 고른 이유</strong>
           <ul>
             {reasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>
         </div>
+        </MobileSection>
       )}
 
       {(menu.categories.length > 0 || menu.tags.length > 0) && (
@@ -676,13 +799,15 @@ function PickResultCard({
           disabled={feedbackMutation.isPending} aria-pressed={feedback === "ACCEPTED"}>
           👍 이걸로 먹을래요
         </button>
+        <button onClick={onRetry}>🔁 다시 돌리기</button>
+        <MobileSection title="다른 의견 · 공유" className="result-secondary">
         <button onClick={() => feedbackMutation.mutate("REJECTED")}
           disabled={feedbackMutation.isPending} aria-pressed={feedback === "REJECTED"}>
           👎 별로예요
         </button>
-        <button onClick={onRetry}>🔁 다시 돌리기</button>
         <SharePickButton menuName={menu.name} />
         <Link to="/history">히스토리 보기 →</Link>
+        </MobileSection>
       </div>
       {feedback && <p className="card-muted-hint" role="status">의견을 저장했어요.</p>}
       </div>

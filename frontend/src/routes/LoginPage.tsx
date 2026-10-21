@@ -14,6 +14,7 @@ import { useAuth } from "../auth/AuthContext";
 import { consumeReturnTo } from "../auth/returnTo";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
+import MealPlate from "../components/MealPlate";
 import "./AuthPages.css";
 
 /** 막힌 화면 없이 그냥 로그인한 경우의 착지점 — 메뉴가 없으면 픽 자체가 안 되므로 메뉴부터 보여준다. */
@@ -43,77 +44,89 @@ export default function LoginPage() {
   const demoHeadingId = useId();
 
   return (
-    <div className="login-page">
-      {/* 이 h1만 서비스 이름이다 — 다른 로그인 전 화면의 h1은 "비밀번호 재설정"처럼
-          화면 제목이라 같은 크기·서체로 두면 안내문이 간판처럼 커진다. */}
-      <h1 className="auth-wordmark">메뉴픽</h1>
-      <p className="auth-tagline">오늘 뭐 먹지 고민을 대신 해드립니다.</p>
+    <div className="login-page login-entry">
+      <section className="login-story" aria-label="메뉴픽 소개">
+        {/* 이 h1만 서비스 이름이다 — 다른 로그인 전 화면의 h1은 "비밀번호 재설정"처럼
+            화면 제목이라 같은 크기·서체로 두면 안내문이 간판처럼 커진다. */}
+        <h1 className="auth-wordmark">메뉴픽</h1>
+        <p className="login-headline">잘 고르고,<br />맛있게 먹어요.</p>
+        <p className="auth-tagline">오늘 뭐 먹지, 매일의 작은 고민.<br />내가 좋아하는 메뉴에서 한 끼를 골라드려요.</p>
+        <MealPlate />
+        <p className="login-story-note">좋아하는 맛을 모으고 · 한 끼를 고르고 · 기록으로 남기세요</p>
+      </section>
+      <div className="login-form-panel">
+        <div className="login-form-heading">
+          <p className="eyebrow" lang="en">WELCOME TO YOUR TABLE</p>
+          <h2>나의 식탁으로 들어가기</h2>
+          <p>로그인하고 나만의 메뉴판을 이어가세요.</p>
+        </div>
 
-      {/* 아무 말 없이 화면만 바뀌면 사용자는 자기가 뭘 잘못 눌렀다고 생각한다.
-          "다시 로그인하면 보던 화면으로 돌아간다"까지 말하는 이유는 ProtectedRoute가
-          returnTo를 남겨뒀기 때문이다 — 실제로 그렇게 동작한다.
-          tabIndex={-1}이 없으면 <p>는 초점을 받지 못해 focus()가 조용히 무시된다. */}
-      {arrival?.sessionExpired && (
-        <p className="auth-notice" ref={expiredNotice} tabIndex={-1}>
-          로그인한 지 오래되어 자동으로 로그아웃됐어요. 다시 로그인하면 보던 화면으로 돌아갑니다.
-        </p>
-      )}
-
-      <EmailLoginForm />
-
-      <div className="auth-divider">또는</div>
-
-      {notLinked && (
-        <p className="auth-notice" role="status">
-          {PROVIDER_LABELS[notLinked]} 계정이 아직 연동돼 있지 않아요.{" "}
-          <Link to="/signup">이메일로 가입</Link>한 뒤 설정에서 연동해주세요.
-        </p>
-      )}
-
-      <div className="login-actions">
-        {PROVIDERS.map((provider) => (
-          <button
-            key={provider}
-            onClick={() => (window.location.href = loginAuthorizeUrl(provider))}
-          >
-            {PROVIDER_LABELS[provider]}로 로그인
-          </button>
-        ))}
-      </div>
-
-      {/* 소셜은 가입 경로가 아니다. 이 줄이 없으면 "카카오로 로그인"을 처음 누른 사람은
-          가입 버튼으로 읽고, 거절당한 뒤에야 이유를 알게 된다. */}
-      <p className="login-social-hint">
-        소셜 로그인은 이메일로 가입한 계정에 <strong>설정 &gt; 소셜 계정 연동</strong>을 마친 뒤
-        쓸 수 있어요.
-      </p>
-
-      <section className="card login-demo" aria-labelledby={demoHeadingId}>
-        {/* <strong>이었다. 시각적으로는 이 카드의 제목인데 제목 트리에서는 빠져 있어,
-            로그인 화면을 제목으로 훑으면 <h1>메뉴픽 하나만 나오고 "가입 없이 먼저
-            써 볼 수 있다"는 이 온보딩 경로는 존재하지 않는 것이 된다. 카드 자체도
-            이름이 없어 랜드마크로 잡히지 않았다. */}
-        <h2 id={demoHeadingId}>먼저 구경해보기</h2>
-        <p className="login-demo-desc">
-          로그인 없이 뽑아볼 수 있어요. 샘플 메뉴로 시연하며, 결과는 저장되지 않습니다.
-        </p>
-
-        <button disabled={demo.isPending} onClick={() => demo.mutate()}>
-          {demo.isPending ? "뽑는 중…" : demo.data ? "다시 뽑기" : "랜덤으로 하나 뽑아보기"}
-        </button>
-
-        {demo.data && (
-          <div className="login-demo-result">
-            <span className="login-demo-name">{demo.data.name}</span>
-            <span className="login-demo-categories">{demo.data.categories.join(" · ")}</span>
-            <p className="login-demo-cta">
-              내 메뉴로 뽑고 기록까지 남기려면 로그인하세요.
-            </p>
-          </div>
+        {/* 아무 말 없이 화면만 바뀌면 사용자는 자기가 뭘 잘못 눌렀다고 생각한다.
+            "다시 로그인하면 보던 화면으로 돌아간다"까지 말하는 이유는 ProtectedRoute가
+            returnTo를 남겨뒀기 때문이다 — 실제로 그렇게 동작한다.
+            tabIndex={-1}이 없으면 <p>는 초점을 받지 못해 focus()가 조용히 무시된다. */}
+        {arrival?.sessionExpired && (
+          <p className="auth-notice" ref={expiredNotice} tabIndex={-1}>
+            로그인한 지 오래되어 자동으로 로그아웃됐어요. 다시 로그인하면 보던 화면으로 돌아갑니다.
+          </p>
         )}
 
-        {demo.isError && <p className="error" role="alert">{apiErrorMessage(demo.error)}</p>}
-      </section>
+        <EmailLoginForm />
+
+        <div className="auth-divider">또는</div>
+
+        {notLinked && (
+          <p className="auth-notice" role="status">
+            {PROVIDER_LABELS[notLinked]} 계정이 아직 연동돼 있지 않아요.{" "}
+            <Link to="/signup">이메일로 가입</Link>한 뒤 설정에서 연동해주세요.
+          </p>
+        )}
+
+        <div className="login-actions">
+          {PROVIDERS.map((provider) => (
+            <button
+              key={provider}
+              onClick={() => (window.location.href = loginAuthorizeUrl(provider))}
+            >
+              {PROVIDER_LABELS[provider]}로 로그인
+            </button>
+          ))}
+        </div>
+
+        {/* 소셜은 가입 경로가 아니다. 이 줄이 없으면 "카카오로 로그인"을 처음 누른 사람은
+            가입 버튼으로 읽고, 거절당한 뒤에야 이유를 알게 된다. */}
+        <p className="login-social-hint">
+          소셜 로그인은 이메일로 가입한 계정에 <strong>설정 &gt; 소셜 계정 연동</strong>을 마친 뒤
+          쓸 수 있어요.
+        </p>
+
+        <section className="card login-demo" aria-labelledby={demoHeadingId}>
+          {/* <strong>이었다. 시각적으로는 이 카드의 제목인데 제목 트리에서는 빠져 있어,
+              로그인 화면을 제목으로 훑으면 <h1>메뉴픽 하나만 나오고 "가입 없이 먼저
+              써 볼 수 있다"는 이 온보딩 경로는 존재하지 않는 것이 된다. 카드 자체도
+              이름이 없어 랜드마크로 잡히지 않았다. */}
+          <h2 id={demoHeadingId}>먼저 구경해보기</h2>
+          <p className="login-demo-desc">
+            로그인 없이 뽑아볼 수 있어요. 샘플 메뉴로 시연하며, 결과는 저장되지 않습니다.
+          </p>
+
+          <button disabled={demo.isPending} onClick={() => demo.mutate()}>
+            {demo.isPending ? "뽑는 중…" : demo.data ? "다시 뽑기" : "랜덤으로 하나 뽑아보기"}
+          </button>
+
+          {demo.data && (
+            <div className="login-demo-result">
+              <span className="login-demo-name">{demo.data.name}</span>
+              <span className="login-demo-categories">{demo.data.categories.join(" · ")}</span>
+              <p className="login-demo-cta">
+                내 메뉴로 뽑고 기록까지 남기려면 로그인하세요.
+              </p>
+            </div>
+          )}
+
+          {demo.isError && <p className="error" role="alert">{apiErrorMessage(demo.error)}</p>}
+        </section>
+      </div>
     </div>
   );
 }
