@@ -14,7 +14,7 @@ import {
   type Provider,
 } from "../api/auth";
 import { deleteTag, fetchAllTags, renameTag, type TagInfo } from "../api/tags";
-import { fetchDefaultExcludedTagIds, updateDefaultExcludedTagIds } from "../api/pickPreferences";
+import DefaultExclusionSection from "./DefaultExclusionSection";
 import { linkAuthorizeUrl } from "../auth/oauthUrls";
 import { apiErrorMessage as errorMessage, apiErrorCode } from "../api/http";
 import "./SettingsPage.css";
@@ -218,51 +218,6 @@ export default function SettingsPage() {
   );
 }
 
-function DefaultExclusionSection() {
-  const headingId = useId();
-  const tagsQuery = useQuery({ queryKey: ["tags", "all"], queryFn: fetchAllTags });
-  const preferenceQuery = useQuery({
-    queryKey: ["pick-preferences"], queryFn: fetchDefaultExcludedTagIds,
-  });
-  const [selected, setSelected] = useState<number[] | null>(null);
-  const current = selected ?? preferenceQuery.data ?? [];
-  const saveMutation = useMutation({
-    mutationFn: () => updateDefaultExcludedTagIds(current),
-    onSuccess: (ids) => setSelected(ids),
-  });
-
-  return (
-    <section className="card settings-section" aria-labelledby={headingId}>
-      <h2 id={headingId}>기본 제외 태그</h2>
-      <p className="settings-desc">
-        알레르기나 기피 재료 태그를 고르면 매번 픽할 때 기본으로 제외합니다.
-        픽 화면에서는 이번 한 번만 해제할 수 있어요.
-      </p>
-      {tagsQuery.data?.map((tag) => (
-        <label className="settings-check" key={tag.id}>
-          <input type="checkbox" checked={current.includes(tag.id)} onChange={() => {
-            setSelected(current.includes(tag.id)
-              ? current.filter((id) => id !== tag.id)
-              : [...current, tag.id]);
-          }} />
-          {tag.name}
-        </label>
-      ))}
-      {tagsQuery.isSuccess && tagsQuery.data.length === 0 &&
-        <p className="settings-desc">먼저 메뉴에서 알레르기·기피 태그를 만들어 주세요.</p>}
-      {(tagsQuery.isError || preferenceQuery.isError || saveMutation.isError) &&
-        <p className="error" role="alert">기본 제외 설정을 처리하지 못했습니다.</p>}
-      <div className="card-actions">
-        <button type="button" onClick={() => saveMutation.mutate()}
-          aria-busy={saveMutation.isPending}>
-          {saveMutation.isPending ? "저장 중…" : "기본 제외 저장"}
-        </button>
-      </div>
-      {saveMutation.isSuccess && <p className="settings-desc" role="status">저장했습니다.</p>}
-    </section>
-  );
-}
-
 /**
  * 태그 이름 변경·삭제는 계정 전체에 적용되므로 설정에서 관리한다.
  *
@@ -304,6 +259,7 @@ function TagSection() {
       // 자동완성 캐시(["tags", 키워드])도 함께 턴다 — 방금 지운 태그가 제안에 남으면
       // 눌렀을 때 404가 난다.
       queryClient.invalidateQueries({ queryKey: ["tags"] });
+      void queryClient.invalidateQueries({ queryKey: ["pick-preferences"] });
     },
   });
 
