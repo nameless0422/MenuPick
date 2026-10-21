@@ -1,4 +1,4 @@
-import { forwardRef, useDeferredValue, useEffect, useId, useRef, useState } from "react";
+import { forwardRef, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { requestPick, type PickRequest, type PickResult } from "../api/pick";
@@ -142,20 +142,22 @@ export default function PickPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [includeTags, setIncludeTags] = useState<TagSummary[]>([]);
   const [excludeTags, setExcludeTags] = useState<TagSummary[]>([]);
+  const defaultTagsQuery = useQuery({ queryKey: ["tags", "all"], queryFn: fetchAllTags });
+  // 설정 화면과 같은 캐시에는 서버 응답인 ID 목록만 저장한다. 이름은 태그 캐시에서 찾는다.
   const defaultsQuery = useQuery({
-    queryKey: ["pick-preferences"],
-    queryFn: async () => {
-      const [ids, tags] = await Promise.all([fetchDefaultExcludedTagIds(), fetchAllTags()]);
-      return tags.filter((tag) => ids.includes(tag.id));
-    },
+    queryKey: ["pick-preferences"], queryFn: fetchDefaultExcludedTagIds,
   });
+  const defaultExcludedTags = useMemo(() => defaultTagsQuery.data?.filter(
+    (tag) => defaultsQuery.data?.includes(tag.id)), [defaultTagsQuery.data, defaultsQuery.data]);
+  const defaultsReady = defaultsQuery.isSuccess && defaultTagsQuery.isSuccess;
+  const defaultsPending = defaultsQuery.isPending || defaultTagsQuery.isPending;
   const defaultsApplied = useRef(false);
   useEffect(() => {
-    if (!defaultsApplied.current && defaultsQuery.data) {
+    if (!defaultsApplied.current && defaultsReady && defaultExcludedTags) {
       defaultsApplied.current = true;
-      setExcludeTags(defaultsQuery.data.map(({ id, name }) => ({ id, name })));
+      setExcludeTags(defaultExcludedTags.map(({ id, name }) => ({ id, name })));
     }
-  }, [defaultsQuery.data]);
+  }, [defaultsReady, defaultExcludedTags]);
   // 빠른 픽 실행 결과. 수동 픽과 같은 카드로 보여주되 출처가 다르므로 따로 담는다 —
   // 하나로 합치면 "방금 무엇으로 뽑았는지"를 화면이 구분해 말할 수 없다.
   const [presetResult, setPresetResult] = useState<PickPresetExecutionResult | null>(null);
@@ -534,7 +536,7 @@ export default function PickPage() {
                 ? categories.filter((value) => value !== category) : [...categories, category])}>{category}</button>)}
         </div>
         <button type="button" className="filter-trigger" aria-haspopup="dialog"
-          aria-expanded={filterDraft !== null} disabled={defaultsQuery.isPending} onClick={openFilters}>
+          aria-expanded={filterDraft !== null} disabled={defaultsPending} onClick={openFilters}>
           조건 설정 <span>{conditionCount > 0 ? `${conditionCount}개 적용 중` : "전체 메뉴에서"}</span>
         </button>
         {(includeTags.length > 0 || excludeTags.length > 0 || geo.status === "ready" || excludeRecentDays !== null) &&
@@ -553,7 +555,7 @@ export default function PickPage() {
           <button type="button" onClick={() => {
             geoGeneration.current += 1;
             setFilterDraft({ categories: [], includeTags: [],
-              excludeTags: (defaultsQuery.data ?? []).map(({ id, name }) => ({ id, name })),
+              excludeTags: (defaultExcludedTags ?? []).map(({ id, name }) => ({ id, name })),
               geo: { status: "idle" }, maxDistance: 500, excludeRecentDays: null });
           }}>초기화</button>
           <button type="button" className="primary-action" disabled={filterDraft?.geo.status === "loading"}
@@ -656,7 +658,7 @@ export default function PickPage() {
               categories={categories}
               includeTagIds={includeTags.map((t) => t.id)}
               excludeTagIds={excludeTags.map((t) => t.id)}
-              defaultExcludedTagIds={(defaultsQuery.data ?? []).map((t) => t.id)}
+              defaultExcludedTagIds={(defaultExcludedTags ?? []).map((t) => t.id)}
               maxDistance={geo.status === "ready" ? maxDistance : null}
             />
           </MobileSection>
@@ -667,7 +669,7 @@ export default function PickPage() {
             resetSelectionKey={presetSelectionResetKey}
             onBusyChange={setPresetBusy}
             tagNameOf={(id) =>
-              defaultsQuery.data?.find((t) => t.id === id)?.name
+              defaultExcludedTags?.find((t) => t.id === id)?.name
                 ?? includeTags.find((t) => t.id === id)?.name
                 ?? excludeTags.find((t) => t.id === id)?.name
                 ?? `#${id}`
