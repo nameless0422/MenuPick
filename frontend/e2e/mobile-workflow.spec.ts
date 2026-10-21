@@ -18,6 +18,10 @@ async function installApi(page: Page) {
       "/api/v1/menus": { menus: [menu], hasNext: false, nextCursor: null },
       "/api/v1/menus/1": menu,
       "/api/v1/menus/1/restaurants": { menuRestaurants: [] },
+      "/api/v1/restaurants": [{ id: 1, name: "동네 식탁", address: "서울 강남구 역삼동", phone: "02-1234-5678",
+        latitude: 37.5, longitude: 127, naverUrl: "https://place.map.kakao.com/1" }],
+      "/api/v1/restaurants/1": { id: 1, name: "동네 식탁", address: "서울 강남구 역삼동", phone: "02-1234-5678",
+        latitude: 37.5, longitude: 127, naverUrl: "https://place.map.kakao.com/1", kakaoPlaceId: "1", version: 0 },
       "/api/v1/history": { histories: [{ id: 1, menuId: 1, menuName: menu.name, restaurantName: "동네 식탁",
         isVisited: true, visitedAt: "2026-10-19T12:30:00", recommendedAt: "2026-10-19T12:00:00",
         memo: null, filterConditions: [], recommendationFeedback: null }], hasNext: false, nextCursor: null },
@@ -212,4 +216,36 @@ test("결과를 받은 뒤에도 함께 뽑기와 현재 조건 저장을 열 �
   await expect(page.getByRole("button", { name: "여럿이 같이 뽑기" })).toBeVisible();
   await page.getByRole("button", { name: "현재 조건 저장", exact: true }).click();
   await expect(page.getByRole("group", { name: "현재 조건을 빠른 픽으로 저장" })).toBeVisible();
+});
+
+test("식당 목록을 먼저 보고 추가·관리 작업을 열며 수정 취소 후 초점을 복원한다", async ({ page }) => {
+  await installApi(page);
+  await page.goto("/restaurants");
+  await expect(page.getByText("동네 식탁", { exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByLabel("장소 검색어", { exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "동네 식탁 수정", exact: true })).toHaveCount(0);
+  const manage = page.getByRole("button", { name: "동네 식탁 관리", exact: true });
+  await manage.click();
+  await page.getByRole("button", { name: "동네 식탁 수정", exact: true }).click();
+  await expect(page.getByLabel("식당 이름", { exact: true })).toHaveValue("동네 식탁");
+  await page.getByRole("button", { name: "취소", exact: true }).click();
+  await expect(manage).toBeFocused();
+  await expect(manage).toHaveAttribute("aria-expanded", "false");
+  const add = page.getByRole("button", { name: "새 식당 추가", exact: true });
+  await add.click();
+  await page.getByLabel("장소 검색어", { exact: true }).fill("역삼동");
+  await add.click();
+  await add.click();
+  await expect(page.getByLabel("장소 검색어", { exact: true })).toHaveValue("역삼동");
+});
+
+test("식당 목록은 320px에서 글자를 200%로 키워도 가로로 넘치지 않는다", async ({ page }) => {
+  await installApi(page);
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto("/restaurants");
+  await page.addStyleTag({ content: ":root { font-size: 200%; }" });
+  await page.evaluate(() => document.fonts.ready);
+  await page.getByRole("button", { name: "동네 식탁 관리", exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "동네 식탁 수정", exact: true }).click({ trial: true });
 });

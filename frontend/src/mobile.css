@@ -178,6 +178,52 @@
 }
 
 @media (max-width: 760px) {
+  .restaurant-add-section, .restaurant-map-section {
+    margin-bottom: 20px;
+  }
+  .restaurant-add-section .menu-form {
+    margin: 12px 0 0;
+  }
+  .restaurants-page > h2 {
+    margin: 24px 0 16px;
+  }
+  .restaurants-page > .card-list > .card {
+    position: relative;
+    padding: 20px 16px;
+    gap: 10px;
+  }
+  .restaurants-page .card-main {
+    padding-right: 74px;
+  }
+  .restaurants-page .card-main strong {
+    font-size: 1.0625rem;
+    overflow-wrap: anywhere;
+  }
+  .restaurants-page .card > span {
+    font-size: .8125rem;
+    overflow-wrap: anywhere;
+  }
+  .restaurant-management > .mobile-section-toggle {
+    position: absolute;
+    top: 16px;
+    right: 12px;
+    width: auto;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: .75rem;
+  }
+  .restaurant-management > div:not([hidden]) {
+    padding-top: 12px;
+  }
+  .restaurant-management .card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .restaurant-management .card-actions button {
+    min-height: 44px;
+    font-size: .8125rem;
+  }
   .app-bar nav {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
