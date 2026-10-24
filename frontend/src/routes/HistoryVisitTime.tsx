@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchHistoryVisitTime, updateHistoryVisitTime, type HistoryVisitTimeResponse } from "../api/history";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
+import { useCompactLayout } from "../a11y/useCompactLayout";
 
 export default function HistoryVisitTime({ historyId, label }: { historyId: number; label: string }) {
   const [open, setOpen] = useState(false);
@@ -46,7 +47,10 @@ function VisitTimeForm({ initial, label, onClose, onSaved, onBusy }: {
   initial: HistoryVisitTimeResponse; label: string; onClose: () => void; onSaved: () => void; onBusy: (value: boolean) => void;
 }) {
   const [original] = useState(initial);
-  const [time, setTime] = useState(original.visitedAt.slice(0, 19));
+  const compact = useCompactLayout();
+  const [date, setDate] = useState(original.visitedAt.slice(0, 10));
+  const [clock, setClock] = useState(original.visitedAt.slice(11, 19));
+  const time = date && clock ? `${date}T${clock}` : "";
   const client = useQueryClient();
   const id = useId();
   const focus = useFocusOnMount<HTMLInputElement>();
@@ -63,10 +67,27 @@ function VisitTimeForm({ initial, label, onClose, onSaved, onBusy }: {
   const blocked = update.isPending || conflict || !time;
   return <form className="history-memo-form" aria-label={`${label} 방문 일시 편집`}
     onSubmit={event => { event.preventDefault(); if (!blocked) update.mutate(); }}>
-    <label htmlFor={id}>방문한 날짜와 시각 (한국 시간)</label>
-    <input ref={focus} id={id} type="datetime-local" step="1" required value={time}
-      min={original.earliestVisitAt.slice(0, 19)} max={original.latestVisitAt.slice(0, 19)} readOnly={update.isPending}
-      aria-describedby={`${id}-help`} onChange={event => setTime(event.target.value)} />
+    {compact ? <>
+      <label htmlFor={`${id}-date`}>방문한 날짜 (한국 시간)</label>
+      <input ref={focus} id={`${id}-date`} type="date" required value={date}
+        min={original.earliestVisitAt.slice(0, 10)} max={original.latestVisitAt.slice(0, 10)}
+        readOnly={update.isPending} aria-describedby={`${id}-help`}
+        onChange={event => setDate(event.target.value)} />
+      <label htmlFor={`${id}-clock`}>방문한 시각 (한국 시간)</label>
+      <input id={`${id}-clock`} type="time" step="1" required value={clock}
+        min={date === original.earliestVisitAt.slice(0, 10) ? original.earliestVisitAt.slice(11, 19) : undefined}
+        max={date === original.latestVisitAt.slice(0, 10) ? original.latestVisitAt.slice(11, 19) : undefined}
+        readOnly={update.isPending} aria-describedby={`${id}-help`}
+        onChange={event => setClock(event.target.value)} />
+    </> : <>
+      <label htmlFor={id}>방문한 날짜와 시각 (한국 시간)</label>
+      <input ref={focus} id={id} type="datetime-local" step="1" required value={time}
+        min={original.earliestVisitAt.slice(0, 19)} max={original.latestVisitAt.slice(0, 19)} readOnly={update.isPending}
+        aria-describedby={`${id}-help`} onChange={event => {
+          setDate(event.target.value.slice(0, 10));
+          setClock(event.target.value.slice(11));
+        }} />
+    </>}
     <p id={`${id}-help`}>추천 기록이 생성된 날짜부터 조회 시점의 현재 시각까지 입력할 수 있습니다. 식당·메모·추천 피드백은 유지됩니다.</p>
     {update.isError && <p role="alert" className="error">{apiErrorMessage(update.error)}</p>}
     {conflict && <p role="status">입력한 일시는 유지했습니다. 편집을 취소한 뒤 다시 열어 최신 기록을 확인하세요.</p>}

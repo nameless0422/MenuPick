@@ -245,7 +245,7 @@ export default function HistoryPage() {
           // 화면에 보이는 이름, 버튼 이름, 확인 대화상자가 전부 같은 말을 쓰게 한 번만 만든다.
           const label = history.menuName ?? "삭제된 메뉴";
           return (
-          <li key={history.id} className="card">
+          <li key={history.id} className="card history-card">
             <div className="card-main">
               <strong>{label}</strong>
               <time className="history-time" dateTime={history.recommendedAt}>
@@ -262,21 +262,6 @@ export default function HistoryPage() {
               {history.restaurantName ?? "기록된 식당 없음"}
             </p>
 
-            {history.filterConditions.length > 0 && (
-              <div className="chip-row">
-                {history.filterConditions.map((condition, index) => (
-                  <span key={index} className={filterChipClass(condition)}>
-                    {filterLabel(condition)}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <HistoryMemo historyId={history.id} label={`${label} (${formatDateTime(history.recommendedAt)})`}
-              memo={history.memo ?? null} />
-            {history.isVisited && <HistoryVisitTime historyId={history.id}
-              label={`${label} (${formatDateTime(history.recommendedAt)})`} />}
-
             <div className="card-actions">
               {history.isVisited ? (
                 <>
@@ -286,14 +271,6 @@ export default function HistoryPage() {
                       <time dateTime={history.visitedAt}>{formatDateTime(history.visitedAt)}</time>
                     </span>
                   )}
-                  <button
-                    type="button"
-                    disabled={undoVisitMutation.isPending}
-                    aria-label={`${label} 방문 처리 취소 (${formatDateTime(history.recommendedAt)})`}
-                    onClick={() => undoVisitMutation.mutate(history.id)}
-                  >
-                    {undoVisitMutation.isPending && undoVisitMutation.variables === history.id ? "처리 중…" : "방문 취소"}
-                  </button>
                 </>
               ) : (
                 <VisitAction
@@ -307,21 +284,56 @@ export default function HistoryPage() {
                   }}
                 />
               )}
-              {/* 이름 없는 "삭제"가 기록 수만큼 늘어서고, 확인 대화상자마저 무엇을 지우는지
-                  말하지 않아 되돌릴 수 없는 동작을 눈으로 확인할 방법이 없었다. 같은 메뉴를
-                  여러 번 뽑을 수 있으므로 시각까지 넣어야 항목이 서로 구분된다. */}
-              <button
-                disabled={deleteMutation.isPending}
-                aria-label={`${label} 픽 기록 삭제 (${formatDateTime(history.recommendedAt)})`}
-                onClick={() => {
-                  if (window.confirm(`'${label}' 픽 기록을 삭제할까요?`)) {
-                    deleteMutation.mutate({ id: history.id, label });
-                  }
-                }}
-              >
-                삭제
-              </button>
             </div>
+            {compact && history.memo && <p className="history-memo-text">{history.memo}</p>}
+
+            <MobileSection title="기록 상세"
+              label={`${label} 기록 상세 (${formatDateTime(history.recommendedAt)})`}
+              className="history-details">
+              <div className="history-detail-content">
+                {history.filterConditions.length > 0 && (
+                  <div className="chip-row">
+                    {history.filterConditions.map((condition, index) => (
+                      <span key={index} className={filterChipClass(condition)}>
+                        {filterLabel(condition)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <HistoryMemo historyId={history.id} label={`${label} (${formatDateTime(history.recommendedAt)})`}
+                  memo={history.memo ?? null} showPreview={!compact} />
+                {history.isVisited && <HistoryVisitTime historyId={history.id}
+                  label={`${label} (${formatDateTime(history.recommendedAt)})`} />}
+
+                <div className="card-actions">
+                  {history.isVisited && (
+                    <button
+                      type="button"
+                      disabled={undoVisitMutation.isPending}
+                      aria-label={`${label} 방문 처리 취소 (${formatDateTime(history.recommendedAt)})`}
+                      onClick={() => undoVisitMutation.mutate(history.id)}
+                    >
+                      {undoVisitMutation.isPending && undoVisitMutation.variables === history.id ? "처리 중…" : "방문 취소"}
+                    </button>
+                  )}
+                  {/* 이름 없는 "삭제"가 기록 수만큼 늘어서고, 확인 대화상자마저 무엇을 지우는지
+                      말하지 않아 되돌릴 수 없는 동작을 눈으로 확인할 방법이 없었다. 같은 메뉴를
+                      여러 번 뽑을 수 있으므로 시각까지 넣어야 항목이 서로 구분된다. */}
+                  <button
+                    disabled={deleteMutation.isPending}
+                    aria-label={`${label} 픽 기록 삭제 (${formatDateTime(history.recommendedAt)})`}
+                    onClick={() => {
+                      if (window.confirm(`'${label}' 픽 기록을 삭제할까요?`)) {
+                        deleteMutation.mutate({ id: history.id, label });
+                      }
+                    }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+            </MobileSection>
           </li>
           );
         })}
