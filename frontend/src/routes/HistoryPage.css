@@ -110,3 +110,78 @@
 
 .history-memo-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .history-memo-form { display: flex; flex-direction: column; gap: 8px; margin-block: 12px; }
+
+.history-details,
+.history-detail-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.history-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .history-card .card-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+  }
+
+  .history-card .card-main strong {
+    font-size: 1.125rem;
+    overflow-wrap: anywhere;
+  }
+
+  .history-card .history-time {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .history-card .history-restaurant,
+  .history-card .history-memo-text {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .history-card > .card-actions {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+
+  .history-card .history-visited-at {
+    flex-basis: 100%;
+  }
+
+  .history-card button,
+  .history-card select {
+    min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .history-details > div > .history-detail-content {
+    padding-top: 12px;
+  }
+
+  .history-detail-content .chip {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .history-memo-form textarea,
+  .history-memo-form input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 1rem;
+  }
+
+  .history-memo-form input {
+    padding-inline: 8px;
+  }
+}

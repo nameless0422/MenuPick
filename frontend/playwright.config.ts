@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+const port = process.env.MENUPICK_E2E_PORT ?? "4350";
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -8,13 +11,13 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:4350",
+    baseURL,
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4350",
+    command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
     env: { VITE_PICK_ALTERNATIVES_ENABLED: "true" },
-    url: "http://127.0.0.1:4350",
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
   },
 });

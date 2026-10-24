@@ -4,7 +4,9 @@ import { fetchHistoryMemo, updateHistoryMemo, type HistoryMemoResponse } from ".
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 
-export default function HistoryMemo({ historyId, label, memo }: { historyId: number; label: string; memo: string | null }) {
+export default function HistoryMemo({ historyId, label, memo, showPreview = true }: {
+  historyId: number; label: string; memo: string | null; showPreview?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -16,7 +18,7 @@ export default function HistoryMemo({ historyId, label, memo }: { historyId: num
     if (hadFocus) openerRef.current?.focus();
   };
   return <div ref={groupRef}>
-    {memo && <p className="history-memo-text">{memo}</p>}
+    {showPreview && memo && <p className="history-memo-text">{memo}</p>}
     <button ref={openerRef} type="button" aria-expanded={open} aria-disabled={busy || undefined}
       aria-label={`${label} 메모 ${memo ? "수정" : "쓰기"}`}
       onClick={() => { if (busy) return; if (!open) { setMessage(""); setOpen(true); } else close(); }}>
