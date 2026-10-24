@@ -1,12 +1,40 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-10-22 / 기준 브랜치: `main`**
+**최종 갱신: 2026-10-24 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-10-24 모바일 픽 기록 상세와 방문 일시 입력 개선
+
+- 모바일 픽 기록에서 메뉴·식당·메모·방문 정보를 바로 읽고, 추천 조건·메모 편집·방문
+  일시 수정·방문 취소·삭제는 기록별 상세에서 연다. 미방문 기록의 방문 버튼은 유지한다.
+  상세를 접거나 PC 폭으로 바꿔도 초안과 시작 버전을 보존하며 PC에서는 도구를 펼친다.
+  모바일 방문 일시는 날짜와 시각을 나눠 입력하며 한국 시각·초 단위·허용 범위를 유지한다.
+  기존 API와 MobileSection을 사용하고 DB·인프라 변경은 없다. 설계 근거는 D-069다.
+- 로컬 lint·build·전체 Vitest 569개, 최종 수정 후 관련 Vitest 44개와 전체 Playwright
+  45개가 통과했다. PR #361과 배포 `main`의 frontend·test·docker-build CI도 모두 통과했고,
+  CI Vitest 569개·Playwright 45개를 확인했다. 초안 보존·저장 실패 재시도·초점·동일 이름
+  기록 구분·날짜 범위와 320·390·1440px, 글자 200% 확대를 검증했다. 기존 AuthContext
+  Fast Refresh 경고 1개는 남는다. 로컬 테스트는 MENUPICK_E2E_PORT로 Orca와 포트를 분리했다.
+- `main` SHA `1c7926a3be090f830f3567b14a4ee3782936f673`의 앱·웹 ARM64 이미지를
+  운영 배포했다. 백업 `menupick-20261024-133445Z.sql.gz`의 gzip 무결성과 덤프 완료 표지를
+  서버와 로컬 사본에서 확인했으며 기존 백업은 삭제하지 않았다.
+- 배포 전후와 브라우저 검증 후 전체 DB 데이터 덤프 해시는 모두
+  `e127194340b79adaa56ff66811ca7a97459a352e65f41a682c251c2a12b0a121`로 같았다.
+  users 3·menus 45·restaurants 1·menu_restaurants 1·histories 10·tags 12·menu_tags 76개,
+  pick_presets·pick_preset_tags·user_default_excluded_tags 0개와 Flyway V20 `success=1`을
+  유지했다. 운영 사용자 데이터를 수정하지 않았다.
+- 다섯 컨테이너 healthy, readiness·전체 health UP, HTTPS 200·HTTP 301, 미인증 식당
+  API 401, 공개 데모 API, 새 JS·CSS와 배포 SHA·ARM64 이미지를 확인했다. 배포된 UI에
+  샘플 API를 적용해 모바일·PC·어두운 테마에서 상세 열기·초안 보존·메모 저장·방문 일시
+  입력을 확인했다. 별도 브라우저에서는 실제 서버의 로그인 화면과 공개 데모 뽑기를
+  검증했다. app ERROR는 0건이었다. 이후 app·web·mysql·redis·mailpit을 모두 중지하고
+  정지 상태를 확인했다. MySQL·Redis 볼륨을 유지했고 디스크 사용률은 56%다. 로컬 미리보기
+  서버도 종료했으며 이번 작업에서 로컬 컨테이너를 시작하지 않았다.
 
 ### 2026-10-22 기본 제외 태그 검색과 선택 확인
 
