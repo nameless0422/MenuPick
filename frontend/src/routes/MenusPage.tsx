@@ -4,7 +4,7 @@ import {
   pauseLabel,
   pauseOptionLabel,
 } from "./menuPause";
-import { useDeferredValue, useId, useRef, useState } from "react";
+import { lazy, Suspense, useDeferredValue, useId, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
@@ -36,9 +36,10 @@ import { useCompactLayout } from "../a11y/useCompactLayout";
 import MobileSection from "../components/MobileSection";
 
 const WEIGHT_LABELS = ["가끔", "덜 자주", "보통", "자주", "최애"];
+const MenuBulkExclusions = lazy(() => import("./MenuBulkExclusions"));
 
 /** 편집 중인 대상. "new"면 신규 등록 폼, 숫자면 해당 메뉴 수정 폼. */
-type Editing = "new" | "bulk" | number;
+type Editing = "new" | "bulk" | "exclusions" | number;
 
 export default function MenusPage() {
   const compact = useCompactLayout();
@@ -140,6 +141,8 @@ export default function MenusPage() {
   });
 
   const menus = menusQuery.data?.pages.flatMap((page) => page.menus) ?? [];
+  const selectionBlocked = editing !== null || menusQuery.isFetching || menus.length === 0
+    || excludeMutation.isPending || deleteMutation.isPending || pauseMutation.isPending || resumeMutation.isPending;
 
   // 조사(을/를)는 받침에 따라 갈리므로 이름 뒤에 "메뉴를"을 붙여 이름과 조사를 떼어 놓는다.
   const listAnnouncement = menusQuery.isFetchingNextPage
@@ -161,16 +164,23 @@ export default function MenusPage() {
         </div>
         <button
           ref={opener("new")}
+          disabled={editing === "exclusions"}
           onClick={() => setEditing("new")}
         >
           + 새 메뉴
         </button>
-        <button ref={opener("bulk")} onClick={() => setEditing("bulk")}>
+        <button ref={opener("bulk")} disabled={editing === "exclusions"} onClick={() => setEditing("bulk")}>
           여러 개 한 번에 추가
         </button>
+        <button ref={opener("exclusions")}
+          aria-disabled={selectionBlocked || undefined}
+          onClick={() => {
+            if (selectionBlocked) return;
+            setPauseTarget(null); setEditing("exclusions");
+          }}>여러 메뉴 선택</button>
       </header>
 
-      <form
+      {editing !== "exclusions" && <form
         className="menu-search"
         role="search"
         onSubmit={(event) => {
@@ -205,7 +215,15 @@ export default function MenusPage() {
         )}
         <p>이름과 카테고리를 함께 검색합니다. 직접 만든 카테고리도 입력할 수 있으며, 비워두면 전체를 조회합니다.</p>
         {category && <p>적용한 카테고리: {category}</p>}
-      </form>
+      </form>}
+
+      {editing === "exclusions" && <Suspense fallback={<div>
+        <p role="status">메뉴 선택 도구를 불러오는 중…</p>
+        <button type="button" onClick={closeForm}>선택 종료</button>
+      </div>}><MenuBulkExclusions menus={menus} keyword={keyword} category={category}
+        loading={menusQuery.isFetching} loadError={menusQuery.isError} hasNextPage={Boolean(menusQuery.hasNextPage)}
+        onLoadMore={() => { void menusQuery.fetchNextPage(); }} onReload={() => { void menusQuery.refetch(); }}
+        onClose={closeForm} /></Suspense>}
 
       {editing === "new" && (
         <MenuForm onClose={closeForm} onSaved={() => { closeForm(); invalidate(); }} />
@@ -214,7 +232,7 @@ export default function MenusPage() {
         <BulkMenuForm onClose={closeForm} onSaved={invalidate} />
       )}
 
-      {menusQuery.isError && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
+      {menusQuery.isError && editing !== "exclusions" && <p className="error" role="alert">{errorMessage(menusQuery.error)}</p>}
 
       {/* 삭제·제외 토글은 실패해도 onSettled가 목록을 새로고침해 원래대로 돌아간다.
           이유를 알리지 않으면 사용자에게는 클릭이 그냥 씹힌 것으로만 보인다. */}
@@ -249,7 +267,7 @@ export default function MenusPage() {
           tabIndex={-1}은 삭제 후 초점을 받기 위한 것이다. 이때 읽히는 "목록, 항목 3개"가
           role="status"의 "'김치찌개' 메뉴를 삭제했습니다"와 겹칠 수 있지만, 개수가 줄어든
           목록이 다시 읽히므로 삭제됐다는 사실 자체는 어느 쪽으로든 전달된다. */}
-      {menus.length > 0 && (
+      {menus.length > 0 && editing !== "exclusions" && (
       <ul className="card-list" role="list" ref={listRef} tabIndex={-1}>
         {menus.map((menu) =>
           editing === menu.id ? (
@@ -369,7 +387,7 @@ export default function MenusPage() {
       </ul>
       )}
 
-      {menusQuery.hasNextPage && (
+      {menusQuery.hasNextPage && editing !== "exclusions" && (
         <button
           disabled={menusQuery.isFetchingNextPage}
           onClick={() => menusQuery.fetchNextPage()}
@@ -377,7 +395,7 @@ export default function MenusPage() {
           {menusQuery.isFetchingNextPage ? "불러오는 중…" : "더 보기"}
         </button>
       )}
-      <MenuTrash />
+      {editing !== "exclusions" && <MenuTrash />}
     </div>
   );
 }
