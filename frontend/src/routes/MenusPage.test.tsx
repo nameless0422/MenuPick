@@ -19,6 +19,7 @@ import {
 import { searchTags } from "../api/tags";
 
 vi.mock("../api/menus", () => ({
+  batchUpdateExclusions: vi.fn(),
   createBulkMenus: vi.fn(),
   previewBulkMenus: vi.fn(),
   fetchMenus: vi.fn(),
