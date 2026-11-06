@@ -1234,6 +1234,8 @@ Refresh Token은 Redis에 userId를 키로 저장하여 강제 로그아웃(블�
 
 회원 탈퇴 시 Soft delete + Redis Refresh Token 즉시 삭제 (탈퇴/재가입 정책은 4.4 참고)
 
+로그아웃·탈퇴·비밀번호 변경·소셜 연동 변경·Refresh 재사용 탐지는 `users.auth_version`을 올려 기존 Access/Refresh Token을 즉시 무효화한다 (D-070)
+
 
 ### 4.3 게스트 접근 정책
 
