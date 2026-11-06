@@ -1,0 +1,84 @@
+.menu-bulk-panel {
+  width: 100%;
+  min-width: 0;
+  margin-block: 20px;
+}
+
+.menu-bulk-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.menu-bulk-heading h2 {
+  margin: 0;
+}
+
+.menu-bulk-panel p {
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.menu-bulk-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 8px;
+  padding: 0;
+  margin-block: 16px;
+  list-style: none;
+}
+
+.menu-bulk-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-md);
+  padding: 12px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.menu-bulk-option:has(input:checked) {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.menu-bulk-option input {
+  flex-shrink: 0;
+}
+
+.menu-bulk-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.menu-bulk-current {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+
+.menu-bulk-apply {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+@media (max-width: 760px) {
+  .menu-bulk-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .menu-bulk-panel button {
+    min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
