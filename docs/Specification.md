@@ -322,9 +322,9 @@
 
 | 레이어 | 기술 | 비고 |
 | --- | --- | --- |
-| Backend | Java 17 + Spring Boot 4.0.x | Web MVC, Spring Security |
-| ORM / DB | Spring Data JPA + MySQL 8.x | Flyway 마이그레이션, 테스트는 Testcontainers |
-| Cache | Redis 7.x | Refresh Token 저장, 외부 API 캐싱, Rate Limit 카운터 |
+| Backend | Java 17 + Spring Boot 4.1.x | Web MVC, Spring Security |
+| ORM / DB | Spring Data JPA + MySQL 8.4 LTS | Flyway 마이그레이션, 테스트는 Testcontainers. 8.0은 2026-04 EOL(D-072) |
+| Cache | Redis 8.2 | Refresh Token 저장, 외부 API 캐싱, Rate Limit 카운터. 7-alpine EOSL 탈출(D-072) |
 | Auth | JWT (Access/Refresh) + OAuth2 (카카오/구글) | `token_type` 클레임으로 토큰 구분 |
 | 외부 API | 카카오 로컬(장소 검색) | 백엔드 프록시, WebClient. 네이버 NCP Maps는 걷어냈다(D-035) |
 | Frontend | React + Vite + TypeScript | Axios 인터셉터 기반 토큰 갱신 |

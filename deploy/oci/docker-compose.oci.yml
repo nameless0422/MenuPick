@@ -6,7 +6,10 @@ services:
   # true(AuthCookieProperties)가 그대로 적용된다 — refresh 쿠키가 http로 나가지 않는다.
 
   mailpit:
-    image: axllent/mailpit:latest
+    # :latest는 매번 다른 이미지를 받아 재현이 안 되므로 digest로 고정한다. Mailpit은 2026 CVE가
+    # 여럿이라(SSRF·미인증 JSON 엔드포인트·XS-WebSocket 하이재킹) 최신으로 유지하고, 웹 UI·SMTP를
+    # 외부에 열지 않는다(아래 포트는 전부 127.0.0.1). 개발용 메일 캡처 전용이다. 갱신은 D-072.
+    image: axllent/mailpit:latest@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     container_name: menupick-mailpit
     restart: unless-stopped
     # Spring이 smtp.auth=true로 접속하므로 인증을 받아주되 아무 자격증명이나 통과시킨다.

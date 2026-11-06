@@ -57,6 +57,13 @@ CI가 `main`의 백엔드·프론트 이미지를 같은 커밋 SHA로 GHCR에 �
 `.env`의 `APP_VERSION`을 그 **전체 SHA**로 바꾸고 두 이미지를 명시적으로 받은 뒤 app/web만
 재생성한다. MySQL·Redis를 함께 재시작할 이유는 없다.
 
+MySQL·Redis·Mailpit 이미지는 compose에 `@sha256:` digest로 고정돼 있다(2026-11, D-072). 이 중
+MySQL은 8.0 EOL로 **8.4 LTS**, Redis는 Alpine EOSL 탈출로 **8.2-alpine**이다. 서버를 이미 8.0/7로
+띄워 둔 상태라면 이 digest로 바꾼 compose를 올릴 때 MySQL·Redis 컨테이너가 재생성된다 —
+데이터는 named volume에 있어 보존되지만, **배포 전에 `scripts/backup-db.sh`로 덤프를 한 번 받고**
+engine 업그레이드(8.0→8.4)를 적용한다. digest 갱신은 `security.yml`의 주간 `infra-image-scan`이
+새 CVE를 보고하면 사람이 올린다.
+
 ```bash
 cd ~/menupick
 docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml --env-file .env pull app web

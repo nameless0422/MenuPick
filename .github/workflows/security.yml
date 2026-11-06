@@ -84,6 +84,46 @@ jobs:
             --no-progress \
             menupick-scan-${{ matrix.name }}:ci
 
+  # 런타임 서드파티 이미지(DB·Redis·Mailpit)는 CI가 빌드하지 않아 위 image-scan 매트릭스에 없었다.
+  # 코드와 무관하게 새 CVE가 나오므로 주간 일정·수동 실행에서만 돈다 — PR에서는 돌지 않아 무관한
+  # PR을 빨갛게 하지 않는다. 스캔 대상은 compose에 적힌 pin을 그대로 읽어 단일 출처로 둔다.
+  #   - redis: 우리의 깨끗한 지원 베이스(Alpine 3.22)라 HIGH/CRIT가 생기면 실패시켜 digest 갱신을 알린다.
+  #   - mysql·mailpit: 우리가 쓰지 않는 벤더 번들(mysqlsh의 Python/Go 등) CVE가 남아 보고만 한다.
+  #     근본 해소는 mysql 8.4 EOL 전 이전과 mailpit 상류 패치다(docs/DecisionLog.md D-072).
+  infra-image-scan:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve pinned images from compose
+        id: imgs
+        run: |
+          {
+            echo "redis=$(grep -oP 'image:\s*\Kredis:\S+' docker-compose.prod.yml)"
+            echo "mysql=$(grep -oP 'image:\s*\Kmysql:\S+' docker-compose.prod.yml)"
+            echo "mailpit=$(grep -oP 'image:\s*\Kaxllent/mailpit:\S+' deploy/oci/docker-compose.oci.yml)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Scan redis (must stay clean)
+        run: |
+          docker run --rm \
+            aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+            image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
+            "${{ steps.imgs.outputs.redis }}"
+
+      - name: Scan mysql and mailpit (report only)
+        run: |
+          for img in "${{ steps.imgs.outputs.mysql }}" "${{ steps.imgs.outputs.mailpit }}"; do
+            echo "### $img" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            docker run --rm \
+              aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+              image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 --no-progress \
+              --format table "$img" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
+
   # Gradle 전이 의존성은 저장소 파일에 드러나지 않아 Dependabot 경고가 닿지 않는다.
   # 해석 결과를 GitHub 의존성 그래프에 제출한다. 쓰기 권한이 필요해 main push에서만 돈다.
   gradle-dependency-submission:
