@@ -770,6 +770,41 @@
   화면을 열지 않으면 식당은 정해지지 않는다. 여러 사람이 호스트 식당 목록을 바꾸는 것보다
   기존 개인 데이터 경계를 지키는 편을 택했다. 기능 플래그 없이 배포된다.
 
+### D-072. 런타임 서드파티 이미지 — digest 고정, EOSL/EOL 탈출, 주간 스캔
+
+- **날짜**: 2026-11-07
+- **상태**: 채택 (운영 미배포)
+- **배경**: CI `image-scan`은 우리가 빌드하는 backend·web 이미지만 본다. 데이터플레인
+  서드파티 이미지(MySQL·Redis·Mailpit)는 사각지대였고, 떠 있는 태그라 서버마다 다른 이미지를
+  받았다. Trivy로 직접 보니 `redis:7-alpine`은 **Alpine 3.21 EOSL**(보안 수명 종료, libssl
+  CRITICAL 포함), `mysql:8.0`은 114건 HIGH/CRIT, `mysql:8.0` 자체도 **2026-04 EOL**이었다.
+- **결정**:
+  - **Redis `7-alpine` → `8.2-alpine`**. 지원 베이스(Alpine 3.22)로 올려 EOSL을 벗어난다. Redis 8은
+    우리가 쓰는 범위(EVAL Lua·문자열 op·AOF·requirepass·maxmemory noeviction)에서 7과 호환이고,
+    통합 테스트(AuthTokenStore Lua·RefreshTokenStore·레이트 리밋·캐시)가 검증한다.
+  - **MySQL `8.0` → `8.4` LTS**. EOL 런웨이를 확보한다. 콜레이션(utf8mb4_0900_ai_ci)·Flyway
+    마이그레이션·인증 플러그인(caching_sha2, `allowPublicKeyRetrieval=true`)은 Testcontainers
+    mysql:8.4로 검증한다.
+  - **digest 고정**. prod compose(및 Mailpit 오버레이)의 이미지를 태그가 아니라 `@sha256:`로 묶어,
+    같은 파일이 서버마다 같은 이미지를 받게 한다. 로컬·테스트는 가독성 위해 태그만 쓴다.
+  - **주간 `infra-image-scan`**(security.yml). 일정·수동 실행에서만 돌아 **PR을 빨갛게 하지 않는다**
+    (코드와 무관한 새 공지로 무관한 PR이 깨지는 것을 피한다 — security.yml 분리 취지). redis는
+    깨끗한 지원 베이스라 HIGH/CRIT가 생기면 실패시켜 갱신 신호를 주고, mysql·mailpit은 보고만 한다.
+    대상 이미지는 compose의 pin을 그대로 읽어 단일 출처로 둔다.
+  - **소스 tarball 제거**. `main-bc518a5.tar`(이관용 `git archive` 스냅샷)를 지우고 `.gitignore`에
+    `*.tar`를 더한다. 코드는 git이 이미 버전 관리하며, 바이너리 스냅샷은 리포만 비대하게 한다.
+- **검토한 대안**:
+  1. **blocking Trivy 게이트에 인프라 이미지 추가** — mysql은 벤더 번들(mysqlsh의 Python·Go) CVE가
+     상시 남아, `--ignore-unfixed`로도 수십 건이 계속 걸려 PR이 영구히 빨개진다. 예외를 CVE id로
+     나열하면 주마다 새 id가 생겨 유지 불가.
+  2. **Dependabot docker 생태계로 digest 자동 PR** — 이 리포는 버전 업데이트를 끄고 보안만 받는
+     정책(dependabot.yml, `open-pull-requests-limit: 0`)이다. docker는 보안 전용 트랙이 없어 사실상
+     버전 업데이트라, 켜면 그 정책과 충돌한다. 그래서 주간 스캔 신호 + 사람의 digest 갱신으로 둔다.
+- **남은 위험**: mysql·mailpit 이미지에는 우리가 **쓰지 않는** 번들(mysqlsh·gosu의 Go·Python)
+  CVE가 남는다. 컨테이너는 mysqld/메일 캡처만 돌려 그 경로를 타지 않지만, 근본 해소는 더 슬림한
+  베이스로의 이전이다. Mailpit은 자체 2026 CVE가 여럿이라(SSRF·미인증 JSON·XS-WebSocket) dev 전용으로
+  두고 포트를 루프백에만 묶는다. MySQL 8.4도 언젠가 EOL이 온다 — LTS 지원 기간 내 재점검 대상이다.
+
 ### D-071. 인증 메일은 입력 주소가 아니라 등록된 주소로 보낸다 — 유니코드 동치 콜레이션 탈취 차단
 
 - **날짜**: 2026-11-07

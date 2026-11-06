@@ -1,12 +1,24 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-11-06 / 기준 브랜치: `main`**
+**최종 갱신: 2026-11-07 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-11-07 추가 보안 분석과 인프라 이미지 하드닝 (운영 미배포)
+
+- 전수 재점검 + 웹 리서치로 새 취약점을 찾아 둘로 나눠 올렸다(둘 다 머지 전).
+  - **인증 메일 탈취(CVE-2019-19844 류)**: `email`·`social_id`가 accent-insensitive 콜레이션이라
+    `victim@exámple.com` 변형이 조회에서 victim 행과 매칭되는데 토큰을 입력 주소로 보냈다. 등록된
+    `social_id`로만 보내고 NFKC·바이트 동일성 가드를 더해 막았다(D-071).
+  - **런타임 이미지 위생**: redis를 EOSL(Alpine 3.21)에서 `8.2-alpine`으로, mysql을 EOL(8.0)에서
+    `8.4` LTS로 올리고 digest로 고정, 주간 `infra-image-scan`을 추가했다(D-072). 소스 tarball을
+    리포에서 제거했다.
+- 안전 확인: 비밀 유출 없음(gitleaks 2건은 테스트 픽스처 JWT, 운영은 전부 env). Spring 2026
+  액추에이터·servlet-path CVE는 Boot 4.1.2/Security 7.0.10에서 이미 패치됨.
 
 ### 2026-11-06 인증 토큰 무효화와 의존성 보안 수정 (운영 미배포)
 

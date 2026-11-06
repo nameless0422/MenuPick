@@ -22,7 +22,7 @@ import org.testcontainers.containers.MySQLContainer;
  */
 public abstract class AbstractIntegrationTest {
 
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
+    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
             .withDatabaseName("menupick")
             .withUsername("menupick")
             .withPassword("menupick")
@@ -30,7 +30,7 @@ public abstract class AbstractIntegrationTest {
             // 기본 상한(151)에 걸려 무관한 테스트가 Too many connections로 실패한다.
             .withCommand("--max_connections=500");
 
-    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
+    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:8.2-alpine")
             .withExposedPorts(6379);
 
     static {
