@@ -727,6 +727,35 @@ class LocalAuthServiceTest {
         }
 
         @Test
+        @DisplayName("accent 변형 주소의 재설정 요청은 등록 주소와 바이트가 달라 토큰을 흘리지 않는다")
+        void requestResetForFoldedVariantLeaksNothing() {
+            // 콜레이션(utf8mb4_0900_ai_ci)이 á=a로 접어, 변형 주소 조회가 등록된 victim 행을
+            // 돌려주는 상황을 흉내 낸다. NFKC는 á를 접지 않으므로 바이트가 다르게 남아야 한다.
+            String variant = "user@exámple.com";
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, variant))
+                    .willReturn(Optional.of(localAccount(7L, EMAIL, PASSWORD, true)));
+
+            localAuthService.requestPasswordReset(variant);
+
+            verify(authTokenStore, never())
+                    .issue(eq(AuthTokenStore.Purpose.PASSWORD_RESET), anyLong(), anyLong(), any());
+            verify(authMailer, never()).sendPasswordReset(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("정상 재설정은 입력이 아니라 등록된 주소로 메일을 보낸다")
+        void requestResetSendsToRegisteredAddress() {
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.of(localAccount(7L, EMAIL, PASSWORD, true)));
+            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.PASSWORD_RESET), eq(7L), anyLong(), any()))
+                    .willReturn("reset-token");
+
+            localAuthService.requestPasswordReset("  " + EMAIL + "  ");
+
+            verify(authMailer).sendPasswordReset(eq(EMAIL), eq("reset-token"), any());
+        }
+
+        @Test
         @DisplayName("재설정 토큰이 유효하면 비밀번호를 바꾸고 세션을 새로 발급한다")
         void confirmReset() {
             AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
