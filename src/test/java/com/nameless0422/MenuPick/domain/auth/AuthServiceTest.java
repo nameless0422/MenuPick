@@ -107,6 +107,10 @@ class AuthServiceTest {
         // "활성 계정"으로 두고, 필요한 테스트만 개별로 덮어쓴다.
         lenient().when(userRepository.findById(any()))
                 .thenReturn(Optional.of(User.builder().nickname("활성").build()));
+        // 잠금 조회는 잠금 없는 조회의 스텁을 따른다 — 잠금 자체는 AuthRevocationIntegrationTest가 실제 MySQL로 본다.
+        lenient().when(userRepository.findByIdForUpdate(any()))
+                .thenAnswer(call -> userRepository.findById(call.getArgument(0)));
+        lenient().when(userRepository.findActiveAuthVersion(any())).thenReturn(Optional.of(0L));
     }
 
     @Test
@@ -142,8 +146,8 @@ class AuthServiceTest {
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(existingProvider));
 
-        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
-        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(jwtTokenProvider.createAccessToken(any(), anyLong())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any(), anyLong())).willReturn("refresh_token");
 
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
@@ -165,8 +169,8 @@ class AuthServiceTest {
         given(authProviderRepository.save(any(AuthProvider.class)))
                 .willAnswer(inv -> inv.getArgument(0));
 
-        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
-        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(jwtTokenProvider.createAccessToken(any(), anyLong())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any(), anyLong())).willReturn("refresh_token");
 
         TokenResponse result = authService.socialLogin("GOOGLE", "auth_code");
 
@@ -217,8 +221,8 @@ class AuthServiceTest {
         given(authProviderRepository.save(any(AuthProvider.class)))
                 .willThrow(new DataIntegrityViolationException("uq_auth_provider_social"));
 
-        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
-        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(jwtTokenProvider.createAccessToken(any(), anyLong())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any(), anyLong())).willReturn("refresh_token");
 
         TokenResponse result = authService.socialLogin("GOOGLE", "auth_code");
 
@@ -241,8 +245,8 @@ class AuthServiceTest {
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(provider));
 
-        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
-        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(jwtTokenProvider.createAccessToken(any(), anyLong())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any(), anyLong())).willReturn("refresh_token");
 
         TokenResponse result = authService.socialLogin("KAKAO", "auth_code");
 
@@ -268,8 +272,8 @@ class AuthServiceTest {
         given(userRepository.existsByNickname("홍길동")).willReturn(true);
         given(userRepository.existsByNickname("홍길동2")).willReturn(false);
 
-        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
-        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(jwtTokenProvider.createAccessToken(any(), anyLong())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any(), anyLong())).willReturn("refresh_token");
 
         authService.socialLogin("KAKAO", "auth_code");
 
@@ -290,8 +294,8 @@ class AuthServiceTest {
         given(authProviderRepository.findByProviderAndSocialId("KAKAO", "kakao_123"))
                 .willReturn(Optional.of(provider));
 
-        given(jwtTokenProvider.createAccessToken(any())).willReturn("access_token");
-        given(jwtTokenProvider.createRefreshToken(any())).willReturn("refresh_token");
+        given(jwtTokenProvider.createAccessToken(any(), anyLong())).willReturn("access_token");
+        given(jwtTokenProvider.createRefreshToken(any(), anyLong())).willReturn("refresh_token");
 
         authService.socialLogin("KAKAO", "auth_code");
 
@@ -582,8 +586,8 @@ class AuthServiceTest {
         Claims claims = Jwts.claims().subject("1").build();
         given(jwtTokenProvider.parseRefreshToken("old_refresh")).willReturn(Optional.of(claims));
         given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
-        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(jwtTokenProvider.createAccessToken(1L, 0L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L, 0L)).willReturn("new_refresh");
         given(refreshTokenStore.rotate(1L, "old_refresh", "new_refresh", jwtProperties.refreshTokenExpiry()))
                 .willReturn(Optional.of("new_refresh"));
 
@@ -603,8 +607,8 @@ class AuthServiceTest {
         Claims claims = Jwts.claims().subject("1").build();
         given(jwtTokenProvider.parseRefreshToken("previous_refresh")).willReturn(Optional.of(claims));
         given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
-        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(jwtTokenProvider.createAccessToken(1L, 0L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L, 0L)).willReturn("new_refresh");
         given(refreshTokenStore.rotate(1L, "previous_refresh", "new_refresh",
                 jwtProperties.refreshTokenExpiry()))
                 .willReturn(Optional.of("current_refresh"));
@@ -621,8 +625,8 @@ class AuthServiceTest {
         Claims claims = Jwts.claims().subject("1").build();
         given(jwtTokenProvider.parseRefreshToken("stolen_refresh")).willReturn(Optional.of(claims));
         given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
-        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(jwtTokenProvider.createAccessToken(1L, 0L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L, 0L)).willReturn("new_refresh");
         // 스크립트가 불일치를 감지하고 키를 삭제한 뒤 빈 값을 돌려준다
         given(refreshTokenStore.rotate(eq(1L), eq("stolen_refresh"), anyString(), anyLong()))
                 .willReturn(Optional.empty());
@@ -648,8 +652,8 @@ class AuthServiceTest {
         Claims claims = Jwts.claims().subject("1").build();
         given(jwtTokenProvider.parseRefreshToken("old_refresh")).willReturn(Optional.of(claims));
         given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
-        given(jwtTokenProvider.createAccessToken(1L)).willReturn("new_access");
-        given(jwtTokenProvider.createRefreshToken(1L)).willReturn("new_refresh");
+        given(jwtTokenProvider.createAccessToken(1L, 0L)).willReturn("new_access");
+        given(jwtTokenProvider.createRefreshToken(1L, 0L)).willReturn("new_refresh");
         given(refreshTokenStore.rotate(any(), anyString(), anyString(), anyLong()))
                 .willThrow(new BusinessException(ErrorCode.REDIS_UNAVAILABLE));
 

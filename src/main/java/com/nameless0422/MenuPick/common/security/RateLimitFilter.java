@@ -42,8 +42,10 @@ import java.util.List;
  * 즉 운영에서는 프록시 버킷이 사실상 IP 기준으로 동작한다.
  * SecurityConfig에서 이 필터를 JWT 필터 뒤로 옮기면 별도 코드 수정 없이 사용자 ID 기준으로 전환된다.
  *
- * <p>Redis 장애 시에는 요청을 통과시킨다(fail-open) — 레이트 리밋 때문에 서비스 전체가
- * 멈추는 편이 더 나쁘다는 판단.
+ * <p>Redis 장애 시 정책은 버킷마다 다르다. 인증 경로는 503으로 막는다 — 비밀번호 대입 제한이
+ * 풀리고, 어차피 뒤따르는 세션 저장이 Redis 없이는 실패해 Argon2 비용만 들기 때문이다.
+ * 자격증명을 다루지 않는 경로(데모·방·프록시)와 로그아웃은 통과시킨다. 레이트 리밋 때문에 조회까지
+ * 멈추는 편이 더 나쁘고, 로그아웃은 DB만으로 세션을 끊을 수 있다.
  */
 @Slf4j
 @Component
@@ -158,8 +160,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitProperties rateLimitProperties;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** 한 요청에 적용할 버킷(Redis 키 + 허용 횟수). */
-    private record Bucket(String key, int limit) {}
+    /** 한 요청에 적용할 버킷(Redis 키 + 허용 횟수 + Redis 장애 시 차단 여부). */
+    private record Bucket(String key, int limit, boolean failClosed) {}
+
+    private static final RequestMatcher LOGOUT_MATCHER =
+            PathPatternRequestMatcher.pathPattern(HttpMethod.DELETE, "/api/v1/auth/logout");
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -180,27 +185,32 @@ public class RateLimitFilter extends OncePerRequestFilter {
             count = redisTemplate.execute(RATE_LIMIT_SCRIPT, List.of(bucket.key()),
                     String.valueOf(windowSeconds));
         } catch (Exception e) {
+            if (bucket.failClosed()) {
+                log.warn("Redis 장애로 인증 요청을 차단합니다: {}", e.getMessage());
+                writeError(response, 503, ErrorCode.REDIS_UNAVAILABLE, windowSeconds);
+                return;
+            }
             log.warn("Redis 장애로 rate limit 검사를 건너뜁니다: {}", e.getMessage());
             filterChain.doFilter(request, response);
             return;
         }
 
         if (count != null && count > bucket.limit()) {
-            writeTooManyRequests(response, windowSeconds);
+            writeError(response, 429, ErrorCode.TOO_MANY_REQUESTS, windowSeconds);
             return;
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private void writeTooManyRequests(HttpServletResponse response, int windowSeconds) throws IOException {
-        response.setStatus(429);
+    private void writeError(HttpServletResponse response, int status, ErrorCode code,
+                            int windowSeconds) throws IOException {
+        response.setStatus(status);
         response.setHeader("Retry-After", String.valueOf(windowSeconds));
         response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8");
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write(objectMapper.writeValueAsString(
-                ApiResponse.error(ErrorCode.TOO_MANY_REQUESTS,
-                        ErrorCode.TOO_MANY_REQUESTS.getMessage())));
+                ApiResponse.error(code, code.getMessage())));
     }
 
     /**
@@ -212,27 +222,27 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private Bucket resolveBucket(HttpServletRequest request) {
         if (matchesAny(AUTH_RATE_LIMITED_MATCHERS, request)) {
             return new Bucket(AUTH_KEY_PREFIX + resolveClientIp(request),
-                    rateLimitProperties.authLimitPerMinute());
+                    rateLimitProperties.authLimitPerMinute(), !LOGOUT_MATCHER.matches(request));
         }
 
         if (DEMO_PICK_MATCHER.matches(request)) {
             return new Bucket(DEMO_KEY_PREFIX + resolveClientIp(request),
-                    rateLimitProperties.demoLimitPerMinute());
+                    rateLimitProperties.demoLimitPerMinute(), false);
         }
 
         if (PICK_ALTERNATIVES_MATCHER.matches(request)) {
             return new Bucket(ALTERNATIVES_KEY_PREFIX + resolveClientIp(request),
-                    rateLimitProperties.alternativesLimitPerMinute());
+                    rateLimitProperties.alternativesLimitPerMinute(), false);
         }
 
         if (matchesAny(ROOM_RATE_LIMITED_MATCHERS, request)) {
             return new Bucket(ROOM_KEY_PREFIX + resolveClientIp(request),
-                    rateLimitProperties.roomLimitPerMinute());
+                    rateLimitProperties.roomLimitPerMinute(), false);
         }
 
         if (matchesAny(PROXY_RATE_LIMITED_MATCHERS, request)) {
             return new Bucket(PROXY_KEY_PREFIX + resolveProxySubject(request),
-                    rateLimitProperties.proxyLimitPerMinute());
+                    rateLimitProperties.proxyLimitPerMinute(), false);
         }
 
         return null;

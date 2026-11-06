@@ -41,6 +41,7 @@ public enum ErrorCode {
     TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다. 15분 후 다시 시도해주세요."),
     TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요."),
     REDIS_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요."),
+    AUTH_CHECK_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 서버 오류입니다. 잠시 후 다시 시도해주세요."),
 
     // --- Auth ---
     OAUTH_INVALID_CODE(HttpStatus.UNAUTHORIZED, "소셜 로그인 인가 코드가 유효하지 않습니다. 다시 로그인해주세요."),

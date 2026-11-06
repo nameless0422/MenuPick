@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -14,6 +15,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -26,6 +28,10 @@ import java.util.function.Supplier;
  *
  * <p>저장하는 것은 토큰 자체가 아니라 SHA-256 해시다. Redis 덤프가 유출되어도 링크를
  * 되살릴 수 없다. 토큰이 256비트 난수라 사전 공격 대상이 아니므로 솔트·스트레칭은 두지 않았다.
+ *
+ * <p><b>이 저장소가 보장하는 것은 "사용자·용도별로 살아 있는 토큰은 하나"까지다.</b> 비밀번호가
+ * 바뀐 뒤의 링크 거절은 여기서 할 수 없다. DB 커밋과 Redis 작업은 한 원자 단위가 아니므로, 호출자가
+ * 값에 묶인 {@code credentialVersion}을 잠금 트랜잭션에서 비교한다({@code LocalAuthService}).
  */
 @Slf4j
 @Component
@@ -44,7 +50,71 @@ public class AuthTokenStore {
         }
     }
 
+    /** 소비에 성공한 토큰의 주인과, 발급 당시의 자격증명 버전. */
+    public record Consumed(Long userId, long credentialVersion) {}
+
     private static final int TOKEN_BYTES = 32;
+
+    /**
+     * 이전 토큰 폐기와 새 토큰 저장을 한 번에 실행한다. 명령을 나누면 동시 발급이 같은 이전 해시를
+     * 읽고 각자 저장해 토큰 둘이 유효하게 남는다.
+     *
+     * <p>역인덱스의 TTL은 토큰과 같다. 더 길면 이미 만료된 해시를 가리킨 채 남고, 짧으면 아직 유효한
+     * 토큰을 폐기할 수단이 먼저 사라진다.
+     *
+     * <p>이전 토큰의 키를 스크립트 안에서 조립하므로 Redis Cluster로 옮기면 같은 슬롯을 보장해야
+     * 한다. 지금은 단일 노드다({@link RefreshTokenStore}와 같은 전제).
+     */
+    private static final DefaultRedisScript<Long> ISSUE_SCRIPT = new DefaultRedisScript<>(
+            """
+            local previous = redis.call('GET', KEYS[1])
+            if previous then
+              redis.call('DEL', ARGV[1] .. previous)
+            end
+            redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[4])
+            redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[4])
+            return 1
+            """,
+            Long.class
+    );
+
+    /**
+     * 토큰을 소비한다. 키가 있어도 역인덱스가 이 토큰을 가리키지 않으면 거절한다.
+     *
+     * <p>{@code userId:version} 형식이 아닌 값은 이 형식 도입 전에 발급된 링크다. 어떤 비밀번호에
+     * 묶였는지 알 수 없으므로 통과시키지 않는다(사용자는 재발송·재요청으로 이어 갈 수 있다).
+     */
+    private static final DefaultRedisScript<String> CONSUME_SCRIPT = new DefaultRedisScript<>(
+            """
+            local value = redis.call('GET', KEYS[1])
+            if not value then
+              return false
+            end
+            redis.call('DEL', KEYS[1])
+            local userId = string.match(value, '^(%d+):%d+$')
+            if not userId then
+              return false
+            end
+            local ownerKey = ARGV[1] .. 'user:' .. userId
+            if redis.call('GET', ownerKey) ~= ARGV[2] then
+              return false
+            end
+            redis.call('DEL', ownerKey)
+            return value
+            """,
+            String.class
+    );
+
+    private static final DefaultRedisScript<Long> REVOKE_SCRIPT = new DefaultRedisScript<>(
+            """
+            local current = redis.call('GET', KEYS[1])
+            if current then
+              redis.call('DEL', ARGV[1] .. current, KEYS[1])
+            end
+            return 1
+            """,
+            Long.class
+    );
 
     private final SecureRandom secureRandom = new SecureRandom();
     private final StringRedisTemplate redisTemplate;
@@ -52,91 +122,58 @@ public class AuthTokenStore {
     /**
      * 새 토큰을 발급하고 해시를 저장한다. <b>같은 사용자·같은 용도의 이전 토큰은 폐기된다.</b>
      *
-     * <p><b>왜 이전 토큰을 지워야 하는가.</b> 예전에는 {@code auth:verify:{hash} -> userId} 한
-     * 방향만 저장해, 발급된 토큰을 사용자 기준으로 찾아낼 수단이 아예 없었다. 그래서 같은
-     * 사용자에게 토큰이 둘 이상 동시에 유효할 수 있었고, 다음이 실제로 열렸다:
+     * <p>살아 있는 링크가 하나뿐이어야 "한 번만 사용할 수 있다"는 안내가 사실이 되고, 유출 시
+     * 회수 범위도 명확해진다.
      *
-     * <ol>
-     *   <li>피해자가 정상 가입하고 인증 메일을 받는다(TTL 24시간). 아직 누르지 않았다.</li>
-     *   <li>그 사이 공격자가 같은 주소로 재가입한다. 미인증 계정은 주소 선점을 막기 위해
-     *       비밀번호를 덮어쓰도록 돼 있어({@code createOrReplacePendingAccount}),
-     *       LOCAL 행의 해시가 공격자 비밀번호로 바뀐다.</li>
-     *   <li>피해자가 뒤늦게 <b>자기가 받은</b> 링크를 누른다. 그 토큰은 여전히 유효하므로
-     *       계정이 <b>공격자 비밀번호를 가진 채</b> 활성화된다. 피해자는 "로그인이 안 된다"고만
-     *       인지한다.</li>
-     * </ol>
-     *
-     * <p>역인덱스({@code auth:verify:user:{userId} -> 현재 토큰 해시})를 두고 발급 때마다
-     * 이전 것을 지우면, 2단계에서 피해자의 토큰이 함께 죽는다.
-     *
-     * <p>비밀번호 재설정에도 같은 규칙을 적용한다. "한 번만 사용할 수 있다"고 안내하면서
-     * 재요청 전의 링크가 계속 살아 있는 것이 더 이상하고, 살아 있는 링크가 하나뿐이면
-     * 유출 시 회수 범위도 명확해진다.
-     *
-     * <p>동시 발급 사이의 경쟁은 남는다 — 두 요청이 겹치면 잠깐 토큰 둘이 유효할 수 있다.
-     * 다만 그 둘은 모두 정당하게 발급된 것이고, 위 시나리오처럼 "비밀번호가 바뀐 뒤에도
-     * 옛 토큰이 남는" 상황과는 다르다. Lua 스크립트로 원자화할 수 있으나 이 위험에 비해
-     * 과하다고 판단했다.
-     *
+     * @param credentialVersion 이 링크를 묶을 자격증명 버전. 소비 시 그대로 돌려준다
      * @return 메일 링크에 넣을 원본 토큰. 저장되지 않으므로 이 반환값이 유일한 사본이다
      */
-    public String issue(Purpose purpose, Long userId, Duration ttl) {
+    public String issue(Purpose purpose, Long userId, long credentialVersion, Duration ttl) {
         byte[] raw = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(raw);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
         String tokenHash = sha256(token);
 
-        execute(() -> {
-            String ownerKey = ownerKey(purpose, userId);
-
-            String previousHash = redisTemplate.opsForValue().get(ownerKey);
-            if (previousHash != null) {
-                redisTemplate.delete(purpose.keyPrefix + previousHash);
-            }
-
-            redisTemplate.opsForValue().set(purpose.keyPrefix + tokenHash, String.valueOf(userId), ttl);
-            // 역인덱스의 TTL은 토큰과 같다. 더 길면 이미 만료된 해시를 가리킨 채 남고,
-            // 짧으면 아직 유효한 토큰을 폐기할 수단이 먼저 사라진다.
-            redisTemplate.opsForValue().set(ownerKey, tokenHash, ttl);
-            return null;
-        });
+        execute(() -> redisTemplate.execute(
+                ISSUE_SCRIPT,
+                List.of(ownerKey(purpose, userId), purpose.keyPrefix + tokenHash),
+                purpose.keyPrefix, tokenHash, userId + ":" + credentialVersion,
+                String.valueOf(ttl.toMillis())));
 
         return token;
     }
 
     /**
-     * 토큰을 사용하고 즉시 폐기한다.
+     * 토큰을 사용하고 즉시 폐기한다. 스크립트가 단일 원자 실행이라 같은 링크를 두 번 눌러도
+     * 승자는 항상 하나다.
      *
-     * <p>조회와 삭제를 나누면 같은 링크를 두 번 눌렀을 때 양쪽이 모두 통과하는 창이 열린다.
-     * {@code GETDEL}은 Redis에서 단일 원자 연산이라 승자가 항상 하나다.
-     *
-     * @return 토큰이 유효했다면 그 주인의 userId, 아니면 비어 있음
+     * @return 토큰이 유효했다면 주인과 자격증명 버전, 아니면 비어 있음
      */
-    public Optional<Long> consume(Purpose purpose, String token) {
+    public Optional<Consumed> consume(Purpose purpose, String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
 
         String tokenHash = sha256(token);
-        String userId = execute(() -> redisTemplate.opsForValue().getAndDelete(purpose.keyPrefix + tokenHash));
+        String value = execute(() -> redisTemplate.execute(
+                CONSUME_SCRIPT,
+                List.of(purpose.keyPrefix + tokenHash),
+                purpose.keyPrefix, tokenHash));
 
-        if (userId == null) {
+        if (value == null) {
             return Optional.empty();
         }
 
-        // 역인덱스도 함께 치운다. 남겨 두면 이미 없는 토큰을 가리킨 채 TTL 동안 버티다가,
-        // 그 사이 발급되는 새 토큰이 "이전 토큰"이라며 엉뚱한 키를 지우게 된다(실제로는
-        // 없는 키라 무해하지만, 인덱스가 사실과 어긋난 채 도는 것 자체가 다음 버그의 씨앗이다).
-        // 이 토큰이 최신이 아니었다면 인덱스는 더 새 토큰을 가리키고 있으므로 건드리지 않는다.
-        execute(() -> {
-            String ownerKey = ownerKey(purpose, Long.valueOf(userId));
-            if (tokenHash.equals(redisTemplate.opsForValue().get(ownerKey))) {
-                redisTemplate.delete(ownerKey);
-            }
-            return null;
-        });
+        String[] parts = value.split(":");
+        return Optional.of(new Consumed(Long.valueOf(parts[0]), Long.parseLong(parts[1])));
+    }
 
-        return Optional.of(Long.valueOf(userId));
+    /** 이 사용자의 살아 있는 토큰을 폐기한다. 없으면 아무 일도 하지 않는다. */
+    public void revoke(Purpose purpose, Long userId) {
+        execute(() -> redisTemplate.execute(
+                REVOKE_SCRIPT,
+                List.of(ownerKey(purpose, userId)),
+                purpose.keyPrefix));
     }
 
     /** 사용자별 "지금 살아 있는 토큰"의 해시를 가리키는 역인덱스 키. */

@@ -74,7 +74,7 @@ public class AuthService {
             throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_NOT_LINKED);
         }
 
-        return tokenIssuer.issue(resolved.userId());
+        return tokenIssuer.issue(resolved.userId(), resolved.authVersion());
     }
 
     /**
@@ -130,7 +130,7 @@ public class AuthService {
      */
     private LinkResult finishAuthMethodChange(Long userId, Changed changed,
                                               String providerName, boolean linked) {
-        TokenResponse tokens = tokenIssuer.issue(userId);
+        TokenResponse tokens = tokenIssuer.issue(userId, changed.authVersion());
 
         if (changed.email() != null) {
             authMailer.sendLoginMethodChanged(changed.email(), providerLabel(providerName), linked);
@@ -139,7 +139,7 @@ public class AuthService {
     }
 
     /** 로그인 수단 변경의 결과. 메일 발송을 트랜잭션 밖으로 빼기 위해 주소를 함께 들고 나온다. */
-    private record Changed(List<String> providers, String email) {}
+    private record Changed(List<String> providers, String email, long authVersion) {}
 
     /** 메일 문구에 쓰는, 사람이 읽는 이름. 모르는 값이면 그대로 쓴다(연동 자체는 이미 성공했다). */
     private static String providerLabel(String providerName) {
@@ -151,7 +151,7 @@ public class AuthService {
     }
 
     private Changed link(Long userId, String providerName, OAuthUserProfile profile) {
-        User user = activeUser(userId);
+        User user = lockActiveUser(userId);
 
         authProviderRepository.findByProviderAndSocialId(providerName, profile.socialId())
                 .ifPresent(linked -> {
@@ -179,10 +179,13 @@ public class AuthService {
                         .build()
         );
 
+        user.revokeSessions();
+
         // 재조회 대신 직접 이어 붙인다 — 방금 save한 행이 조회에 잡히려면 flush 시점에 기대게 된다.
         return new Changed(
                 socialProviderNames(Stream.concat(owned.stream(), Stream.of(saved)).toList()),
-                user.getEmail());
+                user.getEmail(),
+                user.getAuthVersion());
     }
 
     /**
@@ -198,7 +201,7 @@ public class AuthService {
     }
 
     private Changed unlink(Long userId, String providerName) {
-        User user = activeUser(userId);
+        User user = lockActiveUser(userId);
 
         List<AuthProvider> owned = authProviderRepository.findAllByUserId(userId);
 
@@ -218,10 +221,12 @@ public class AuthService {
         }
 
         authProviderRepository.delete(target);
+        user.revokeSessions();
 
         return new Changed(
                 socialProviderNames(owned.stream().filter(provider -> provider != target).toList()),
-                user.getEmail());
+                user.getEmail(),
+                user.getAuthVersion());
     }
 
     /**
@@ -236,9 +241,12 @@ public class AuthService {
                 .toList();
     }
 
-    /** 탈퇴 처리된 계정에는 연동을 붙이거나 떼지 않는다 — 되살아날 때의 상태가 조용히 달라진다. */
-    private User activeUser(Long userId) {
-        return userRepository.findById(userId)
+    /**
+     * 탈퇴 처리된 계정에는 연동을 붙이거나 떼지 않는다 — 되살아날 때의 상태가 조용히 달라진다.
+     * 트랜잭션의 첫 조회로 잠가, 동시 비밀번호 변경·탈퇴의 커밋을 본 뒤 판단한다.
+     */
+    private User lockActiveUser(Long userId) {
+        return userRepository.findByIdForUpdate(userId)
                 .filter(user -> !user.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
     }
@@ -253,22 +261,45 @@ public class AuthService {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다.");
         }
 
-        String newAccessToken = jwtTokenProvider.createAccessToken(userId);
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);
+        // 탈퇴했거나 무효화 이전에 발급된 토큰이면 저장소를 건드리기 전에 끊는다. 재사용 탐지까지
+        // 가면 옛 토큰 하나로 비밀번호 변경 뒤의 새 세션까지 지울 수 있다.
+        long authVersion = currentAuthVersion(claims, userId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.UNAUTHORIZED, "유효하지 않은 Refresh Token입니다."));
+
+        String newAccessToken = jwtTokenProvider.createAccessToken(userId, authVersion);
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(userId, authVersion);
 
         // 비교와 교체를 Lua로 원자 실행 — 동시 요청이 둘 다 통과해 유효 토큰이 두 개 생기는 창을 막는다.
         // 돌려받은 값을 그대로 내려보내야 한다. 방금 회전에 밀려난 직전 토큰이 제시된 경우
         // (탭 두 개가 부팅하며 각자 refresh를 부르는 흔한 상황) 저장소는 새로 만든 토큰이 아니라
         // 이미 유효한 토큰을 돌려주고, 여기서 newRefreshToken을 고집하면 그 값이 버려져
         // 클라이언트가 저장소에 없는 토큰을 들고 다음 회전에서 탈취로 판정된다.
-        String issuedRefreshToken = refreshTokenStore
-                .rotate(userId, refreshToken, newRefreshToken, jwtProperties.refreshTokenExpiry())
-                // 저장값·유예값 어느 쪽과도 불일치 = 유예 창 밖의 옛 토큰이거나 탈취된 토큰.
-                // 스크립트가 키를 삭제했으므로 해당 유저의 모든 Refresh Token 체인이 무효화된다.
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.UNAUTHORIZED, "Refresh Token이 일치하지 않습니다."));
+        Optional<String> issuedRefreshToken = refreshTokenStore
+                .rotate(userId, refreshToken, newRefreshToken, jwtProperties.refreshTokenExpiry());
 
-        return new TokenResponse(newAccessToken, issuedRefreshToken);
+        if (issuedRefreshToken.isEmpty()) {
+            // 저장값·유예값 어느 쪽과도 불일치 = 유예 창 밖의 옛 토큰이거나 탈취된 토큰.
+            // 스크립트가 키를 삭제해 Refresh Token 체인이 끊겼으니 Access Token도 함께 끊는다.
+            revokeSessions(userId);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Refresh Token이 일치하지 않습니다.");
+        }
+
+        return new TokenResponse(newAccessToken, issuedRefreshToken.get());
+    }
+
+    /** 살아 있는 계정의 버전이 토큰의 버전과 같으면 그 값, 아니면 비어 있음. */
+    private Optional<Long> currentAuthVersion(Claims claims, Long userId) {
+        long tokenVersion = jwtTokenProvider.getAuthVersion(claims);
+        return userRepository.findActiveAuthVersion(userId)
+                .filter(version -> version == tokenVersion);
+    }
+
+    private void revokeSessions(Long userId) {
+        inTransaction(() -> {
+            userRepository.findByIdForUpdate(userId).ifPresent(User::revokeSessions);
+            return null;
+        });
     }
 
     /**
@@ -286,28 +317,43 @@ public class AuthService {
      * <p>permitAll이 되면서 남이 강제로 로그아웃시키는 CSRF가 이론상 가능해지지만, refresh
      * 쿠키가 {@code SameSite=Strict}라 다른 사이트에서 실려 나가지 않고, 성공해도 피해는
      * 재로그인뿐이다.
+     *
+     * <p>Refresh Token이 사용자당 하나이므로 로그아웃은 그 계정의 모든 기기에 적용된다. DB의 버전을
+     * 먼저 올리므로 Redis 삭제가 실패해도 옛 토큰은 이미 거부된다 — 그래서 그 실패로 로그아웃을
+     * 실패시키지 않는다(쿠키까지 지워야 공용 PC에서 끝난다).
      */
     public void logout(Long userId, String refreshToken) {
         Long target = userId != null ? userId : userIdFrom(refreshToken);
-        if (target != null) {
+        if (target == null) {
+            return;
+        }
+        revokeSessions(target);
+        try {
             refreshTokenStore.delete(target);
+        } catch (BusinessException e) {
+            log.warn("로그아웃 중 Refresh Token 삭제 실패 — 버전을 올려 이미 무효화됐습니다: userId={}", target);
         }
     }
 
+    /** 이미 무효화된 옛 토큰으로는 현재 세션을 끊지 못하게, 버전이 맞는 토큰만 주체로 인정한다. */
     private Long userIdFrom(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             return null;
         }
         return jwtTokenProvider.parseRefreshToken(refreshToken)
-                .map(jwtTokenProvider::getUserId)
+                .map(claims -> {
+                    Long userId = jwtTokenProvider.getUserId(claims);
+                    return userId != null && currentAuthVersion(claims, userId).isPresent() ? userId : null;
+                })
                 .orElse(null);
     }
 
     @Transactional
     public void withdraw(Long userId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
         user.softDelete(LocalDateTime.now(clock));
+        user.revokeSessions();
         refreshTokenStore.delete(userId);
     }
 
@@ -334,7 +380,7 @@ public class AuthService {
      * <p>유예기간이 지난 탈퇴 계정은 트랜잭션 밖에서 정리해야 해서 따로 표시한다 —
      * LocalAuthService가 같은 상황을 다루는 방식과 같다.
      */
-    private record Resolved(Long userId, Long userToPurge) {}
+    private record Resolved(Long userId, Long userToPurge, long authVersion) {}
 
     private Resolved resolveUser(String providerName, OAuthUserProfile profile) {
         AuthProvider authProvider = authProviderRepository
@@ -344,7 +390,7 @@ public class AuthService {
         User user = authProvider.getUser();
         if (user.isDeleted()) {
             if (!user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
-                return new Resolved(null, user.getId());
+                return new Resolved(null, user.getId(), user.getAuthVersion());
             }
             String email = trustedEmail(profile);
             user.reactivate(
@@ -352,7 +398,7 @@ public class AuthService {
                     keptOrFreeNickname(user, nickname(profile, user.getNickname())));
         }
 
-        return new Resolved(user.getId(), null);
+        return new Resolved(user.getId(), null, user.getAuthVersion());
     }
 
     private <T> T inTransaction(Supplier<T> work) {

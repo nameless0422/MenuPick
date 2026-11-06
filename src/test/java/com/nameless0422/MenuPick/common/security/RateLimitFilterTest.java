@@ -572,10 +572,43 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("Redis 장애 시 요청을 통과시킨다 (fail-open)")
+    @DisplayName("Redis 장애 시 인증 경로는 503으로 막는다 — 대입 제한이 풀린 채 Argon2를 돌리지 않는다")
     @SuppressWarnings("unchecked")
-    void redisFailure_passThrough() throws ServletException, IOException {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/kakao");
+    void redisFailure_authPathFailsClosed() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+        request.setRemoteAddr("10.0.0.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), any(List.class), any()))
+                .willThrow(new RuntimeException("Redis connection refused"));
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    @DisplayName("Redis 장애여도 로그아웃은 통과시킨다 — DB만으로 세션을 끊을 수 있다")
+    @SuppressWarnings("unchecked")
+    void redisFailure_logoutPassesThrough() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/api/v1/auth/logout");
+        request.setRemoteAddr("10.0.0.1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        given(redisTemplate.execute(any(RedisScript.class), any(List.class), any()))
+                .willThrow(new RuntimeException("Redis connection refused"));
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("Redis 장애여도 자격증명과 무관한 경로는 통과시킨다")
+    @SuppressWarnings("unchecked")
+    void redisFailure_nonAuthPathPassesThrough() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/pick/demo");
         request.setRemoteAddr("10.0.0.1");
         MockHttpServletResponse response = new MockHttpServletResponse();
 

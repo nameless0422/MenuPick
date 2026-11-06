@@ -25,7 +25,10 @@ public abstract class AbstractIntegrationTest {
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
             .withDatabaseName("menupick")
             .withUsername("menupick")
-            .withPassword("menupick");
+            .withPassword("menupick")
+            // 스프링 테스트 컨텍스트마다 커넥션 풀이 살아 있어, 목 구성이 다른 컨텍스트가 늘면
+            // 기본 상한(151)에 걸려 무관한 테스트가 Too many connections로 실패한다.
+            .withCommand("--max_connections=500");
 
     static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
             .withExposedPorts(6379);

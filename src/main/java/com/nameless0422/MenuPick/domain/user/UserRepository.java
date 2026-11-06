@@ -25,6 +25,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select u from User u where u.id = :id")
     Optional<User> findByIdForUpdate(@Param("id") Long id);
 
+    /**
+     * 살아 있는 계정의 토큰 버전. 탈퇴했거나 없는 계정이면 비어 있다.
+     *
+     * <p>인증된 요청마다 도는 PK 조회라 값 하나만 읽는다(영속성 컨텍스트를 거치지 않는다).
+     */
+    @Query("select u.authVersion from User u where u.id = :id and u.deletedAt is null")
+    Optional<Long> findActiveAuthVersion(@Param("id") Long id);
+
     Optional<User> findByEmail(String email);
 
     /**
