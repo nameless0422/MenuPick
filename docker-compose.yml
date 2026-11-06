@@ -1,6 +1,7 @@
 services:
   mysql:
-    image: mysql:8.0
+    # prod·통합 테스트와 엔진 버전을 맞춘다(8.0 EOL → 8.4 LTS). 로컬은 digest까지 고정하지 않는다.
+    image: mysql:8.4
     container_name: menupick-mysql
     ports:
       # 루프백에만 바인딩한다. "3306:3306"은 0.0.0.0 바인딩이라 같은 공유기/카페 와이파이의
@@ -24,7 +25,8 @@ services:
       - mysql-data:/var/lib/mysql
 
   redis:
-    image: redis:7-alpine
+    # prod·통합 테스트와 맞춘다(Alpine EOSL 탈출: 7-alpine → 8.2-alpine).
+    image: redis:8.2-alpine
     container_name: menupick-redis
     ports:
       # 로컬 Redis는 무인증이므로 외부 노출은 그대로 무단 접근이다. 루프백만 바인딩.

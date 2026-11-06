@@ -67,10 +67,10 @@ class TokenIssuerTest {
     @DisplayName("살아 있는 계정에는 토큰을 발급하고 Refresh를 저장소에 기록한다")
     void activeUser_issuesAndStores() {
         given(userRepository.findById(7L)).willReturn(Optional.of(user(7L, null)));
-        given(jwtTokenProvider.createAccessToken(7L)).willReturn("access");
-        given(jwtTokenProvider.createRefreshToken(7L)).willReturn("refresh");
+        given(jwtTokenProvider.createAccessToken(7L, 0L)).willReturn("access");
+        given(jwtTokenProvider.createRefreshToken(7L, 0L)).willReturn("refresh");
 
-        TokenResponse result = tokenIssuer.issue(7L);
+        TokenResponse result = tokenIssuer.issue(7L, 0L);
 
         assertThat(result.accessToken()).isEqualTo("access");
         assertThat(result.refreshToken()).isEqualTo("refresh");
@@ -85,12 +85,12 @@ class TokenIssuerTest {
         given(userRepository.findById(7L))
                 .willReturn(Optional.of(user(7L, LocalDateTime.now().minusDays(1))));
 
-        assertThatThrownBy(() -> tokenIssuer.issue(7L))
+        assertThatThrownBy(() -> tokenIssuer.issue(7L, 0L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.UNAUTHORIZED);
 
-        verify(jwtTokenProvider, never()).createRefreshToken(anyLong());
+        verify(jwtTokenProvider, never()).createRefreshToken(anyLong(), anyLong());
         verify(refreshTokenStore, never()).save(any(), anyString(), anyLong());
     }
 
@@ -99,7 +99,22 @@ class TokenIssuerTest {
     void purgedUser_rejected() {
         given(userRepository.findById(7L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> tokenIssuer.issue(7L))
+        assertThatThrownBy(() -> tokenIssuer.issue(7L, 0L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.UNAUTHORIZED);
+
+        verify(refreshTokenStore, never()).save(any(), anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("자격을 확인한 뒤 버전이 올랐으면 발급하지 않고 현재 체인도 덮어쓰지 않는다")
+    void staleAuthVersion_rejected() {
+        User user = user(7L, null);
+        user.revokeSessions();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> tokenIssuer.issue(7L, 0L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.UNAUTHORIZED);

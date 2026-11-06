@@ -121,7 +121,7 @@ API로 시드하는 방법(인증 CRUD를 호출)도 가능하지만 `heavy` 프
 
 - 토큰 내용은 `sub = userId`, `token_type = "access"`, `iat`, `exp`가 전부다 (`JwtTokenProvider.java:85-94`).
 - 서명은 `jwt.secret`에 대한 HMAC-SHA256이다.
-- `JwtAuthenticationFilter`는 **서명·만료·`token_type`만 확인한다.** 요청마다 DB나 Redis를 조회하지 않는다 (`JwtAuthenticationFilter.java:33-40`, `JwtTokenProvider.java:96-112`).
+- `JwtAuthenticationFilter`는 서명·만료·`token_type`에 더해 계정의 `auth_version`을 PK로 조회한다(D-070). `ver` 클레임이 없는 토큰은 0으로 읽으므로 시드 계정(기본값 0)에서는 k6 토큰이 그대로 통한다. **이전 측정값에는 이 조회 비용이 들어 있지 않다.**
 
 즉 `JWT_SECRET`과 사용자 id만 있으면 **k6가 토큰을 스스로 만들 수 있다.** 얻는 것이 세 가지다.
 

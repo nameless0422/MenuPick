@@ -3,6 +3,7 @@ package com.nameless0422.MenuPick.common.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import jakarta.servlet.FilterChain;
+import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,11 +29,14 @@ class JwtAuthenticationFilterTest {
     @Mock
     private FilterChain filterChain;
 
+    @Mock
+    private UserRepository userRepository;
+
     private JwtAuthenticationFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthenticationFilter(jwtTokenProvider);
+        filter = new JwtAuthenticationFilter(jwtTokenProvider, userRepository);
         SecurityContextHolder.clearContext();
     }
 
@@ -46,6 +50,7 @@ class JwtAuthenticationFilterTest {
         Claims claims = Jwts.claims().subject("1").build();
         given(jwtTokenProvider.parseAccessToken("valid.token.here")).willReturn(Optional.of(claims));
         given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
+        given(userRepository.findActiveAuthVersion(1L)).willReturn(Optional.of(0L));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -113,5 +118,68 @@ class JwtAuthenticationFilterTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(filterChain).doFilter(request, response);
+    }
+
+    private MockHttpServletRequest validBearerRequest(Claims claims, long tokenVersion) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer valid.token.here");
+        given(jwtTokenProvider.parseAccessToken("valid.token.here")).willReturn(Optional.of(claims));
+        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
+        given(jwtTokenProvider.getAuthVersion(claims)).willReturn(tokenVersion);
+        return request;
+    }
+
+    @Test
+    @DisplayName("토큰 버전이 현재 버전과 다르면 서명이 유효해도 인증하지 않는다")
+    void staleVersion_noAuthentication() throws Exception {
+        MockHttpServletRequest request = validBearerRequest(Jwts.claims().subject("1").build(), 0L);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(userRepository.findActiveAuthVersion(1L)).willReturn(Optional.of(1L));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("탈퇴했거나 삭제된 계정의 토큰은 인증하지 않는다")
+    void withdrawnUser_noAuthentication() throws Exception {
+        MockHttpServletRequest request = validBearerRequest(Jwts.claims().subject("1").build(), 0L);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(userRepository.findActiveAuthVersion(1L)).willReturn(Optional.empty());
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    @DisplayName("버전을 조회하지 못하면 통과시키지 않고 503을 준다")
+    void databaseFailure_serviceUnavailable() throws Exception {
+        MockHttpServletRequest request = validBearerRequest(Jwts.claims().subject("1").build(), 0L);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(userRepository.findActiveAuthVersion(1L))
+                .willThrow(new org.springframework.dao.DataAccessResourceFailureException("down"));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    @DisplayName("트랜잭션을 열지 못해도 503을 준다")
+    void transactionFailure_serviceUnavailable() throws Exception {
+        MockHttpServletRequest request = validBearerRequest(Jwts.claims().subject("1").build(), 0L);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(userRepository.findActiveAuthVersion(1L))
+                .willThrow(new org.springframework.transaction.CannotCreateTransactionException("down"));
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        org.mockito.Mockito.verifyNoInteractions(filterChain);
     }
 }

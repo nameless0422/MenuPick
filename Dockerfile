@@ -24,7 +24,11 @@ FROM eclipse-temurin:17-jre-jammy
 
 # HEALTHCHECK용 curl. jre-jammy 베이스에는 wget/curl이 모두 없다.
 # 이미지가 수 MB 늘어나지만, 오케스트레이터가 앱의 살아있음을 판별할 수 없는 편이 더 비싸다.
+#
+# 베이스 태그가 Ubuntu 보안 패치보다 늦게 갱신될 때가 있어 설치 전에 패키지를 올린다
+# (2026-11: 베이스의 apt 2.4.14가 CVE-2026-109518 수정본보다 낮았다).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 

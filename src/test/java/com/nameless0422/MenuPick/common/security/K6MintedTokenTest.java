@@ -16,8 +16,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * k6가 만든 토큰을 서버 파서가 그대로 받아들이는지 고정한다.
  *
  * <p>부하 테스트({@code scripts/k6/jwt.js})는 OAuth를 거치지 않고 Access Token을 직접 서명해
- * 만든다. 성립 근거는 {@link JwtAuthenticationFilter}가 서명·만료·{@code token_type}만 보고
- * DB나 Redis를 조회하지 않는다는 것이다. 그 조립이 서버와 한 글자라도 어긋나면 부하 테스트는
+ * 만든다. {@link JwtAuthenticationFilter}는 서명·만료·{@code token_type}에 더해 계정의 인증 버전을
+ * 보지만, {@code ver}가 없는 토큰은 0으로 읽으므로 시드 계정(기본값 0)에서는 그대로 통한다. 그 조립이 서버와 한 글자라도 어긋나면 부하 테스트는
  * 실행 자체가 안 되는데, <b>실제로 부하를 걸어야 할 시점에야 401 더미로 드러난다</b>.
  *
  * <p>아래 토큰은 실제로 k6가 {@code scripts/k6/jwt.js}를 돌려 만들어낸 값이다. 두 구현이
@@ -38,6 +38,12 @@ class K6MintedTokenTest {
             "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
                     + ".eyJzdWIiOiI0MiIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpYXQiOjE3ODY4MTcyNzMsImV4cCI6MTc4NjgxOTA3M30"
                     + ".ZVn5-J6ysxUbLn3rIxbso-UiOrjS5F7GTQLKcgH_amU";
+
+    private static java.util.List<String> concat(java.util.Set<String> keys, String... extra) {
+        java.util.List<String> all = new java.util.ArrayList<>(keys);
+        all.addAll(java.util.List.of(extra));
+        return all;
+    }
 
     /** 만료만 건너뛰고 서명은 그대로 검증하는 파서. 100년치 오차를 허용해 exp를 무력화한다. */
     private Claims parseIgnoringExpiry(String token, String secret) {
@@ -84,14 +90,16 @@ class K6MintedTokenTest {
                 new JwtProperties(SECRET, 1_800_000L, 1_209_600_000L));
         provider.init(); // @PostConstruct는 스프링 컨텍스트 밖에서 자동으로 불리지 않는다
 
-        Claims serverIssued = parseIgnoringExpiry(provider.createAccessToken(42L), SECRET);
+        Claims serverIssued = parseIgnoringExpiry(provider.createAccessToken(42L, 0L), SECRET);
         Claims k6Minted = parseIgnoringExpiry(K6_TOKEN, SECRET);
 
         assertThat(k6Minted.getSubject()).isEqualTo(serverIssued.getSubject());
         assertThat(k6Minted.get("token_type")).isEqualTo(serverIssued.get("token_type"));
-        assertThat(k6Minted.keySet())
-                .as("서버가 넣는 클레임 집합과 같아야 한다 — 한쪽에만 있는 클레임이 생기면 조립이 갈라진 것이다")
-                .isEqualTo(serverIssued.keySet());
+        // 서버에만 있는 ver·jti는 k6에 없어도 된다. ver가 없으면 0으로 읽고(시드 계정의 값) jti는 판정에 쓰지 않는다.
+        assertThat(serverIssued.keySet())
+                .as("k6가 넣는 클레임은 서버도 넣어야 한다 — 그 외에 갈라진 클레임이 생기면 조립이 어긋난 것이다")
+                .containsExactlyInAnyOrderElementsOf(concat(k6Minted.keySet(), "jti", "ver"));
+        assertThat(provider.getAuthVersion(k6Minted)).isZero();
     }
 
     @Test

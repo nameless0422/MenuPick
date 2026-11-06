@@ -66,3 +66,7 @@ id_ed25519*
 # 서버에서 내려받은 백업은 local-backups/ 에 둔다(deploy/oci/README.md).
 local-backups/
 *.sql.gz
+
+# 소스 tarball — `git archive`로 만든 배포/이관용 스냅샷이다. 저장소에 커밋하면 리포가
+# 비대해지고(한 번에 수 MB) 리뷰·히스토리를 흐린다. 코드는 이미 git이 버전 관리한다.
+*.tar

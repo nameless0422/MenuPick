@@ -32,7 +32,7 @@ class JwtTokenProviderTest {
     @Test
     @DisplayName("Access Token을 생성하고 Claims에서 userId를 추출한다")
     void createAccessToken_and_getUserId() {
-        String token = jwtTokenProvider.createAccessToken(1L);
+        String token = jwtTokenProvider.createAccessToken(1L, 0L);
 
         assertThat(token).isNotBlank();
         Claims claims = jwtTokenProvider.parseAccessToken(token).orElseThrow();
@@ -42,7 +42,7 @@ class JwtTokenProviderTest {
     @Test
     @DisplayName("Refresh Token을 생성하고 Claims에서 userId를 추출한다")
     void createRefreshToken_and_getUserId() {
-        String token = jwtTokenProvider.createRefreshToken(42L);
+        String token = jwtTokenProvider.createRefreshToken(42L, 0L);
 
         assertThat(token).isNotBlank();
         Claims claims = jwtTokenProvider.parseRefreshToken(token).orElseThrow();
@@ -52,7 +52,7 @@ class JwtTokenProviderTest {
     @Test
     @DisplayName("Refresh Token은 parseAccessToken이 빈 Optional을 반환한다")
     void parseAccessToken_rejectsRefreshToken() {
-        String refreshToken = jwtTokenProvider.createRefreshToken(1L);
+        String refreshToken = jwtTokenProvider.createRefreshToken(1L, 0L);
 
         assertThat(jwtTokenProvider.parseAccessToken(refreshToken)).isEmpty();
     }
@@ -60,7 +60,7 @@ class JwtTokenProviderTest {
     @Test
     @DisplayName("Access Token은 parseRefreshToken이 빈 Optional을 반환한다")
     void parseRefreshToken_rejectsAccessToken() {
-        String accessToken = jwtTokenProvider.createAccessToken(1L);
+        String accessToken = jwtTokenProvider.createAccessToken(1L, 0L);
 
         assertThat(jwtTokenProvider.parseRefreshToken(accessToken)).isEmpty();
     }
@@ -72,7 +72,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider expiredProvider = provider(
                 "testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!", -120_000L, -120_000L);
 
-        String token = expiredProvider.createAccessToken(1L);
+        String token = expiredProvider.createAccessToken(1L, 0L);
 
         assertThat(expiredProvider.parseAccessToken(token)).isEmpty();
     }
@@ -84,7 +84,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider justExpiredProvider = provider(
                 "testSecretKeyMustBeAtLeast256BitsLongForHS256Algorithm!!", -1000L, -1000L);
 
-        String token = justExpiredProvider.createAccessToken(1L);
+        String token = justExpiredProvider.createAccessToken(1L, 0L);
 
         assertThat(justExpiredProvider.parseAccessToken(token)).isPresent();
     }
@@ -95,7 +95,7 @@ class JwtTokenProviderTest {
         JwtTokenProvider otherProvider = provider(
                 "differentSecretKeyThatIsAlsoAtLeast256BitsLongForHS256!!", 1800000L, 1209600000L);
 
-        String token = otherProvider.createAccessToken(1L);
+        String token = otherProvider.createAccessToken(1L, 0L);
 
         assertThat(jwtTokenProvider.parseAccessToken(token)).isEmpty();
     }
@@ -126,5 +126,37 @@ class JwtTokenProviderTest {
                 io.jsonwebtoken.Jwts.builder().subject("1").compact());
 
         assertThat(parsed).isEmpty();
+    }
+
+    @Test
+    @DisplayName("같은 초에 발급해도 토큰 문자열과 jti가 매번 다르다")
+    void tokensAreUniqueWithinSameSecond() {
+        java.util.Set<String> refresh = new java.util.HashSet<>();
+        java.util.Set<String> access = new java.util.HashSet<>();
+        for (int i = 0; i < 50; i++) {
+            refresh.add(jwtTokenProvider.createRefreshToken(1L, 0L));
+            access.add(jwtTokenProvider.createAccessToken(1L, 0L));
+        }
+
+        assertThat(refresh).hasSize(50);
+        assertThat(access).hasSize(50);
+        assertThat(jwtTokenProvider.parseRefreshToken(refresh.iterator().next()).orElseThrow().getId()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("토큰에 넣은 인증 버전을 읽어 온다")
+    void authVersionRoundTrip() {
+        String token = jwtTokenProvider.createAccessToken(1L, 5L);
+
+        assertThat(jwtTokenProvider.getAuthVersion(jwtTokenProvider.parseAccessToken(token).orElseThrow()))
+                .isEqualTo(5L);
+    }
+
+    @Test
+    @DisplayName("ver가 없으면 배포 전 토큰이라 0으로, 숫자가 아니면 어떤 버전과도 맞지 않는 값으로 읽는다")
+    void authVersionFallbacks() {
+        assertThat(jwtTokenProvider.getAuthVersion(io.jsonwebtoken.Jwts.claims().subject("1").build())).isZero();
+        assertThat(jwtTokenProvider.getAuthVersion(
+                io.jsonwebtoken.Jwts.claims().subject("1").add("ver", "x").build())).isEqualTo(-1L);
     }
 }

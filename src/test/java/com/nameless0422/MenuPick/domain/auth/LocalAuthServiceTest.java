@@ -115,8 +115,22 @@ class LocalAuthServiceTest {
         );
         localAuthService.initDummyHash();
 
-        given(tokenIssuer.issue(anyLong()))
+        given(tokenIssuer.issue(anyLong(), anyLong()))
                 .willReturn(new TokenResponse("access_token", "refresh_token"));
+
+        // 잠금 조회는 잠금 없는 조회의 스텁을 따른다 — 잠금 자체는 AuthRevocationIntegrationTest가 실제 MySQL로 본다.
+        given(userRepository.findByIdForUpdate(anyLong())).willAnswer(call -> {
+            Long id = call.getArgument(0);
+            return authProviderRepository.findByUserIdAndProvider(id, AuthProvider.LOCAL)
+                    .map(AuthProvider::getUser)
+                    .or(() -> userRepository.findById(id));
+        });
+        given(authProviderRepository.findByUserIdAndProviderForUpdate(anyLong(), anyString())).willAnswer(call ->
+                authProviderRepository.findByUserIdAndProvider(call.getArgument(0), call.getArgument(1)));
+        given(authProviderRepository.save(any(AuthProvider.class))).willAnswer(call -> call.getArgument(0));
+        given(authProviderRepository.findUserIdByProviderAndSocialId(anyString(), anyString())).willAnswer(call ->
+                authProviderRepository.findByProviderAndSocialId(call.getArgument(0), call.getArgument(1))
+                        .map(provider -> provider.getUser().getId()));
     }
 
     /** 저장된 자체 계정 한 건을 만든다. id는 JPA가 채우는 값이라 리플렉션으로 넣는다. */
@@ -149,7 +163,7 @@ class LocalAuthServiceTest {
             User saved = User.builder().nickname("테스터").emailVerified(false).build();
             ReflectionTestUtils.setField(saved, "id", 1L);
             given(userRepository.save(any(User.class))).willReturn(saved);
-            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.VERIFY_EMAIL), eq(1L), any()))
+            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.VERIFY_EMAIL), eq(1L), anyLong(), any()))
                     .willReturn("verify-token");
 
             localAuthService.signup(EMAIL, PASSWORD, "테스터");
@@ -248,7 +262,7 @@ class LocalAuthServiceTest {
             User saved = User.builder().nickname("테스터").emailVerified(false).build();
             ReflectionTestUtils.setField(saved, "id", 1L);
             given(userRepository.save(any(User.class))).willReturn(saved);
-            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.VERIFY_EMAIL), eq(1L), any()))
+            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.VERIFY_EMAIL), eq(1L), anyLong(), any()))
                     .willReturn("verify-token");
 
             localAuthService.signup(EMAIL, PASSWORD, "테스터");
@@ -308,8 +322,14 @@ class LocalAuthServiceTest {
             String oldHash = pending.getPasswordHash();
             given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
                     .willReturn(Optional.of(pending));
+            given(authProviderRepository.findByUserIdAndProvider(1L, AuthProvider.LOCAL))
+                    .willReturn(Optional.of(pending));
 
             localAuthService.signup(EMAIL, PASSWORD, "새닉네임");
+
+            // 새 비밀번호에 묶인 링크가 나가야 한다. 옛 링크는 버전이 달라 거절된다.
+            assertThat(pending.getCredentialVersion()).isEqualTo(1L);
+            verify(authTokenStore).issue(eq(AuthTokenStore.Purpose.VERIFY_EMAIL), eq(1L), eq(1L), any());
 
             assertThat(pending.getPasswordHash()).isNotEqualTo(oldHash);
             assertThat(passwordEncoder.matches(PASSWORD, pending.getPasswordHash())).isTrue();
@@ -354,7 +374,7 @@ class LocalAuthServiceTest {
             TokenResponse result = localAuthService.login(EMAIL, PASSWORD);
 
             assertThat(result.accessToken()).isEqualTo("access_token");
-            verify(tokenIssuer).issue(7L);
+            verify(tokenIssuer).issue(7L, 0L);
             verify(loginAttemptLimiter).reset(EMAIL);
         }
 
@@ -369,7 +389,7 @@ class LocalAuthServiceTest {
                     .extracting("errorCode").isEqualTo(ErrorCode.INVALID_CREDENTIALS);
 
             verify(loginAttemptLimiter).recordFailure(EMAIL);
-            verify(tokenIssuer, never()).issue(anyLong());
+            verify(tokenIssuer, never()).issue(anyLong(), anyLong());
         }
 
         @Test
@@ -439,7 +459,7 @@ class LocalAuthServiceTest {
             // 이미 검증된 주소는 그대로 유지돼야 한다
             assertThat(provider.getUser().getEmail()).isEqualTo(EMAIL);
             assertThat(provider.getUser().isEmailVerified()).isTrue();
-            verify(tokenIssuer).issue(7L);
+            verify(tokenIssuer).issue(7L, 0L);
         }
     }
 
@@ -452,7 +472,7 @@ class LocalAuthServiceTest {
         void confirms() {
             AuthProvider pending = localAccount(3L, EMAIL, PASSWORD, false);
             given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
-                    .willReturn(Optional.of(3L));
+                    .willReturn(Optional.of(new AuthTokenStore.Consumed(3L, 0L)));
             given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
                     .willReturn(Optional.of(pending));
             given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
@@ -469,7 +489,7 @@ class LocalAuthServiceTest {
         void seedsDefaultMenusForNewAccount() {
             AuthProvider pending = localAccount(3L, EMAIL, PASSWORD, false);
             given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
-                    .willReturn(Optional.of(3L));
+                    .willReturn(Optional.of(new AuthTokenStore.Consumed(3L, 0L)));
             given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
                     .willReturn(Optional.of(pending));
             given(userRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
@@ -491,7 +511,7 @@ class LocalAuthServiceTest {
             ReflectionTestUtils.setField(socialUser, "id", 9L);
 
             given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
-                    .willReturn(Optional.of(3L));
+                    .willReturn(Optional.of(new AuthTokenStore.Consumed(3L, 0L)));
             given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
                     .willReturn(Optional.of(pending));
             given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialUser));
@@ -501,7 +521,7 @@ class LocalAuthServiceTest {
             // 자격증명의 주인이 기존 계정으로 옮겨가고, 로그인도 그 계정으로 이뤄져야 한다.
             assertThat(pending.getUser()).isSameAs(socialUser);
             verify(userRepository).delete(pendingUser);
-            verify(tokenIssuer).issue(9L);
+            verify(tokenIssuer).issue(9L, 0L);
 
             // 병합 대상에도 provision을 부른다. 예전에는 "이미 쓰이던 계정이니 메뉴가 있다"고 보고
             // 부르지 않았는데, V10이 건너뛴 계정(탈퇴 중이었거나 email_verified=0인 레거시 소셜)에는
@@ -524,7 +544,7 @@ class LocalAuthServiceTest {
             withdrawn.softDelete(NOW.minusDays(25));
 
             given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
-                    .willReturn(Optional.of(3L));
+                    .willReturn(Optional.of(new AuthTokenStore.Consumed(3L, 0L)));
             given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
                     .willReturn(Optional.of(pending));
             given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(withdrawn));
@@ -542,7 +562,7 @@ class LocalAuthServiceTest {
             assertThat(pending.getUser()).isSameAs(withdrawn);
             verify(userRepository).delete(pendingUser);
             verify(userHardDeleteService, never()).purge(anyLong());
-            verify(tokenIssuer).issue(9L);
+            verify(tokenIssuer).issue(9L, 0L);
 
             // 되살아난 계정에도 기본 메뉴를 채울 기회를 준다.
             //
@@ -566,7 +586,7 @@ class LocalAuthServiceTest {
             withdrawn.softDelete(NOW.minusDays(31));
 
             given(authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, "tok"))
-                    .willReturn(Optional.of(3L));
+                    .willReturn(Optional.of(new AuthTokenStore.Consumed(3L, 0L)));
             given(authProviderRepository.findByUserIdAndProvider(3L, AuthProvider.LOCAL))
                     .willReturn(Optional.of(pending));
             // 정리가 끝난 뒤 다시 보면 그 주소를 붙잡고 있던 행은 사라져 있다.
@@ -581,7 +601,7 @@ class LocalAuthServiceTest {
             assertThat(pendingUser.getEmail()).isEqualTo(EMAIL);
             assertThat(pendingUser.isEmailVerified()).isTrue();
             verify(userRepository, never()).delete(any(User.class));
-            verify(tokenIssuer).issue(3L);
+            verify(tokenIssuer).issue(3L, 0L);
         }
 
         @Test
@@ -611,7 +631,9 @@ class LocalAuthServiceTest {
 
             assertThat(passwordEncoder.matches("brand-new-password", provider.getPasswordHash()))
                     .isTrue();
-            verify(tokenIssuer).issue(7L);
+            assertThat(provider.getCredentialVersion()).isEqualTo(1L);
+            verify(authTokenStore).revoke(AuthTokenStore.Purpose.PASSWORD_RESET, 7L);
+            verify(tokenIssuer).issue(7L, 1L);
         }
 
         @Test
@@ -628,7 +650,7 @@ class LocalAuthServiceTest {
                     .extracting("errorCode").isEqualTo(ErrorCode.INVALID_CREDENTIALS);
 
             assertThat(provider.getPasswordHash()).isEqualTo(original);
-            verify(tokenIssuer, never()).issue(anyLong());
+            verify(tokenIssuer, never()).issue(anyLong(), anyLong());
         }
 
         @Test
@@ -666,7 +688,7 @@ class LocalAuthServiceTest {
 
             // 맞는 비밀번호를 줬는데도 바뀌지 않았다 = 검증 자체에 도달하지 않았다
             assertThat(provider.getPasswordHash()).isEqualTo(original);
-            verify(tokenIssuer, never()).issue(anyLong());
+            verify(tokenIssuer, never()).issue(anyLong(), anyLong());
         }
 
         @Test
@@ -705,11 +727,40 @@ class LocalAuthServiceTest {
         }
 
         @Test
+        @DisplayName("accent 변형 주소의 재설정 요청은 등록 주소와 바이트가 달라 토큰을 흘리지 않는다")
+        void requestResetForFoldedVariantLeaksNothing() {
+            // 콜레이션(utf8mb4_0900_ai_ci)이 á=a로 접어, 변형 주소 조회가 등록된 victim 행을
+            // 돌려주는 상황을 흉내 낸다. NFKC는 á를 접지 않으므로 바이트가 다르게 남아야 한다.
+            String variant = "user@exámple.com";
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, variant))
+                    .willReturn(Optional.of(localAccount(7L, EMAIL, PASSWORD, true)));
+
+            localAuthService.requestPasswordReset(variant);
+
+            verify(authTokenStore, never())
+                    .issue(eq(AuthTokenStore.Purpose.PASSWORD_RESET), anyLong(), anyLong(), any());
+            verify(authMailer, never()).sendPasswordReset(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("정상 재설정은 입력이 아니라 등록된 주소로 메일을 보낸다")
+        void requestResetSendsToRegisteredAddress() {
+            given(authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, EMAIL))
+                    .willReturn(Optional.of(localAccount(7L, EMAIL, PASSWORD, true)));
+            given(authTokenStore.issue(eq(AuthTokenStore.Purpose.PASSWORD_RESET), eq(7L), anyLong(), any()))
+                    .willReturn("reset-token");
+
+            localAuthService.requestPasswordReset("  " + EMAIL + "  ");
+
+            verify(authMailer).sendPasswordReset(eq(EMAIL), eq("reset-token"), any());
+        }
+
+        @Test
         @DisplayName("재설정 토큰이 유효하면 비밀번호를 바꾸고 세션을 새로 발급한다")
         void confirmReset() {
             AuthProvider provider = localAccount(7L, EMAIL, PASSWORD, true);
             given(authTokenStore.consume(AuthTokenStore.Purpose.PASSWORD_RESET, "tok"))
-                    .willReturn(Optional.of(7L));
+                    .willReturn(Optional.of(new AuthTokenStore.Consumed(7L, 0L)));
             given(authProviderRepository.findByUserIdAndProvider(7L, AuthProvider.LOCAL))
                     .willReturn(Optional.of(provider));
 
@@ -717,7 +768,7 @@ class LocalAuthServiceTest {
 
             assertThat(passwordEncoder.matches("brand-new-password", provider.getPasswordHash()))
                     .isTrue();
-            verify(tokenIssuer).issue(7L);
+            verify(tokenIssuer).issue(7L, 1L);
         }
     }
 

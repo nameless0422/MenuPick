@@ -42,6 +42,13 @@ public class AuthProvider extends BaseTimeEntity {
     @Column(length = 255)
     private String passwordHash;
 
+    /**
+     * 비밀번호가 바뀔 때마다 오른다. 메일 링크(인증·재설정)는 발급 시점의 값에 묶여,
+     * 그 뒤 비밀번호가 바뀌면 Redis에 남아 있어도 DB 트랜잭션에서 거절된다.
+     */
+    @Column(nullable = false)
+    private long credentialVersion;
+
     @Builder
     public AuthProvider(User user, String provider, String socialId, String passwordHash) {
         this.user = user;
@@ -56,6 +63,7 @@ public class AuthProvider extends BaseTimeEntity {
 
     public void changePassword(String encodedPassword) {
         this.passwordHash = encodedPassword;
+        this.credentialVersion++;
     }
 
     /**
