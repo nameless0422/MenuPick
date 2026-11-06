@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.support;
 
+import com.nameless0422.MenuPick.domain.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nameless0422.MenuPick.common.security.CustomAccessDeniedHandler;
 import com.nameless0422.MenuPick.common.security.CustomAuthenticationEntryPoint;
@@ -49,4 +50,5 @@ public abstract class AbstractControllerTest {
 
     @MockitoBean protected JwtTokenProvider jwtTokenProvider;
     @MockitoBean protected StringRedisTemplate redisTemplate;
+    @MockitoBean protected UserRepository userRepository;
 }

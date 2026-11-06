@@ -50,6 +50,9 @@ docker exec menupick-web nginx -t && docker exec menupick-web nginx -s reload
 docker compose -f docker-compose.prod.yml -f docker-compose.oci.yml up -d
 ```
 
+`nginx-tls.conf`는 쿼리 없는 접근 로그와 강제 CSP를 담고 있다(2026-11). 이미지만 올리면 서버에는
+반영되지 않으므로 위 복사를 함께 한다. V21 배포의 로그인·메일 링크 전환 동작은 D-070을 본다.
+
 CI가 `main`의 백엔드·프론트 이미지를 같은 커밋 SHA로 GHCR에 게시한다. 운영 서버에서는
 `.env`의 `APP_VERSION`을 그 **전체 SHA**로 바꾸고 두 이미지를 명시적으로 받은 뒤 app/web만
 재생성한다. MySQL·Redis를 함께 재시작할 이유는 없다.

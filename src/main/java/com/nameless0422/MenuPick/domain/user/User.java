@@ -6,11 +6,13 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User extends BaseTimeEntity {
@@ -40,6 +42,16 @@ public class User extends BaseTimeEntity {
 
     private LocalDateTime deletedAt;
 
+    /**
+     * 토큰 무효화 버전. Access/Refresh Token의 {@code ver} 클레임과 다르면 그 토큰은 거부된다.
+     *
+     * <p>올릴 때는 {@code UserRepository.findByIdForUpdate}로 행을 잠근다. 클래스의
+     * {@code @DynamicUpdate}는 잠금 없이 다른 칸을 고치는 트랜잭션(닉네임 변경 등)이 읽어 둔
+     * 옛 값을 함께 써서 방금 올린 버전을 되돌리지 못하게 하려는 것이다.
+     */
+    @Column(nullable = false)
+    private long authVersion;
+
     @Builder
     public User(String email, String nickname, boolean emailVerified) {
         this.email = email;
@@ -66,6 +78,11 @@ public class User extends BaseTimeEntity {
      */
     public void softDelete(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    /** 이미 발급된 Access/Refresh Token을 전부 무효화한다. 행을 잠근 트랜잭션에서만 부른다. */
+    public void revokeSessions() {
+        this.authVersion++;
     }
 
     public boolean isDeleted() {

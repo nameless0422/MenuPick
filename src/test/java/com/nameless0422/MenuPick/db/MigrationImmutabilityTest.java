@@ -102,7 +102,9 @@ class MigrationImmutabilityTest {
             Map.entry("V19__history_memo.sql",
                     "047ce11fd3118d47f2a4f435ec59f6fa5e361750d721a546349dbcec73005683"),
             Map.entry("V20__tag_version.sql",
-                    "fb82e69798439f4730fa348d787929642466e1935eb27691ef85e95686374242"));
+                    "fb82e69798439f4730fa348d787929642466e1935eb27691ef85e95686374242"),
+            Map.entry("V21__auth_versions.sql",
+                    "8543e8bfbb82d57e8b640e999a52a3301527845e2a86750447f6263c25f122fe"));
 
     @Test
     @DisplayName("이미 머지된 마이그레이션 파일은 내용이 바뀌지 않았다")

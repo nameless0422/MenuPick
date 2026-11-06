@@ -103,22 +103,30 @@ public class LocalAuthService {
         String nickname = rawNickname.trim();
 
         String encodedPassword = passwordEncoder.encode(rawPassword);
-        Long userId = inTransaction(() -> createOrReplacePendingAccount(email, encodedPassword, nickname));
+        LinkTarget pending = inTransaction(() -> createOrReplacePendingAccount(email, encodedPassword, nickname));
 
         // 발송은 전용 풀에서 비동기로 일어나고 실패해도 예외가 올라오지 않는다(AuthMailer 참고).
         // 즉 가입 응답은 SMTP 왕복을 기다리지 않는다. 메일이 끝내 안 나가면 계정은 미인증
         // 상태로 남고, 사용자는 재발송 버튼이나 같은 주소의 재가입으로 이어갈 수 있다.
-        if (userId == null) {
+        if (pending == null) {
             authMailer.sendAlreadyRegistered(email);
             return;
         }
-        sendVerification(userId, email);
+        sendVerification(pending, email);
+    }
+
+    /** 메일 링크를 묶을 대상. 링크는 이 자격증명 버전에서만 통한다. */
+    private record LinkTarget(Long userId, long credentialVersion) {
+
+        static LinkTarget of(AuthProvider provider) {
+            return new LinkTarget(provider.getUser().getId(), provider.getCredentialVersion());
+        }
     }
 
     /**
-     * @return 새로 만들었거나 덮어쓴 pending 계정의 userId. 이미 가입된 주소면 {@code null}
+     * @return 새로 만들었거나 덮어쓴 pending 계정. 이미 가입된 주소면 {@code null}
      */
-    private Long createOrReplacePendingAccount(String email, String encodedPassword, String nickname) {
+    private LinkTarget createOrReplacePendingAccount(String email, String encodedPassword, String nickname) {
         // 살아 있는 계정이 이미 이 주소를 갖고 있으면 아무것도 만들지 않는다.
         //
         // 검증된 주소는 users.email에 들어가므로(verifyEmail) 이 한 줄이 "이미 인증된 자체
@@ -132,11 +140,17 @@ public class LocalAuthService {
             return null;
         }
 
-        Optional<AuthProvider> existing =
-                authProviderRepository.findByProviderAndSocialId(AuthProvider.LOCAL, email);
+        Optional<Long> existingUserId =
+                authProviderRepository.findUserIdByProviderAndSocialId(AuthProvider.LOCAL, email);
 
-        if (existing.isPresent()) {
-            AuthProvider provider = existing.get();
+        if (existingUserId.isPresent()) {
+            // 메일 인증과 같은 행을 잠가 순서를 하나로 만든다. 인증이 먼저 커밋됐으면 아래에서
+            // 인증된 계정으로 보이고, 이쪽이 먼저면 changePassword가 올린 버전 때문에 옛 링크가 거절된다.
+            // 잠그기 전에 병합으로 행이 다른 계정에 옮겨 갔으면 더 이상 pending 계정이 아니다.
+            AuthProvider provider = lockLocalProvider(existingUserId.get()).orElse(null);
+            if (provider == null) {
+                return null;
+            }
             User user = provider.getUser();
 
             // 위 검사에 걸리지 않는데 인증까지 끝난 경우는 users.email이 비어 있는 어긋난
@@ -155,7 +169,7 @@ public class LocalAuthService {
             }
             provider.changePassword(encodedPassword);
             user.updateNickname(nickname);
-            return user.getId();
+            return LinkTarget.of(provider);
         }
 
         checkNicknameAvailable(nickname);
@@ -166,14 +180,14 @@ public class LocalAuthService {
                 .emailVerified(false)
                 .build());
 
-        authProviderRepository.save(AuthProvider.builder()
+        AuthProvider created = authProviderRepository.save(AuthProvider.builder()
                 .user(user)
                 .provider(AuthProvider.LOCAL)
                 .socialId(email)
                 .passwordHash(encodedPassword)
                 .build());
 
-        return user.getId();
+        return LinkTarget.of(created);
     }
 
     /**
@@ -220,11 +234,14 @@ public class LocalAuthService {
         }
 
         loginAttemptLimiter.reset(email);
-        return tokenIssuer.issue(result.userId());
+        return tokenIssuer.issue(result.userId(), result.authVersion());
     }
 
-    /** 인증 결과. 유예기간이 지난 탈퇴 계정은 트랜잭션 밖에서 정리해야 해서 따로 표시한다. */
-    private record Authenticated(Long userId, boolean withdrawnPastGrace) {}
+    /**
+     * 인증 결과. 유예기간이 지난 탈퇴 계정은 트랜잭션 밖에서 정리해야 해서 따로 표시한다.
+     * {@code authVersion}은 비밀번호를 대조한 스냅샷의 값이다 — {@link TokenIssuer#issue} 참고.
+     */
+    private record Authenticated(Long userId, boolean withdrawnPastGrace, long authVersion) {}
 
     private Authenticated authenticate(String email, String rawPassword) {
         AuthProvider provider = authProviderRepository
@@ -250,23 +267,23 @@ public class LocalAuthService {
 
         if (user.isDeleted()) {
             if (!user.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
-                return new Authenticated(user.getId(), true);
+                return new Authenticated(user.getId(), true, user.getAuthVersion());
             }
             // 이메일은 이미 검증된 값이므로 그대로 둔다(null을 넘기면 덮어쓰지 않는다).
             user.reactivate(null, user.getNickname());
         }
 
-        return new Authenticated(user.getId(), false);
+        return new Authenticated(user.getId(), false, user.getAuthVersion());
     }
 
     // ---- 메일 인증 ----
 
     /** 인증을 마치고 곧바로 로그인시킨다 — 여기서 다시 로그인을 요구할 이유가 없다. */
     public TokenResponse verifyEmail(String token) {
-        Long pendingUserId = authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, token)
+        AuthTokenStore.Consumed consumed = authTokenStore.consume(AuthTokenStore.Purpose.VERIFY_EMAIL, token)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
 
-        Verified result = inTransaction(() -> completeVerification(pendingUserId));
+        Verified result = inTransaction(() -> completeVerification(consumed));
 
         if (result.ownerToPurge() != null) {
             // 유예기간이 지난 탈퇴 계정이 이 주소를 붙잡고 있다. 같은 트랜잭션에서 지울 수 없다 —
@@ -276,10 +293,10 @@ public class LocalAuthService {
             // 로그인 경로가 같은 상황을 트랜잭션 밖에서 정리하는 것과 같은 방식이다.
             userHardDeleteService.purge(result.ownerToPurge());
             // 주소를 붙잡던 행이 사라졌으니 이번에는 병합 없이 이 계정이 그 주소의 주인이 된다.
-            result = inTransaction(() -> completeVerification(pendingUserId));
+            result = inTransaction(() -> completeVerification(consumed));
         }
 
-        return tokenIssuer.issue(result.userId());
+        return tokenIssuer.issue(result.userId(), result.authVersion());
     }
 
     /**
@@ -288,16 +305,22 @@ public class LocalAuthService {
      * <p>유예기간이 지난 동일 주소 탈퇴 계정은 트랜잭션 밖에서 정리해야 해서 따로 표시한다
      * (로그인 경로의 {@link Authenticated}와 같은 이유).
      */
-    private record Verified(Long userId, Long ownerToPurge) {}
+    private record Verified(Long userId, Long ownerToPurge, long authVersion) {}
 
-    private Verified completeVerification(Long pendingUserId) {
-        AuthProvider provider = authProviderRepository
-                .findByUserIdAndProvider(pendingUserId, AuthProvider.LOCAL)
+    /**
+     * <b>링크가 발급된 뒤 비밀번호가 바뀌었으면 거절한다.</b> 미인증 계정은 같은 주소의 재가입이
+     * 비밀번호를 덮어쓰므로, 이 검사가 없으면 피해자의 옛 링크가 공격자 비밀번호를 활성화한다.
+     * Redis에서 옛 토큰을 지우는 것만으로는 DB 커밋과 Redis 폐기 사이의 틈이 남기 때문에 잠금을 잡은
+     * 트랜잭션 안에서 비교한다.
+     */
+    private Verified completeVerification(AuthTokenStore.Consumed consumed) {
+        AuthProvider provider = lockLocalProvider(consumed.userId())
+                .filter(locked -> locked.getCredentialVersion() == consumed.credentialVersion())
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
 
         User pending = provider.getUser();
         if (pending.isEmailVerified()) {
-            return new Verified(pending.getId(), null);
+            return new Verified(pending.getId(), null, pending.getAuthVersion());
         }
 
         String email = provider.getSocialId();
@@ -318,7 +341,7 @@ public class LocalAuthService {
             // 유예 안이면 되살리고, 지났으면 옛 데이터를 버리고 새로 시작한다.
             if (target.isDeleted()) {
                 if (!target.isWithinGracePeriod(User.WITHDRAW_GRACE_PERIOD_DAYS, LocalDateTime.now(clock))) {
-                    return new Verified(null, target.getId());
+                    return new Verified(null, target.getId(), target.getAuthVersion());
                 }
                 // 주소는 이미 검증된 값이라 그대로 두고(null을 넘기면 덮어쓰지 않는다),
                 // 닉네임도 쓰던 것을 지킨다 — 탈퇴 중에도 그 행이 인덱스를 붙잡고 있어
@@ -351,7 +374,7 @@ public class LocalAuthService {
             // 아무것도 하지 않는다. 그래서 "남의 메뉴를 건드리지 않는다"는 원래 의도는 그대로다.
             defaultMenuProvisioner.provision(target);
 
-            return new Verified(target.getId(), null);
+            return new Verified(target.getId(), null, target.getAuthVersion());
         }
 
         pending.verifyEmail(email);
@@ -361,28 +384,27 @@ public class LocalAuthService {
         // 이미 있는 계정이라 provision의 가드가 실제로 일하는 경우가 드물다 — 근거는 그 주석.)
         defaultMenuProvisioner.provision(pending);
 
-        return new Verified(pending.getId(), null);
+        return new Verified(pending.getId(), null, pending.getAuthVersion());
     }
 
     /** 가입 여부를 응답으로 흘리지 않도록, 보낼 대상이 없어도 성공으로 끝낸다. */
     public void resendVerification(String rawEmail) {
         String email = normalize(rawEmail);
 
-        Long userId = inTransaction(() -> authProviderRepository
+        LinkTarget target = inTransaction(() -> authProviderRepository
                 .findByProviderAndSocialId(AuthProvider.LOCAL, email)
-                .map(AuthProvider::getUser)
-                .filter(user -> !user.isEmailVerified())
-                .map(User::getId)
+                .filter(provider -> !provider.getUser().isEmailVerified())
+                .map(LinkTarget::of)
                 .orElse(null));
 
-        if (userId != null) {
-            sendVerification(userId, email);
+        if (target != null) {
+            sendVerification(target, email);
         }
     }
 
-    private void sendVerification(Long userId, String email) {
-        String token = authTokenStore.issue(
-                AuthTokenStore.Purpose.VERIFY_EMAIL, userId, VERIFICATION_TTL);
+    private void sendVerification(LinkTarget target, String email) {
+        String token = authTokenStore.issue(AuthTokenStore.Purpose.VERIFY_EMAIL,
+                target.userId(), target.credentialVersion(), VERIFICATION_TTL);
         authMailer.sendVerification(email, token, VERIFICATION_TTL);
     }
 
@@ -392,36 +414,39 @@ public class LocalAuthService {
     public void requestPasswordReset(String rawEmail) {
         String email = normalize(rawEmail);
 
-        Long userId = inTransaction(() -> authProviderRepository
+        LinkTarget target = inTransaction(() -> authProviderRepository
                 .findByProviderAndSocialId(AuthProvider.LOCAL, email)
-                .map(AuthProvider::getUser)
-                .filter(User::isEmailVerified)
-                .filter(user -> !user.isDeleted())
-                .map(User::getId)
+                .filter(provider -> provider.getUser().isEmailVerified())
+                .filter(provider -> !provider.getUser().isDeleted())
+                .map(LinkTarget::of)
                 .orElse(null));
 
-        if (userId != null) {
-            String token = authTokenStore.issue(
-                    AuthTokenStore.Purpose.PASSWORD_RESET, userId, RESET_TTL);
+        if (target != null) {
+            String token = authTokenStore.issue(AuthTokenStore.Purpose.PASSWORD_RESET,
+                    target.userId(), target.credentialVersion(), RESET_TTL);
             authMailer.sendPasswordReset(email, token, RESET_TTL);
         }
     }
 
     public TokenResponse confirmPasswordReset(String token, String rawPassword) {
 
-        Long userId = authTokenStore.consume(AuthTokenStore.Purpose.PASSWORD_RESET, token)
+        AuthTokenStore.Consumed consumed = authTokenStore.consume(AuthTokenStore.Purpose.PASSWORD_RESET, token)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
+        Long userId = consumed.userId();
 
+        // 토큰을 먼저 소비한 요청이 해싱하는 사이 비밀번호가 바뀔 수 있어 잠근 뒤 버전을 비교한다.
         String encodedPassword = passwordEncoder.encode(rawPassword);
-        inTransaction(() -> {
-            localProvider(userId).changePassword(encodedPassword);
-            return null;
+        long authVersion = inTransaction(() -> {
+            AuthProvider provider = lockLocalProvider(userId)
+                    .filter(locked -> locked.getCredentialVersion() == consumed.credentialVersion())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_AUTH_TOKEN));
+            return replacePassword(provider, encodedPassword);
         });
 
         // Refresh Token은 사용자당 한 개(refresh:{userId})라, 새로 발급하면 기존 세션이
         // 밀려난다. 비밀번호를 빼앗겼다 되찾는 흐름이므로 다른 세션이 남으면 안 된다 —
         // RefreshTokenStore.save가 회전 유예 값까지 함께 버리는 이유도 이것이다.
-        return tokenIssuer.issue(userId);
+        return tokenIssuer.issue(userId, authVersion);
     }
 
     /**
@@ -433,33 +458,52 @@ public class LocalAuthService {
      * 버킷을 따로 두면 두 경로를 번갈아 써서 한도를 두 배로 늘릴 수 있으므로 login과 공유한다
      * (LOCAL 행의 socialId가 곧 이메일이다).
      *
-     * <p>Redis 접근을 트랜잭션 밖으로 빼느라 조회가 한 번 더 든다(클래스 주석의 원칙).
-     * 자주 일어나는 동작이 아니라 이 비용이 문제되지 않는다.
+     * <p>Redis 접근과 Argon2 해싱을 잠금 밖으로 빼느라 조회가 한 번 더 든다(클래스 주석의 원칙).
+     * 대조한 비밀번호가 그 사이 바뀌었으면 버전이 달라져 변경하지 않는다.
      */
     public TokenResponse changePassword(Long userId, String currentPassword, String newPassword) {
-        String email = inTransaction(() -> localProvider(userId).getSocialId());
+        Credential credential = inTransaction(() -> {
+            AuthProvider provider = localProvider(userId);
+            return new Credential(provider.getSocialId(), provider.getPasswordHash(), provider.getCredentialVersion());
+        });
+        String email = credential.email();
         loginAttemptLimiter.checkAllowed(email);
 
-        boolean matched = inTransaction(() -> {
-            AuthProvider provider = localProvider(userId);
-
-            if (!passwordEncoder.matches(currentPassword, provider.getPasswordHash())) {
-                return false;
-            }
-
-            provider.changePassword(passwordEncoder.encode(newPassword));
-            return true;
-        });
-
-        if (!matched) {
+        if (!passwordEncoder.matches(currentPassword, credential.passwordHash())) {
             loginAttemptLimiter.recordFailure(email);
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
+        String encodedPassword = passwordEncoder.encode(newPassword);
+        long authVersion = inTransaction(() -> {
+            AuthProvider provider = lockLocalProvider(userId)
+                    .filter(locked -> locked.getCredentialVersion() == credential.version())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+            return replacePassword(provider, encodedPassword);
+        });
+
         loginAttemptLimiter.reset(email);
 
+        // 옛 링크는 이미 버전이 달라져 DB에서 거절된다. 여기서 지우는 것은 Redis 정리일 뿐이라
+        // 실패해도 비밀번호 변경을 되돌리지 않는다.
+        try {
+            authTokenStore.revoke(AuthTokenStore.Purpose.PASSWORD_RESET, userId);
+        } catch (BusinessException e) {
+            log.warn("비밀번호 변경 후 재설정 토큰 정리 실패 — 해당 링크는 이미 무효입니다: userId={}", userId);
+        }
+
         // 재설정과 같은 이유로 세션을 새로 발급한다.
-        return tokenIssuer.issue(userId);
+        return tokenIssuer.issue(userId, authVersion);
+    }
+
+    private record Credential(String email, String passwordHash, long version) {}
+
+    /** 비밀번호를 바꾸고 이전 세션을 끊는다. @return 새 세션에 쓸 authVersion */
+    private long replacePassword(AuthProvider provider, String encodedPassword) {
+        provider.changePassword(encodedPassword);
+        User user = provider.getUser();
+        user.revokeSessions();
+        return user.getAuthVersion();
     }
 
     // ---- 계정 정보 ----
@@ -488,6 +532,17 @@ public class LocalAuthService {
     }
 
     // ---- 공통 ----
+
+    /**
+     * 자격증명 판정·변경 전에 사용자 행과 LOCAL 행을 잠근다.
+     *
+     * <p>트랜잭션의 엔티티 첫 조회여야 한다. 이미 올라온 엔티티는 잠금 조회로도 갱신되지 않는다.
+     */
+    private Optional<AuthProvider> lockLocalProvider(Long userId) {
+        return userRepository.findByIdForUpdate(userId).flatMap(user -> authProviderRepository
+                .findByUserIdAndProviderForUpdate(userId, AuthProvider.LOCAL)
+                .filter(provider -> provider.getPasswordHash() != null));
+    }
 
     private AuthProvider localProvider(Long userId) {
         AuthProvider provider = authProviderRepository

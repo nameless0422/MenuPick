@@ -47,8 +47,13 @@ public class TokenIssuer {
      *
      * <p>즉 이 검사에 걸리는 것은 "복구 판단을 거치지 않고 여기까지 온" 호출뿐이다.
      * 복구를 마친 호출자는 자기 트랜잭션을 커밋한 뒤 부르므로 여기서 살아 있는 것으로 보인다.
+     *
+     * <p><b>{@code authVersion}은 호출자가 자격을 확인한 트랜잭션에서 읽어 온 값이다.</b>
+     * 여기서 새로 읽으면, 옛 비밀번호 확인과 발급 사이에 비밀번호가 바뀌었을 때 옛 비밀번호로
+     * 들어온 쪽이 새 버전의 토큰을 받는다. 달라졌으면 발급하지 않는다 — 저장소의 현재 체인을
+     * 옛 버전 토큰으로 덮어 정상 세션을 끊는 일도 함께 막는다.
      */
-    public TokenResponse issue(Long userId) {
+    public TokenResponse issue(Long userId, long authVersion) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
 
@@ -57,8 +62,13 @@ public class TokenIssuer {
                     ErrorCode.UNAUTHORIZED, "탈퇴한 계정입니다. 다시 로그인해주세요.");
         }
 
-        String accessToken = jwtTokenProvider.createAccessToken(userId);
-        String refreshToken = jwtTokenProvider.createRefreshToken(userId);
+        if (user.getAuthVersion() != authVersion) {
+            throw new BusinessException(
+                    ErrorCode.UNAUTHORIZED, "인증 정보가 변경되었습니다. 다시 로그인해주세요.");
+        }
+
+        String accessToken = jwtTokenProvider.createAccessToken(userId, authVersion);
+        String refreshToken = jwtTokenProvider.createRefreshToken(userId, authVersion);
 
         refreshTokenStore.save(userId, refreshToken, jwtProperties.refreshTokenExpiry());
 

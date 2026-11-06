@@ -4,6 +4,8 @@ import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
 import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.nameless0422.MenuPick.domain.user.User;
+import com.nameless0422.MenuPick.domain.user.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
@@ -30,6 +32,7 @@ class PickTrendEndpointIntegrationTest extends AbstractIntegrationTest {
     @LocalServerPort private int servicePort;
     @LocalManagementPort private int managementPort;
     @Autowired private JwtTokenProvider jwtTokenProvider;
+    @Autowired private UserRepository userRepository;
 
     private final HttpClient client = HttpClient.newHttpClient();
 
@@ -41,9 +44,14 @@ class PickTrendEndpointIntegrationTest extends AbstractIntegrationTest {
     }
 
     private HttpResponse<String> authenticatedPost(int port, String path) throws Exception {
+        // 인증 필터가 계정의 존재와 버전을 확인하므로 실제 행이 있어야 한다.
+        Long userId = userRepository.save(User.builder()
+                .nickname("trend" + System.nanoTime())
+                .emailVerified(false)
+                .build()).getId();
         return client.send(HttpRequest.newBuilder()
                         .uri(URI.create("http://localhost:" + port + path))
-                        .header("Authorization", "Bearer " + jwtTokenProvider.createAccessToken(1L))
+                        .header("Authorization", "Bearer " + jwtTokenProvider.createAccessToken(userId, 0L))
                         .POST(HttpRequest.BodyPublishers.noBody())
                         .build(), HttpResponse.BodyHandlers.ofString());
     }

@@ -14,6 +14,7 @@ import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * JWT 발급·검증 담당.
@@ -36,6 +37,7 @@ public class JwtTokenProvider {
     private static final String CLAIM_TOKEN_TYPE = "token_type";
     private static final String TOKEN_TYPE_ACCESS = "access";
     private static final String TOKEN_TYPE_REFRESH = "refresh";
+    private static final String CLAIM_AUTH_VERSION = "ver";
 
     private final JwtProperties jwtProperties;
     private SecretKey key;
@@ -51,12 +53,12 @@ public class JwtTokenProvider {
                 .build();
     }
 
-    public String createAccessToken(Long userId) {
-        return createToken(userId, jwtProperties.accessTokenExpiry(), TOKEN_TYPE_ACCESS);
+    public String createAccessToken(Long userId, long authVersion) {
+        return createToken(userId, authVersion, jwtProperties.accessTokenExpiry(), TOKEN_TYPE_ACCESS);
     }
 
-    public String createRefreshToken(Long userId) {
-        return createToken(userId, jwtProperties.refreshTokenExpiry(), TOKEN_TYPE_REFRESH);
+    public String createRefreshToken(Long userId, long authVersion) {
+        return createToken(userId, authVersion, jwtProperties.refreshTokenExpiry(), TOKEN_TYPE_REFRESH);
     }
 
     /** Access Token으로서 유효하면 Claims, 아니면 빈 Optional. */
@@ -82,11 +84,30 @@ public class JwtTokenProvider {
         }
     }
 
-    private String createToken(Long userId, long expiryMs, String tokenType) {
+    /**
+     * 토큰이 발급될 때의 {@code users.auth_version}.
+     *
+     * <p>클레임이 없는 토큰은 이 클레임 도입 전에 발급된 것이라 0으로 본다. 컬럼 기본값도 0이라
+     * 배포만으로 세션이 끊기지 않고, 버전이 한 번이라도 오른 계정에서는 거부된다.
+     * 숫자가 아닌 값은 어떤 버전과도 맞지 않도록 -1을 돌려준다.
+     */
+    public long getAuthVersion(Claims claims) {
+        Object version = claims.get(CLAIM_AUTH_VERSION);
+        if (version == null) {
+            return 0L;
+        }
+        return version instanceof Number number ? number.longValue() : -1L;
+    }
+
+    private String createToken(Long userId, long authVersion, long expiryMs, String tokenType) {
         Date now = new Date();
         return Jwts.builder()
+                // JWT 시각은 초 단위라, 고유 ID가 없으면 같은 초의 재발급이 이전 토큰과 똑같아져
+                // "새 발급이 이전 토큰을 교체한다"는 회전의 전제가 깨진다.
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_TOKEN_TYPE, tokenType)
+                .claim(CLAIM_AUTH_VERSION, authVersion)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expiryMs))
                 .signWith(key)
