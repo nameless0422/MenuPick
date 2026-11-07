@@ -19,12 +19,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -120,10 +118,8 @@ public class LocalAuthService {
      * 메일 링크를 묶을 대상. 링크는 이 자격증명 버전에서만 통한다.
      *
      * <p>{@code email}은 <b>저장된</b> {@code social_id}다 — 사용자가 입력한 문자열이 아니다.
-     * 메일은 항상 이 값으로 보낸다. 콜레이션(utf8mb4_0900_ai_ci)이 accent/호환 동치를 접어
-     * {@code victim@exámple.com} 같은 변형이 조회에서 victim 행과 매칭될 수 있는데, 입력 주소로
-     * 보내면 그 토큰이 공격자가 통제하는 주소로 나간다(CVE-2019-19844 류). 등록된 주소로만 보내
-     * 조회 매칭과 수신자를 분리한다.
+     * 메일 링크는 항상 이 값으로 보내 조회 매칭과 수신자를 분리한다(CVE-2019-19844 류, D-071).
+     * 주소 비교는 V22부터 바이트 단위다(D-074).
      */
     private record LinkTarget(Long userId, long credentialVersion, String email) {
 
@@ -570,18 +566,10 @@ public class LocalAuthService {
     }
 
     /**
-     * 이메일을 정규화해 저장·조회한다. 공백 제거 → NFKC → 소문자 순.
-     *
-     * <p>스키마 콜레이션(utf8mb4_0900_ai_ci)이 대소문자뿐 아니라 accent·호환 문자까지 접어
-     * {@code á=a}, {@code ß=ss}, 전각 {@code ａ=a}를 같은 값으로 본다. 애플리케이션은
-     * {@code toLowerCase}만 했으므로 변형 주소가 "다른 문자열"로 통과하면서 DB에서는 기존 행과
-     * 매칭되는 틈이 있었다(CVE-2019-19844 류). NFKC로 호환 문자를 먼저 접으면 전각 같은 변형은
-     * 실제 주소로 수렴하고, 남는 accent 변형은 저장된 {@code social_id}와 바이트가 달라
-     * 재설정·재발송의 바이트 동일성 가드에 걸린다. 메일은 어느 경로든 입력값이 아니라 등록된
-     * 주소로만 나간다(LinkTarget 참고). ASCII 주소에는 NFKC가 영향을 주지 않는다.
+     * 이메일을 정규화해 저장·조회한다. 근거는 {@link EmailAddresses}.
      */
     private String normalize(String email) {
-        return Normalizer.normalize(email.trim(), Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+        return EmailAddresses.canonicalize(email);
     }
 
     private <T> T inTransaction(Supplier<T> work) {
