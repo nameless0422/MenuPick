@@ -1,0 +1,40 @@
+name: CodeQL
+
+# 의존성·이미지 검사(security.yml)와 달리 우리 코드를 분석한다. 근거는 docs/DecisionLog.md D-075.
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main]
+  schedule:
+    # 매주 월요일 09:30 KST. 새 쿼리는 코드 변경 없이도 결과를 낼 수 있다.
+    - cron: '30 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    # 결과 업로드에만 쓰기 권한이 필요하다. 포크 PR의 토큰은 GitHub가 읽기 전용으로 낮춘다.
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [java-kotlin, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}
