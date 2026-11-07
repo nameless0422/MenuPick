@@ -128,7 +128,7 @@ class EmojiCollationMigrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("문자열 컬럼이 하나도 빠짐없이 변환된다")
+    @DisplayName("로그인 식별자 두 컬럼(V22)을 뺀 문자열 컬럼이 하나도 빠짐없이 변환된다")
     void everyStringColumnConverted() {
         @SuppressWarnings("unchecked")
         List<Object[]> stragglers = em.createNativeQuery(
@@ -136,7 +136,9 @@ class EmojiCollationMigrationTest extends AbstractIntegrationTest {
                                 + "WHERE TABLE_SCHEMA = DATABASE() "
                                 + "AND TABLE_NAME <> 'flyway_schema_history' "
                                 + "AND COLLATION_NAME IS NOT NULL "
-                                + "AND COLLATION_NAME <> 'utf8mb4_0900_ai_ci'")
+                                + "AND COLLATION_NAME <> 'utf8mb4_0900_ai_ci' "
+                                + "AND NOT (TABLE_NAME = 'users' AND COLUMN_NAME = 'email') "
+                                + "AND NOT (TABLE_NAME = 'auth_providers' AND COLUMN_NAME = 'social_id')")
                 .getResultList();
 
         assertThat(stragglers).isEmpty();

@@ -467,7 +467,9 @@ public class AuthService {
         if (!profile.emailVerified() || profile.email() == null || profile.email().isBlank()) {
             return null;
         }
-        return profile.email();
+        // 제공자는 대소문자를 섞어 줄 수 있다. users.email은 바이트로 비교하므로(V22) 자체 계정과
+        // 같은 형식으로 맞춰야 같은 주소의 계정을 찾는다.
+        return EmailAddresses.canonicalize(profile.email());
     }
 
     private Optional<User> findUserByEmail(String email) {
