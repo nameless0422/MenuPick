@@ -58,32 +58,45 @@ class RestaurantCreationIntegrationTest extends AbstractIntegrationTest {
                 "https://place.map.kakao.com/123", placeId);
     }
 
+    /** 생성은 사용자 행 잠금으로 직렬화된다(D-077). 뒤 요청은 앞 요청이 저장한 행을 돌려받는다. */
     @Test void overlappingCreatesBothSucceedAndStoreOnlyOneRestaurant() throws Exception {
         User user = user();
-        CyclicBarrier bothReadEmpty = new CyclicBarrier(2);
-        AtomicInteger reads = new AtomicInteger();
-        doAnswer(invocation -> {
-            var result = em.createQuery("select r from Restaurant r where r.user.id = :userId and r.kakaoPlaceId = :placeId", Restaurant.class)
-                    .setParameter("userId", user.getId()).setParameter("placeId", "race-place")
-                    .getResultStream().findFirst();
-            if (reads.incrementAndGet() <= 2) bothReadEmpty.await(10, TimeUnit.SECONDS);
-            return result;
-        }).when(restaurants).findByUserIdAndKakaoPlaceId(eq(user.getId()), eq("race-place"));
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
             Future<RestaurantService.CreateResult> first = executor.submit(() -> service.createRestaurant(user.getId(), request("첫 요청", "race-place")));
             Future<RestaurantService.CreateResult> second = executor.submit(() -> service.createRestaurant(user.getId(), request("둘째 요청", "race-place")));
-            var a = first.get(30, TimeUnit.SECONDS);
-            var b = second.get(30, TimeUnit.SECONDS);
-            assertThat(a.restaurant().id()).isEqualTo(b.restaurant().id());
-            assertThat(a.restaurant().name()).isEqualTo(b.restaurant().name());
-            assertThat(java.util.List.of(a.created(), b.created())).containsExactlyInAnyOrder(true, false);
-            assertThat(restaurants.findAllByUserIdAndDeletedAtIsNull(user.getId())).hasSize(1);
+            assertSameRestaurantStoredOnce(user, first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
         } finally {
             executor.shutdownNow();
             assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
         }
     }
+
+    /** 잠금으로 겹치지 않아도 유니크 제약 위반의 재시도 경로는 남아 있다. 오래된 조회를 흉내 내 검증한다. */
+    @Test void duplicatePlaceFailureIsRetriedOnceAndReturnsSavedRestaurant() {
+        User user = user();
+        var saved = service.createRestaurant(user.getId(), request("첫 요청", "race-place"));
+        AtomicInteger reads = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (reads.incrementAndGet() == 1) return java.util.Optional.empty();
+            return em.createQuery("select r from Restaurant r where r.user.id = :userId and r.kakaoPlaceId = :placeId", Restaurant.class)
+                    .setParameter("userId", user.getId()).setParameter("placeId", "race-place")
+                    .getResultStream().findFirst();
+        }).when(restaurants).findByUserIdAndKakaoPlaceId(eq(user.getId()), eq("race-place"));
+
+        var retried = service.createRestaurant(user.getId(), request("둘째 요청", "race-place"));
+
+        assertThat(reads).hasValue(2);
+        assertSameRestaurantStoredOnce(user, saved, retried);
+    }
+
+    private void assertSameRestaurantStoredOnce(User user, RestaurantService.CreateResult a, RestaurantService.CreateResult b) {
+        assertThat(a.restaurant().id()).isEqualTo(b.restaurant().id());
+        assertThat(a.restaurant().name()).isEqualTo(b.restaurant().name());
+        assertThat(java.util.List.of(a.created(), b.created())).containsExactlyInAnyOrder(true, false);
+        assertThat(restaurants.findAllByUserIdAndDeletedAtIsNull(user.getId())).hasSize(1);
+    }
+
     @Test void reSavingDeletedPlaceReturnsCommittedVersionForImmediateEdit() {
         User user = user();
         var first = service.createRestaurant(user.getId(), request("처음 이름", "restore-place"));

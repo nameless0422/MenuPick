@@ -38,7 +38,7 @@ public class TagService {
      * 제 일을 못 한다. 그렇다고 무제한으로 두면 태그가 많은 계정에서 설정 화면 한 번이
      * 전 행을 직렬화하므로, 사람이 실제로 만들 수 있는 규모를 넉넉히 덮는 선에서 자른다.
      */
-    private static final int MAX_MANAGED_TAGS = 200;
+    private static final int MAX_MANAGED_TAGS = Tag.MAX_PER_USER;
 
     /**
      * 내 태그 전체. 태그 관리 화면(설정)에서 쓴다.
@@ -83,9 +83,15 @@ public class TagService {
 
     @Transactional
     public TagResponse.TagInfo createTag(Long userId, TagRequest.Create request) {
+        // 트랜잭션의 첫 조회로 잠근다. 먼저 읽으면 스냅샷이 고정돼 잠근 뒤에도 옛 개수를 본다.
+        userRepository.findByIdForUpdate(userId);
         // 일반 경로에서 명확한 에러를 주기 위한 사전 검사. 동시 요청 레이스는 아래 catch가 받는다.
         tagRepository.findByUserIdAndName(userId, request.name())
                 .ifPresent(t -> { throw new BusinessException(ErrorCode.TAG_DUPLICATE); });
+
+        if (tagRepository.countByUserId(userId) >= Tag.MAX_PER_USER) {
+            throw new BusinessException(ErrorCode.TAG_LIMIT_EXCEEDED);
+        }
 
         Tag tag;
         try {

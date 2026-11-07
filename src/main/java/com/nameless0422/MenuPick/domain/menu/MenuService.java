@@ -124,6 +124,9 @@ public class MenuService {
 
     @Transactional
     public MenuResponse.MenuDetail createMenu(Long userId, MenuRequest.Create request) {
+        // 트랜잭션의 첫 조회로 잠근다. 먼저 읽으면 스냅샷이 고정돼 잠근 뒤에도 옛 개수를 본다.
+        userRepository.findByIdForUpdate(userId);
+        requireCapacity(userId, 1);
         Menu menu = Menu.builder()
                 .user(userRepository.getReferenceById(userId))
                 .name(request.name())
@@ -145,6 +148,8 @@ public class MenuService {
 
     @Transactional
     public MenuResponse.BulkCreateResult bulkCreate(Long userId, MenuRequest.BulkCreate request) {
+        // createMenu와 같은 이유로 중복 조회보다 먼저 잠근다.
+        userRepository.findByIdForUpdate(userId);
         MenuResponse.BulkPreview preview = planBulkCreate(userId, request);
         if (preview.hasInvalid()) {
             String lines = preview.entries().stream()
@@ -158,8 +163,16 @@ public class MenuService {
                 .filter(entry -> entry.status().equals("ADD"))
                 .map(entry -> Menu.builder().user(user).name(entry.name()).build())
                 .toList();
+        requireCapacity(userId, menus.size());
         menuRepository.saveAll(menus);
         return new MenuResponse.BulkCreateResult(menus.size());
+    }
+
+    /** 호출자가 사용자 행을 잠근 뒤 부른다. 근거는 D-040. */
+    private void requireCapacity(Long userId, int adding) {
+        if (menuRepository.countByUserId(userId) + adding > Menu.MAX_PER_USER) {
+            throw new BusinessException(ErrorCode.MENU_LIMIT_EXCEEDED);
+        }
     }
 
     private MenuResponse.BulkPreview planBulkCreate(Long userId, MenuRequest.BulkCreate request) {

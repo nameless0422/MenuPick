@@ -83,6 +83,9 @@ public enum ErrorCode {
     // --- Tag ---
     TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "태그를 찾을 수 없습니다."),
     TAG_DUPLICATE(HttpStatus.CONFLICT, "이미 존재하는 태그입니다."),
+    MENU_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "메뉴는 삭제한 항목을 포함해 최대 1,000개까지 저장할 수 있습니다."),
+    RESTAURANT_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "식당은 삭제한 항목을 포함해 최대 1,000개까지 저장할 수 있습니다."),
+    TAG_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "태그는 최대 200개까지 만들 수 있습니다."),
 
     // --- MenuRestaurant ---
     MENU_RESTAURANT_NOT_FOUND(HttpStatus.NOT_FOUND, "메뉴-식당 연결을 찾을 수 없습니다."),

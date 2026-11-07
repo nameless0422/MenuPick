@@ -60,6 +60,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final String DEMO_KEY_PREFIX = "rl:demo:";
     private static final String ALTERNATIVES_KEY_PREFIX = "rl:pick-alternatives:";
     private static final String ROOM_KEY_PREFIX = "rl:pick-room:";
+    private static final String PICK_KEY_PREFIX = "rl:pick:";
 
     /**
      * 제한 대상 판정은 <b>반드시</b> {@link PathPatternRequestMatcher}로 한다.
@@ -143,6 +144,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
             PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/v1/pick/rooms/*"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.PUT, "/api/v1/pick/rooms/*/vetoes"),
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/rooms/*/decide")
+    );
+
+    /** 호출마다 히스토리 행을 남기는 픽. 이 필터는 JWT 필터보다 먼저 돌아 IP로 센다(D-077). */
+    private static final List<RequestMatcher> PICK_RATE_LIMITED_MATCHERS = List.of(
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick"),
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/presets/*/pick")
     );
 
     private static final List<RequestMatcher> PROXY_RATE_LIMITED_MATCHERS = List.of(
@@ -238,6 +245,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (matchesAny(ROOM_RATE_LIMITED_MATCHERS, request)) {
             return new Bucket(ROOM_KEY_PREFIX + resolveClientIp(request),
                     rateLimitProperties.roomLimitPerMinute(), false);
+        }
+
+        if (matchesAny(PICK_RATE_LIMITED_MATCHERS, request)) {
+            return new Bucket(PICK_KEY_PREFIX + resolveClientIp(request),
+                    rateLimitProperties.pickLimitPerMinute(), false);
         }
 
         if (matchesAny(PROXY_RATE_LIMITED_MATCHERS, request)) {
