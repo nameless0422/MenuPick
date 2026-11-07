@@ -150,6 +150,6 @@ export async function logout() {
   await http.delete<ApiResponse<null>>("/api/v1/auth/logout");
 }
 
-export async function withdraw() {
-  await http.delete<ApiResponse<null>>("/api/v1/auth/withdraw");
+export async function withdraw(password?: string) {
+  await http.post<ApiResponse<null>>("/api/v1/auth/withdraw", password ? { password } : undefined);
 }

@@ -105,8 +105,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             // 외부 API를 두 번 때리므로 제한 없이 두면 제공자 쿼터가 그대로 소모된다.
             // 사용자 ID가 아니라 IP 버킷이 되는데(이 필터가 JWT 필터보다 먼저 돈다 — 클래스 주석),
             // 연동은 계정당 몇 번 하고 마는 동작이라 IP 기준으로도 정상 사용자가 걸리지 않는다.
-            // 해제(DELETE)는 외부 호출 없이 DB 행 하나를 지울 뿐이고 인증도 필요해,
-            // 같은 성격의 /withdraw와 마찬가지로 넣지 않는다.
+            // 해제(DELETE)는 외부 호출 없이 DB 행 하나를 지울 뿐이고 인증도 필요해 넣지 않는다.
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/auth/*/link"),
             // 로그아웃. AT가 만료된 뒤에도 동작해야 해서 permitAll이 됐고(SecurityConfig),
             // 그러면서 "인증이 필요하니 굳이 셀 것 없다"는 위 근거가 이 경로에서만 무너졌다.
@@ -123,7 +122,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             //      SecurityConfig가 Argon2 파라미터를 고를 때 근거로 삼은 전제("로그인 경로는
             //      IP당 10회/분")가 이 경로에서만 무너져 있었다.
             // PATCH라 authMatcher(POST 고정)로는 잡히지 않는다.
-            PathPatternRequestMatcher.pathPattern(HttpMethod.PATCH, "/api/v1/auth/password")
+            PathPatternRequestMatcher.pathPattern(HttpMethod.PATCH, "/api/v1/auth/password"),
+            // 탈퇴도 비밀번호를 대조하므로 비밀번호 변경과 같은 이유로 센다(D-078).
+            authMatcher("/api/v1/auth/withdraw")
     );
 
     private static final RequestMatcher DEMO_PICK_MATCHER =

@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -142,14 +143,34 @@ class AuthControllerTest extends AbstractControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/auth/withdraw - 인증된 사용자 탈퇴 성공")
+    @DisplayName("POST /api/v1/auth/withdraw - 본문의 비밀번호를 서비스로 넘긴다")
     void withdraw_success() throws Exception {
-        mockMvc.perform(delete("/api/v1/auth/withdraw")
-                        .with(authentication(AUTH)))
+        mockMvc.perform(post("/api/v1/auth/withdraw")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"current-password\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
-        verify(authService).withdraw(1L);
+        verify(localAuthService).withdraw(1L, "current-password");
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/withdraw - 소셜 계정은 본문 없이 보낼 수 있다")
+    void withdraw_withoutBody() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/withdraw").with(authentication(AUTH)))
+                .andExpect(status().isOk());
+
+        verify(localAuthService).withdraw(1L, null);
+    }
+
+    @Test
+    @DisplayName("옛 DELETE 탈퇴 경로가 남아 있으면 재인증을 건너뛰므로 처리하지 않는다")
+    void withdraw_deleteIsGone() throws Exception {
+        mockMvc.perform(delete("/api/v1/auth/withdraw").with(authentication(AUTH)))
+                .andExpect(status().isMethodNotAllowed());
+
+        verifyNoInteractions(authService, localAuthService);
     }
 
     // ---- 자체 계정 ----

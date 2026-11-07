@@ -28,6 +28,7 @@ export default function SettingsPage() {
   // 확인 패널을 연 뒤 유예 정책 동의 체크까지 마쳐야 실제 요청이 나간다.
   const [confirming, setConfirming] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [withdrawPassword, setWithdrawPassword] = useState("");
 
   // 확인 패널은 "회원 탈퇴" 버튼을 통째로 대체한다 — 방금 누른 버튼이 사라져 초점이
   // <body>로 떨어지고, 되돌릴 수 없는 동작의 확인 패널이 열린 사실 자체가 전달되지 않는다.
@@ -56,7 +57,12 @@ export default function SettingsPage() {
 
   // 성공하면 isAuthenticated가 false가 되고 ProtectedRoute가 /login으로 보낸다
   // (로그아웃과 같은 경로) — 여기서 따로 navigate 하지 않는다.
-  const withdrawMutation = useMutation({ mutationFn: withdraw });
+  const withdrawMutation = useMutation({ mutationFn: (password?: string) => withdraw(password) });
+  // 계정 정보를 아직 모르면 입력칸을 보여 준다. 숨기면 비밀번호 계정이 빈 값으로 요청을 보낸다.
+  // 소셜 계정의 비밀번호는 서버가 보지 않으므로 잘못 입력해도 해가 없다.
+  const needsPassword = meQuery.data?.hasPassword !== false;
+  const missingPassword = needsPassword && withdrawPassword.length === 0;
+  const withdrawBlocked = !agreed || missingPassword;
 
   // 로그아웃과 탈퇴는 둘 다 지금 세션을 끝내는 요청이라, 하나가 나가 있는 동안 다른 하나를
   // 겹쳐 보낼 이유가 없다. (소셜 연동처럼 서로 무관한 동작끼리 묶는 것과는 다르다.)
@@ -154,9 +160,22 @@ export default function SettingsPage() {
               />
               위 안내를 확인했고, 탈퇴에 동의합니다.
             </label>
+            {needsPassword && (
+              <label className="settings-withdraw-password">
+                탈퇴 확인용 비밀번호
+                <input
+                  type="password"
+                  maxLength={PASSWORD_MAX_LENGTH}
+                  value={withdrawPassword}
+                  onChange={(e) => setWithdrawPassword(e.target.value)}
+                  disabled={withdrawMutation.isPending}
+                  autoComplete="current-password"
+                />
+              </label>
+            )}
             <div className="card-actions">
               {/* 여기서도 disabled를 쓰지 않지만, 쓰지 않는 이유가 두 조건에서 서로 다르다.
-                  - !agreed: disabled면 버튼이 Tab 순회에서 통째로 빠져, 키보드·스크린리더
+                  - withdrawBlocked: disabled면 버튼이 Tab 순회에서 통째로 빠져, 키보드·스크린리더
                     사용자는 확인 패널에 탈퇴 버튼이 있다는 사실 자체를 체크박스를 켜기
                     전까지 알 수 없다. 되돌릴 수 없는 동작인데 "무엇을 해야 진행되는지"가
                     버튼에 닿지 않는 것이다. aria-disabled로 두면 초점은 받되 "사용 불가"와
@@ -166,13 +185,13 @@ export default function SettingsPage() {
               <button
                 className="settings-withdraw"
                 aria-busy={withdrawMutation.isPending}
-                aria-disabled={!agreed || busy || undefined}
-                // 사유 <p>는 !agreed일 때만 그려진다 — 없는 id를 가리키면 참조가 끊겨
+                aria-disabled={withdrawBlocked || busy || undefined}
+                // 사유 <p>는 막혀 있을 때만 그려진다 — 없는 id를 가리키면 참조가 끊겨
                 // 스크린리더가 아무것도 읽지 못한다.
-                aria-describedby={!agreed ? agreeNoteId : undefined}
+                aria-describedby={withdrawBlocked ? agreeNoteId : undefined}
                 onClick={() => {
-                  if (!agreed || busy) return;
-                  withdrawMutation.mutate();
+                  if (withdrawBlocked || busy) return;
+                  withdrawMutation.mutate(needsPassword ? withdrawPassword : undefined);
                 }}
               >
                 {withdrawMutation.isPending ? "탈퇴 처리 중…" : "탈퇴하기"}
@@ -184,6 +203,8 @@ export default function SettingsPage() {
                   focusOpenerAfterCancel.current = true;
                   setConfirming(false);
                   setAgreed(false);
+                  setWithdrawPassword("");
+                  withdrawMutation.reset();
                 }}
               >
                 취소
@@ -193,9 +214,11 @@ export default function SettingsPage() {
             {/* 동의 체크박스의 라벨을 그대로 가리키지 않는다 — "위 안내를 확인했고, 탈퇴에
                 동의합니다"는 이미 동의한 듯 들리는 서술문이라, 버튼 뒤에 이어 읽히면
                 "그래서 무엇을 하라는 것인가"가 남지 않는다. 무엇을 켜야 하는지 지시로 적는다. */}
-            {!agreed && (
+            {withdrawBlocked && (
               <p className="settings-desc" id={agreeNoteId}>
-                탈퇴에 동의하는 위 체크박스를 먼저 켜야 진행할 수 있어요.
+                {!agreed
+                  ? "탈퇴에 동의하는 위 체크박스를 먼저 켜야 진행할 수 있어요."
+                  : "탈퇴 확인용 비밀번호를 입력해야 진행할 수 있어요."}
               </p>
             )}
           </div>

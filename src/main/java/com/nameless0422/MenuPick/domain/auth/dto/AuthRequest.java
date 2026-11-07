@@ -72,6 +72,12 @@ public class AuthRequest {
             String newPassword
     ) {}
 
+    /** 비밀번호가 없는 소셜 계정은 password 없이 보낸다. 필수 여부는 서비스가 계정을 보고 정한다. */
+    public record WithdrawRequest(
+            @Size(max = PASSWORD_MAX_LENGTH)
+            String password
+    ) {}
+
     public record PasswordChangeRequest(
             @NotBlank(message = "현재 비밀번호는 필수입니다.")
             @Size(max = PASSWORD_MAX_LENGTH)

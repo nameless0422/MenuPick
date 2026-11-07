@@ -107,6 +107,16 @@ describe("401 재시도 가드", () => {
     ]);
   });
 
+  it("탈퇴 비밀번호 오류(403)는 재전송하지 않아 실패가 한 번만 집계된다", async () => {
+    installAdapter(async (config) => {
+      throw fail(config, 403, { success: false, errorCode: "WITHDRAW_PASSWORD_MISMATCH" });
+    });
+
+    await expect(http.post("/api/v1/auth/withdraw", { password: "x" })).rejects.toBeInstanceOf(AxiosError);
+
+    expect(calls).toEqual(["POST /api/v1/auth/withdraw"]);
+  });
+
   it("비밀번호 변경(PATCH /auth/password)은 인증 경로라 refresh 대상이다", async () => {
     // 이름이 password-reset과 닮았을 뿐 로그인 상태에서만 부르는 경로다.
     installAdapter(async (config) => {

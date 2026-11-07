@@ -5,7 +5,9 @@ import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.common.security.JwtProperties;
 import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthResponse.TokenResponse;
+import com.nameless0422.MenuPick.domain.user.AuthProvider;
 import com.nameless0422.MenuPick.domain.user.AuthProviderRepository;
+import com.nameless0422.MenuPick.domain.user.User;
 import com.nameless0422.MenuPick.domain.user.UserRepository;
 import com.nameless0422.MenuPick.support.AbstractIntegrationTest;
 import io.jsonwebtoken.Jwts;
@@ -17,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -48,6 +51,8 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -300,6 +305,95 @@ class AuthRevocationIntegrationTest extends AbstractIntegrationTest {
         assertRejected(tokens.accessToken());
         assertFails(ErrorCode.UNAUTHORIZED, () -> authService.refresh(tokens.refreshToken()));
         assertAccepted(localAuthService.login(email, ORIGINAL).accessToken());
+    }
+
+    // ---- 탈퇴 재인증(D-078) ----
+
+    @Test
+    @DisplayName("비밀번호가 틀리거나 없으면 탈퇴하지 않고 세션도 유지한다")
+    void withdrawRejectsWrongOrMissingPassword() throws Exception {
+        TokenResponse tokens = verifiedAccount();
+        Long userId = userId();
+
+        assertFails(ErrorCode.WITHDRAW_PASSWORD_MISMATCH, () -> localAuthService.withdraw(userId, "wrong-password"));
+        assertFails(ErrorCode.WITHDRAW_PASSWORD_MISMATCH, () -> localAuthService.withdraw(userId, null));
+
+        assertThat(userRepository.findById(userId).orElseThrow().isDeleted()).isFalse();
+        assertAccepted(tokens.accessToken());
+    }
+
+    @Test
+    @DisplayName("비밀번호가 맞으면 탈퇴하고 토큰을 거부한다")
+    void withdrawWithCorrectPassword() throws Exception {
+        TokenResponse tokens = verifiedAccount();
+        Long userId = userId();
+
+        localAuthService.withdraw(userId, ORIGINAL);
+
+        assertThat(userRepository.findById(userId).orElseThrow().isDeleted()).isTrue();
+        assertRejected(tokens.accessToken());
+    }
+
+    @Test
+    @DisplayName("탈퇴 비밀번호 대입은 로그인 실패 한도에 걸리고 그 뒤로는 맞는 비밀번호도 거절한다")
+    void withdrawSharesLoginAttemptLimit() {
+        verifiedAccount();
+        Long userId = userId();
+        for (int i = 0; i < 10; i++) {
+            assertFails(ErrorCode.WITHDRAW_PASSWORD_MISMATCH, () -> localAuthService.withdraw(userId, "wrong-password"));
+        }
+
+        assertFails(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS, () -> localAuthService.withdraw(userId, ORIGINAL));
+
+        assertThat(userRepository.findById(userId).orElseThrow().isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("대조한 뒤 비밀번호가 바뀌면 옛 비밀번호로 탈퇴하지 못한다")
+    void withdrawUsesVerifiedCredential() {
+        verifiedAccount();
+        Long userId = userId();
+        AtomicBoolean interleaved = new AtomicBoolean();
+        doAnswer(invocation -> {
+            if (interleaved.compareAndSet(false, true)) {
+                localAuthService.changePassword(userId, ORIGINAL, REPLACEMENT);
+            }
+            return invocation.callRealMethod();
+        }).when(passwordEncoder).matches(any(), any());
+
+        assertFails(ErrorCode.WITHDRAW_PASSWORD_MISMATCH, () -> localAuthService.withdraw(userId, ORIGINAL));
+
+        assertThat(interleaved).isTrue();
+        assertThat(userRepository.findById(userId).orElseThrow().isDeleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("비밀번호가 없는 소셜 계정은 세션만으로 탈퇴한다")
+    void socialAccountWithdrawsWithoutPassword() {
+        User user = userRepository.save(User.builder().email(email).emailVerified(true).nickname(nickname).build());
+        authProviderRepository.save(AuthProvider.builder().user(user).provider("KAKAO").socialId("kakao-" + nickname).build());
+
+        localAuthService.withdraw(user.getId(), null);
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().isDeleted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("HTTP로 틀린 비밀번호를 보내면 재발급을 부르지 않도록 401이 아니라 403을 준다")
+    void withdrawHttpMismatchIsForbidden() throws Exception {
+        TokenResponse tokens = verifiedAccount();
+
+        mockMvc.perform(post("/api/v1/auth/withdraw")
+                        .header("Authorization", "Bearer " + tokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"wrong-password\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("WITHDRAW_PASSWORD_MISMATCH"));
+
+        mockMvc.perform(post("/api/v1/auth/withdraw").header("Authorization", "Bearer " + tokens.accessToken()))
+                .andExpect(status().isForbidden());
+
+        assertAccepted(tokens.accessToken());
     }
 
     @Test
