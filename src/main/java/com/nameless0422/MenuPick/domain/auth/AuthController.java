@@ -7,6 +7,7 @@ import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.EmailRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.LoginRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.OAuthLoginRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.PasswordChangeRequest;
+import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.WithdrawRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.PasswordResetRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.SignupRequest;
 import com.nameless0422.MenuPick.domain.auth.dto.AuthRequest.TokenRequest;
@@ -213,10 +214,12 @@ public class AuthController {
         return responseWithExpiredCookie();
     }
 
-    @DeleteMapping("/withdraw")
+    /** 비밀번호를 본문에 담으므로 본문 처리가 정의되지 않은 DELETE 대신 POST를 쓴다. 근거는 D-078. */
+    @PostMapping("/withdraw")
     public ResponseEntity<ApiResponse<Void>> withdraw(
-            @AuthenticationPrincipal Long userId) {
-        authService.withdraw(userId);
+            @AuthenticationPrincipal Long userId,
+            @RequestBody(required = false) @Valid WithdrawRequest request) {
+        localAuthService.withdraw(userId, request == null ? null : request.password());
         return responseWithExpiredCookie();
     }
 

@@ -61,6 +61,7 @@ public class LocalAuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthTokenStore authTokenStore;
     private final AuthMailer authMailer;
+    private final AuthService authService;
     private final MailSendLimiter mailSendLimiter;
     private final TokenIssuer tokenIssuer;
     private final TransactionTemplate transactionTemplate;
@@ -517,6 +518,38 @@ public class LocalAuthService {
 
         // 재설정과 같은 이유로 세션을 새로 발급한다.
         return tokenIssuer.issue(userId, authVersion);
+    }
+
+    /**
+     * 비밀번호가 있는 계정은 현재 비밀번호를 확인한 뒤 탈퇴시킨다. 소셜 전용 계정은 다시 확인할
+     * 자격 증명이 없어 세션만으로 진행한다. 근거는 D-078.
+     *
+     * <p>대입 방어는 비밀번호 변경과 같아 로그인 실패 카운터를 공유한다. 대조한 자격 증명이 그 사이
+     * 바뀌었으면 버전이 달라져 탈퇴하지 않는다.
+     */
+    public void withdraw(Long userId, String password) {
+        Optional<Credential> credential = inTransaction(() -> authProviderRepository
+                .findByUserIdAndProvider(userId, AuthProvider.LOCAL)
+                .filter(provider -> provider.getPasswordHash() != null)
+                .map(provider -> new Credential(provider.getSocialId(), provider.getPasswordHash(),
+                        provider.getCredentialVersion())));
+
+        credential.ifPresent(verified -> {
+            loginAttemptLimiter.checkAllowed(verified.email());
+            if (password == null || !passwordEncoder.matches(password, verified.passwordHash())) {
+                loginAttemptLimiter.recordFailure(verified.email());
+                throw new BusinessException(ErrorCode.WITHDRAW_PASSWORD_MISMATCH);
+            }
+        });
+
+        inTransaction(() -> {
+            Optional<Long> current = lockLocalProvider(userId).map(AuthProvider::getCredentialVersion);
+            if (!current.equals(credential.map(Credential::version))) {
+                throw new BusinessException(ErrorCode.WITHDRAW_PASSWORD_MISMATCH);
+            }
+            authService.withdraw(userId);
+            return null;
+        });
     }
 
     private record Credential(String email, String passwordHash, long version) {}

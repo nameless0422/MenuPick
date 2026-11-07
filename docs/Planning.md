@@ -191,7 +191,7 @@ size 파라미터는 1~100으로 제한한다 (`@Min(1) @Max(100)`) — 과도�
 | GET | /auth/me | 계정 정보 + 자체 자격증명 보유 여부(`hasPassword`) | Y |
 | POST | /auth/refresh | Access Token 재발급 (Refresh Token은 HttpOnly 쿠키로 전달) | N (쿠키) |
 | DELETE | /auth/logout | 로그아웃 (Refresh Token 무효화) | Y |
-| DELETE | /auth/withdraw | 회원 탈퇴 | Y |
+| POST | /auth/withdraw | 회원 탈퇴(비밀번호 계정은 현재 비밀번호 필요) | Y |
 
 #### 최근 집단 경향 (Trends)
 

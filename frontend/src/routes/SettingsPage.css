@@ -72,6 +72,12 @@
   font-size: var(--fs-sm);
 }
 
+.settings-withdraw-password {
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+
 .settings-withdraw {
   color: var(--danger);
   border-color: var(--danger);

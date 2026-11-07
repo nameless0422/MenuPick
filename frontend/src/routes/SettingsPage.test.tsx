@@ -48,7 +48,7 @@ const loginFn = vi.fn();
 // 로그아웃·탈퇴는 세션 훅이 쥐고 있다. 매번 새 vi.fn()을 끼우면 "요청이 나갔는가"를
 // 테스트에서 붙잡을 수 없어, 한 번 만들어 두고 beforeEach에서 구현만 되돌린다.
 const logoutFn = vi.fn<() => Promise<void>>();
-const withdrawFn = vi.fn<() => Promise<void>>();
+const withdrawFn = vi.fn<(password?: string) => Promise<void>>();
 
 /** 응답을 붙잡아 두어야 "요청 중" 상태를 멈춰 세워 놓고 볼 수 있다. */
 function pendingForever<T>() {
@@ -388,7 +388,10 @@ describe("회원 탈퇴 확인 패널의 '탈퇴하기'", () => {
   /** 확인 패널을 열고, 필요하면 동의까지 체크해 둔다. */
   async function openConfirm(user: ReturnType<typeof userEvent.setup>, agree: boolean) {
     await user.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
-    if (agree) await user.click(await screen.findByRole("checkbox"));
+    if (agree) {
+      await user.click(await screen.findByRole("checkbox"));
+      await user.type(screen.getByLabelText("탈퇴 확인용 비밀번호"), "current-pw");
+    }
     return screen.getByRole("button", { name: "탈퇴하기" });
   }
 
@@ -430,6 +433,48 @@ describe("회원 탈퇴 확인 패널의 '탈퇴하기'", () => {
 
     await user.click(withdrawButton);
     expect(withdrawFn).toHaveBeenCalledTimes(1);
+    expect(withdrawFn).toHaveBeenCalledWith("current-pw");
+  });
+
+  it("동의해도 비밀번호를 입력하기 전에는 요청하지 않고 이유를 알려 준다", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
+    await user.click(await screen.findByRole("checkbox"));
+    const withdrawButton = screen.getByRole("button", { name: "탈퇴하기" });
+
+    expect(withdrawButton).toHaveAttribute("aria-disabled", "true");
+    expect(withdrawButton).toHaveAccessibleDescription(/비밀번호를 입력해야/);
+    await user.click(withdrawButton);
+    expect(withdrawFn).not.toHaveBeenCalled();
+  });
+
+  it("비밀번호가 없는 소셜 계정은 입력칸 없이 동의만으로 탈퇴한다", async () => {
+    fetchMeMock.mockResolvedValue(me({ hasPassword: false, linkedProviders: ["kakao"] }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "회원 탈퇴" }));
+    await user.click(await screen.findByRole("checkbox"));
+
+    await waitFor(() => expect(screen.queryByLabelText("탈퇴 확인용 비밀번호")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "탈퇴하기" }));
+    expect(withdrawFn).toHaveBeenCalledWith(undefined);
+  });
+
+  it("틀린 비밀번호의 오류를 보여 주고, 취소하면 입력값과 오류를 지운다", async () => {
+    withdrawFn.mockRejectedValue(new Error("비밀번호가 올바르지 않습니다."));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await openConfirm(user, true));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "취소" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "회원 탈퇴" }));
+    expect(screen.getByLabelText("탈퇴 확인용 비밀번호")).toHaveValue("");
   });
 
   it("탈퇴 요청 중에도 초점을 지키고 연타되지 않는다", async () => {
