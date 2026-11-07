@@ -61,6 +61,7 @@ public class LocalAuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthTokenStore authTokenStore;
     private final AuthMailer authMailer;
+    private final MailSendLimiter mailSendLimiter;
     private final TokenIssuer tokenIssuer;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
@@ -101,6 +102,12 @@ public class LocalAuthService {
         String email = normalize(rawEmail);
         String nickname = rawNickname.trim();
 
+        // 메일 예산을 다 썼으면 아무것도 바꾸지 않는다. 비밀번호를 덮어쓰면 이미 받은 인증 링크가
+        // 무효가 되는데 새 링크는 나가지 않아 사용자만 막힌다. 응답은 평소와 같다(MailSendLimiter).
+        if (mailSendLimiter.isExhausted(email)) {
+            return;
+        }
+
         String encodedPassword = passwordEncoder.encode(rawPassword);
         LinkTarget pending = inTransaction(() -> createOrReplacePendingAccount(email, encodedPassword, nickname));
 
@@ -108,7 +115,9 @@ public class LocalAuthService {
         // 즉 가입 응답은 SMTP 왕복을 기다리지 않는다. 메일이 끝내 안 나가면 계정은 미인증
         // 상태로 남고, 사용자는 재발송 버튼이나 같은 주소의 재가입으로 이어갈 수 있다.
         if (pending == null) {
-            authMailer.sendAlreadyRegistered(email);
+            if (!mailSendLimiter.countAndCheckExceeded(email)) {
+                authMailer.sendAlreadyRegistered(email);
+            }
             return;
         }
         sendVerification(pending);
@@ -410,6 +419,10 @@ public class LocalAuthService {
     }
 
     private void sendVerification(LinkTarget target) {
+        // 토큰을 만들기 전에 센다. 새 토큰은 이전 토큰을 폐기하므로 먼저 만들면 받은 링크가 죽는다.
+        if (mailSendLimiter.countAndCheckExceeded(target.email())) {
+            return;
+        }
         String token = authTokenStore.issue(AuthTokenStore.Purpose.VERIFY_EMAIL,
                 target.userId(), target.credentialVersion(), VERIFICATION_TTL);
         // 입력 주소가 아니라 등록된 주소(social_id)로 보낸다 — 근거는 LinkTarget.
@@ -430,7 +443,7 @@ public class LocalAuthService {
                 .map(LinkTarget::of)
                 .orElse(null));
 
-        if (target != null) {
+        if (target != null && !mailSendLimiter.countAndCheckExceeded(target.email())) {
             String token = authTokenStore.issue(AuthTokenStore.Purpose.PASSWORD_RESET,
                     target.userId(), target.credentialVersion(), RESET_TTL);
             // 입력 주소가 아니라 등록된 주소(social_id)로 보낸다 — 근거는 LinkTarget.

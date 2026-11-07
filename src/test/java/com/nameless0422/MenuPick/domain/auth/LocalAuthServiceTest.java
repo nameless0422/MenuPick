@@ -66,6 +66,7 @@ class LocalAuthServiceTest {
     @Mock private DefaultMenuProvisioner defaultMenuProvisioner;
     @Mock private AuthTokenStore authTokenStore;
     @Mock private AuthMailer authMailer;
+    @Mock private MailSendLimiter mailSendLimiter;
     @Mock private TokenIssuer tokenIssuer;
 
     /**
@@ -110,7 +111,7 @@ class LocalAuthServiceTest {
         localAuthService = new LocalAuthService(
                 userRepository, authProviderRepository, userHardDeleteService,
                 loginAttemptLimiter, defaultMenuProvisioner, passwordEncoder,
-                authTokenStore, authMailer, tokenIssuer,
+                authTokenStore, authMailer, mailSendLimiter, tokenIssuer,
                 new TransactionTemplate(NO_OP_TX_MANAGER), FIXED_CLOCK
         );
         localAuthService.initDummyHash();
