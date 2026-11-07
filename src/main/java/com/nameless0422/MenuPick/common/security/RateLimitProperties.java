@@ -27,6 +27,7 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  * 5초마다 조회하므로 분당 12회가 정상 사용이고, 한 자리에 여러 명이 같은 회선(사무실 NAT)에서
  * 들어오는 것이 흔하다 — 그래서 60으로 잡는다. 이 값이 너무 낮으면 같은 사무실 사람들이
  * 서로를 밀어내며 429를 받는다.
+ * <p>pickLimitPerMinute: 기록을 남기는 픽 경로의 IP당 분당 허용 횟수. 픽마다 히스토리 행이 쌓인다(D-077).
  * <p>windowSeconds: 카운터 윈도우 길이(초). 429 응답의 Retry-After 값으로도 쓰인다.
  */
 @ConfigurationProperties(prefix = "rate-limit")
@@ -38,6 +39,7 @@ public record RateLimitProperties(
         @DefaultValue("10") int demoLimitPerMinute,
         @DefaultValue("10") int alternativesLimitPerMinute,
         @DefaultValue("60") int roomLimitPerMinute,
+        @DefaultValue("60") int pickLimitPerMinute,
         @DefaultValue("60") int windowSeconds
 ) {
     @ConstructorBinding
@@ -52,6 +54,6 @@ public record RateLimitProperties(
     public RateLimitProperties(boolean trustProxy, int trustedProxyHops, int authLimitPerMinute,
             int proxyLimitPerMinute, int demoLimitPerMinute, int windowSeconds) {
         this(trustProxy, trustedProxyHops, authLimitPerMinute, proxyLimitPerMinute,
-                demoLimitPerMinute, 10, 60, windowSeconds);
+                demoLimitPerMinute, 10, 60, 60, windowSeconds);
     }
 }

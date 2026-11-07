@@ -79,6 +79,23 @@ class RateLimitFilterTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void pick_overLimit_returns429() throws Exception {
+        for (String path : java.util.List.of("/api/v1/pick", "/api/v1/pick/presets/7/pick")) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
+            request.setRemoteAddr("127.0.0.1");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            given(redisTemplate.execute(any(RedisScript.class),
+                    eq(java.util.List.of("rl:pick:127.0.0.1")), eq("60"))).willReturn(61L);
+
+            rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(429);
+        }
+        verifyNoInteractions(filterChain);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void pickAlternatives_redisFailure_failsOpen() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/pick/alternatives");
         request.setRemoteAddr("127.0.0.1");
@@ -560,15 +577,18 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("인증이 필요한 POST /pick은 데모 버킷에 걸리지 않는다")
-    void authenticatedPick_isNotDemoLimited() throws ServletException, IOException {
+    @DisplayName("인증이 필요한 POST /pick은 데모가 아니라 픽 버킷으로 센다")
+    @SuppressWarnings("unchecked")
+    void authenticatedPick_usesPickBucket() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/pick");
+        request.setRemoteAddr("10.0.0.1");
         MockHttpServletResponse response = new MockHttpServletResponse();
+        given(redisTemplate.execute(any(RedisScript.class),
+                eq(java.util.List.of("rl:pick:10.0.0.1")), eq("60"))).willReturn(60L);
 
         rateLimitFilter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
-        verifyNoInteractions(redisTemplate);
     }
 
     @Test

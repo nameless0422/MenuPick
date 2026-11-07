@@ -21,6 +21,10 @@ import java.util.Set;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Menu extends BaseTimeEntity {
 
+    /** 사용자당 저장 상한. 근거는 D-077. */
+    public static final int MAX_PER_USER = 1000;
+
+
     private static final int DEFAULT_WEIGHT = 1;
 
     @Id

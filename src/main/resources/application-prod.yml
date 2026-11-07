@@ -148,6 +148,8 @@ rate-limit:
   # 같이 뽑기의 인증 없는 경로(IP 기준). 사무실 한 회선에서 여러 명이 들어오는 것이 정상이라 넉넉히 둔다.
   room-limit-per-minute: ${RATE_LIMIT_ROOM_PER_MINUTE:60}
   alternatives-limit-per-minute: ${RATE_LIMIT_ALTERNATIVES_PER_MINUTE:10}
+  # 기록을 남기는 픽 경로(IP 기준). 사무실 한 회선을 감안해 넉넉히 두되 기록 폭증은 막는다(D-077).
+  pick-limit-per-minute: ${RATE_LIMIT_PICK_PER_MINUTE:60}
 
 cors:
   allowed-origins: ${FRONTEND_ORIGIN}

@@ -17,6 +17,10 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Restaurant extends BaseTimeEntity {
 
+    /** 사용자당 저장 상한. 근거는 D-077. */
+    public static final int MAX_PER_USER = 1000;
+
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

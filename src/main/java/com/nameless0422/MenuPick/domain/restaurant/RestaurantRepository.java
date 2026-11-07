@@ -12,6 +12,10 @@ import java.util.Optional;
 
 public interface RestaurantRepository extends JpaRepository<Restaurant, Long> {
 
+    /** 삭제한 식당도 행을 차지하므로 함께 센다(D-077). */
+    long countByUserId(Long userId);
+
+
     List<Restaurant> findAllByUserIdAndDeletedAtIsNull(Long userId);
 
     @Query("""

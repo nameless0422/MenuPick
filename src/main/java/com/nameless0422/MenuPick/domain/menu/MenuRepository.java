@@ -137,6 +137,9 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
      */
     boolean existsByUserId(Long userId);
 
+    /** 삭제한 메뉴도 행을 차지하므로 함께 센다(D-077). */
+    long countByUserId(Long userId);
+
     /**
      * 조회 자체를 소유자 범위로 한정한다 — 타인의 메뉴는 "권한 없음(403)"이 아니라
      * "없음(404)"으로 처리해 리소스 존재 여부가 새어 나가지 않게 한다.
