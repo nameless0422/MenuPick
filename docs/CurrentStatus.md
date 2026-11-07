@@ -20,6 +20,10 @@
 - 안전 확인: 비밀 유출 없음(gitleaks 2건은 테스트 픽스처 JWT, 운영은 전부 env). Spring 2026
   액추에이터·servlet-path CVE는 Boot 4.1.2/Security 7.0.10에서 이미 패치됨.
 
+### 2026-11-07 CodeQL 정적 분석 추가
+
+- PR, main push, 주간 일정에서 Java와 TypeScript를 분석한다. 근거는 D-075이다.
+
 ### 2026-11-07 이메일 식별자 바이트 비교 (운영 미배포)
 
 - `users.email`과 `auth_providers.social_id`를 `utf8mb4_0900_bin`으로 바꿔(V22) 변형 주소의 로그인 제한
