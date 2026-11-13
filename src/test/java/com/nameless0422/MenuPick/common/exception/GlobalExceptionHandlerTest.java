@@ -139,4 +139,68 @@ class GlobalExceptionHandlerTest extends AbstractControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("INTERNAL_SERVER_ERROR"));
     }
 
+
+    /**
+     * 깨진 본문의 파싱 오류 메시지에는 <b>본문의 조각</b>이 들어간다 — 파서가 "여기서 막혔다"를
+     * 설명하려고 그 자리의 토큰을 인용하기 때문이다. 로그인·가입·비밀번호 변경 요청이 깨져서
+     * 오면 그 조각이 비밀번호일 수 있다(따옴표를 빠뜨린 값이 그대로 인용된다). 로그는 평문으로
+     * journal에 14일 넘게 남고 알림 채널로도 나갈 수 있으므로, 본문에서 온 글자는 남기지 않는다.
+     */
+    @Test
+    @DisplayName("깨진 JSON의 내용은 로그에 남기지 않는다 — 본문 조각이 비밀번호일 수 있다")
+    void malformedBody_doesNotLogBodyFragments() throws Exception {
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            mockMvc.perform(post("/api/v1/pick")
+                            .with(authentication(AUTH))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"password\": hunter2SecretValue}"))
+                    .andExpect(status().isBadRequest());
+
+            org.assertj.core.api.Assertions.assertThat(appender.list)
+                    .as("무슨 종류의 오류였는지는 남아야 한다")
+                    .anySatisfy(event -> org.assertj.core.api.Assertions
+                            .assertThat(event.getFormattedMessage())
+                            .contains("HttpMessageNotReadableException"));
+            org.assertj.core.api.Assertions.assertThat(appender.list)
+                    .extracting(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+                    .noneMatch(message -> message.contains("hunter2SecretValue"));
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    /**
+     * 타입이 안 맞는 값도 사용자가 보낸 그대로다. 값 전체를 찍으면 URL에 실려 온 긴 문자열이
+     * 통째로 로그에 들어간다 — 무엇이 왔는지 짐작할 만큼만 남긴다.
+     */
+    @Test
+    @DisplayName("타입이 안 맞는 파라미터 값은 잘라서 남긴다")
+    void typeMismatch_truncatesLoggedValue() throws Exception {
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            String longValue = "x".repeat(3_000);
+            GlobalExceptionHandler handler = new GlobalExceptionHandler();
+            handler.handleTypeMismatch(new org.springframework.web.method.annotation
+                    .MethodArgumentTypeMismatchException(longValue, Long.class, "menuId", null,
+                    new NumberFormatException("bad")));
+
+            org.assertj.core.api.Assertions.assertThat(appender.list).hasSize(1);
+            String logged = appender.list.get(0).getFormattedMessage();
+            org.assertj.core.api.Assertions.assertThat(logged).contains("param=menuId");
+            org.assertj.core.api.Assertions.assertThat(logged.length()).isLessThan(200);
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
 }
