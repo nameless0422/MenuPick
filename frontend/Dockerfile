@@ -34,6 +34,19 @@ RUN echo "VITE_PICK_ALTERNATIVES_ENABLED=${VITE_PICK_ALTERNATIVES_ENABLED}" >> .
 RUN npm run build
 
 FROM nginx:1.30.6-alpine
+
+# 베이스 이미지에 든 libxslt 1.1.43-r3의 HIGH 3건(CVE-2026-9947, CVE-2026-87636,
+# CVE-2026-125350 — XML 처리의 use-after-free·type confusion)을 수정판(r4)으로 올린다.
+# 2026-11-14 이미지 스캔(security.yml)이 잡았고, 그 시점에 이 수정이 들어간 nginx 태그는 없었다.
+#
+# 이 서비스는 XSLT를 쓰지 않는다(nginx.conf에 xslt 지시어가 없다). libxslt는 공식 이미지가
+# 동적 모듈 패키지와 함께 넣어 둔 것이라 실제로 닿는 경로는 없지만, 스캔이 빨간 채로 있으면
+# 다음에 뜨는 진짜 문제가 그 옆에서 묻힌다.
+#
+# 이 패키지만 올린다. `apk upgrade` 전체는 태그를 고정해 둔 의미(같은 입력 → 같은 이미지)를
+# 지운다. 베이스 태그가 수정판을 담게 되면 이 줄은 지운다 — 그때는 아무 일도 하지 않는 줄이 된다.
+RUN apk upgrade --no-cache libxslt
+
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
