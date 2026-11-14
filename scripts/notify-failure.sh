@@ -67,10 +67,33 @@ send() {
   # 따옴표·역슬래시·제어문자가 뭐든 들어올 수 있다 — 하나라도 놓치면 알림이 조용히
   # 400으로 떨어진다. 자르기도 여기서 한다: 둘 다 문자 단위라 UTF-8 한글이 깨지지 않는다
   # (바이트로 자르면 반쪽 문자가 들어가 JSON 자체가 거부된다).
-  if command -v jq >/dev/null 2>&1; then
-    payload="$(jq -n --arg t "$text" --arg k "$key" --argjson n "$MAX_CHARS"         '{($k): ($t[0:$n])}')"
-  elif command -v python3 >/dev/null 2>&1; then
-    payload="$(ALERT_TEXT="$text" ALERT_KEY="$key" ALERT_MAX="$MAX_CHARS" python3 -c         'import json,os; print(json.dumps({os.environ["ALERT_KEY"]: os.environ["ALERT_TEXT"][:int(os.environ["ALERT_MAX"])]}))')"
+  # 알림 본문에는 **남이 고른 문자열**이 들어간다 — 앱 로그의 꼬리에는 요청 경로, 파라미터
+  # 이름, 예외 메시지가 섞여 있고 그 일부는 인증 없이도 보낼 수 있다. 채팅 서비스는 본문의
+  # 특정 문자열을 명령으로 해석하므로(@everyone, <!channel>) 그대로 실으면 **요청 한 번으로
+  # 운영 채널 전체를 호출**하거나 그럴듯한 링크를 띄울 수 있다. 본문을 글자로만 읽게 만든다.
+  #   discord: allowed_mentions.parse 를 비워 어떤 멘션도 알림으로 풀리지 않게 한다.
+  #   slack:   &, <, > 를 엔티티로 바꾼다. 슬랙의 특수 멘션·링크 문법은 전부 < 로 시작한다.
+  # 이스케이프한 뒤에 자른다 — 순서가 반대면 잘린 끝에서 엔티티가 반쪽 날 수 있다.
+  # python3을 먼저 쓴다. 두 구현이 같은 일을 하지만, 멘션 무력화를 실제 수신기로 확인한 것이
+  # 이쪽이다 — 운영에서 도는 경로와 검증한 경로를 같게 둔다. jq는 python3이 없을 때의 대비다.
+  if command -v python3 >/dev/null 2>&1; then
+    payload="$(ALERT_TEXT="$text" ALERT_KEY="$key" ALERT_FORMAT="$format" ALERT_MAX="$MAX_CHARS" python3 -c '
+import json, os
+text = os.environ["ALERT_TEXT"]
+fmt = os.environ["ALERT_FORMAT"]
+if fmt == "slack":
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+body = {os.environ["ALERT_KEY"]: text[:int(os.environ["ALERT_MAX"])]}
+if fmt == "discord":
+    body["allowed_mentions"] = {"parse": []}
+print(json.dumps(body))')"
+  elif command -v jq >/dev/null 2>&1; then
+    payload="$(jq -n --arg t "$text" --arg k "$key" --arg f "$format" --argjson n "$MAX_CHARS" '
+        ($t | if $f == "slack"
+              then gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;")
+              else . end) as $safe
+        | {($k): ($safe[0:$n])}
+          + (if $f == "discord" then {allowed_mentions: {parse: []}} else {} end)')"
   else
     log "ERROR: jq도 python3도 없어 알림 본문을 만들 수 없다"
     return 1

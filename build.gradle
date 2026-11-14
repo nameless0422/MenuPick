@@ -1,3 +1,25 @@
+// 빌드 도구(Gradle 플러그인)의 클래스패스에 딸려 오는 라이브러리를 올린다.
+//
+// Spring Boot 플러그인이 buildpack 지원용으로 commons-compress를 끌어오고, 그게 다시
+// commons-lang3 3.16.0을 끌어온다 — CVE-2025-48924(긴 입력에서 무한 재귀, 3.18.0에서 수정).
+// 이 클래스패스는 **빌드할 때만** 쓰이고 배포되는 jar에는 들어가지 않으며(런타임은 이미 3.20.0),
+// 빌드에 들어가는 입력은 이 리포의 소스뿐이라 실제로 공격받을 경로는 없다.
+// 그래도 올리는 이유는 의존성 그래프를 GitHub에 제출하고 있어(security.yml) 이 항목이
+// Dependabot 알림으로 계속 열려 있기 때문이다 — 열려 있는 알림이 하나라도 있으면
+// 새로 뜬 진짜 알림이 그 옆에서 묻힌다.
+//
+// 런타임 쪽과 같은 버전으로 맞춘다. Spring Boot 플러그인이 더 새 버전을 요구하게 되면
+// Gradle이 높은 쪽을 고르므로 이 제약이 낮추는 일은 없다.
+buildscript {
+	dependencies {
+		constraints {
+			classpath('org.apache.commons:commons-lang3:3.20.0') {
+				because 'CVE-2025-48924 — 빌드 클래스패스의 3.16.0을 수정 버전으로 올린다'
+			}
+		}
+	}
+}
+
 plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.2'
