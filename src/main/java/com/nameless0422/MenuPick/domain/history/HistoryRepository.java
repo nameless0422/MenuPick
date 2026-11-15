@@ -315,7 +315,8 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
      * "먹었다"의 정의는 위 요약과 같다. 메뉴가 지워졌어도 남은 열량 값으로 센다 — 먹은 사실은 남는다.
      */
     @Query("select coalesce(h.visitedAt, h.recommendedAt) as eatenAt, h.mealSlot as mealSlot, " +
-            "h.recommendedAt as recommendedAt, h.servings as servings, m.kcalPerServing as kcalPerServing " +
+            "h.recommendedAt as recommendedAt, h.servings as servings, m.kcalPerServing as kcalPerServing, " +
+            "m.carbsG as carbsG, m.proteinG as proteinG, m.fatG as fatG, m.fiberG as fiberG " +
             "from History h left join h.menu m " +
             "where h.user.id = :userId and h.recommendedAt >= :since " +
             "and (h.isVisited = true or h.recommendationFeedback = :accepted) " +
@@ -331,6 +332,10 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
         LocalDateTime getRecommendedAt();
         java.math.BigDecimal getServings();
         Integer getKcalPerServing();
+        java.math.BigDecimal getCarbsG();
+        java.math.BigDecimal getProteinG();
+        java.math.BigDecimal getFatG();
+        java.math.BigDecimal getFiberG();
     }
 
     /** 사용자별 첫 픽 시각. 7일 리텐션 코호트를 만드는 근거. */

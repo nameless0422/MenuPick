@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -70,6 +71,17 @@ public class Menu extends BaseTimeEntity {
 
     /** 열량을 가져온 기준 음식. 직접 적은 열량이면 null이다. 관계가 아니라 id만 둔다 — 위와 같은 이유. */
     private Long foodReferenceId;
+
+    /** 1인분 탄수화물·단백질·지방·식이섬유(g). 열량과 같이 기준 음식에서 복사하거나 직접 적는다(D-084). */
+    // 이름을 적는 이유: 대문자 한 글자로 끝나는 필드(carbsG)는 기본 이름 전략이 carbsg로 바꾼다.
+    @Column(name = "carbs_g")
+    private BigDecimal carbsG;
+    @Column(name = "protein_g")
+    private BigDecimal proteinG;
+    @Column(name = "fat_g")
+    private BigDecimal fatG;
+    @Column(name = "fiber_g")
+    private BigDecimal fiberG;
 
     private LocalDateTime deletedAt;
 
@@ -137,16 +149,35 @@ public class Menu extends BaseTimeEntity {
      * <p>이미 쉬는 중이어도 그냥 덮어쓴다 — 더 짧게 바꾸는 것도 사용자의 정당한 의사다
      * ("2주 쉬게 했는데 내일부터 다시 보고 싶다"). 기간 상한은 서비스가 검증한다.
      */
-    /** 기준 음식에서 열량을 가져온다. */
-    public void useFoodReference(Long foodReferenceId, int kcalPerServing) {
+    /** 기준 음식에서 열량과 영양소를 가져온다. */
+    public void useFoodReference(Long foodReferenceId, int kcalPerServing, Macros macros) {
         this.foodReferenceId = java.util.Objects.requireNonNull(foodReferenceId);
         this.kcalPerServing = kcalPerServing;
+        applyMacros(macros);
     }
 
-    /** 열량을 직접 적는다. null이면 열량을 지운다(모름). */
+    /** 열량을 직접 적는다. null이면 열량을 지운다(모름). 영양소도 비운다. */
     public void setCustomKcal(Integer kcalPerServing) {
+        setCustomNutrition(kcalPerServing, Macros.UNKNOWN);
+    }
+
+    /** 열량과 영양소를 직접 적는다. 열량이 없으면 영양소도 두지 않는다 — 서비스가 미리 거른다. */
+    public void setCustomNutrition(Integer kcalPerServing, Macros macros) {
         this.foodReferenceId = null;
         this.kcalPerServing = kcalPerServing;
+        applyMacros(kcalPerServing == null ? Macros.UNKNOWN : macros);
+    }
+
+    public Macros getMacros() {
+        return new Macros(carbsG, proteinG, fatG, fiberG);
+    }
+
+    private void applyMacros(Macros macros) {
+        Macros values = macros == null ? Macros.UNKNOWN : macros;
+        this.carbsG = values.carbsG();
+        this.proteinG = values.proteinG();
+        this.fatG = values.fatG();
+        this.fiberG = values.fiberG();
     }
 
     public void pause(LocalDateTime until) {

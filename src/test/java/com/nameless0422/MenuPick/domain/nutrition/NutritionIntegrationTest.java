@@ -9,6 +9,7 @@ import com.nameless0422.MenuPick.domain.history.HistoryService;
 import com.nameless0422.MenuPick.domain.history.MealSlot;
 import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryRequest;
+import com.nameless0422.MenuPick.domain.menu.Macros;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.user.User;
@@ -142,6 +143,87 @@ class NutritionIntegrationTest extends AbstractIntegrationTest {
                 new NutritionDto.MenuNutritionRequest(null, null));
         assertThat(cleared.kcalPerServing()).isNull();
         assertThat(service.getMenuNutrition(owner.getId(), menu.getId()).kcalPerServing()).isNull();
+    }
+
+    private static BigDecimal g(String value) {
+        return new BigDecimal(value);
+    }
+
+    private Menu menuWithMacros(User owner, String name, int kcal, String carbs, String protein, String fat, String fiber) {
+        Menu menu = Menu.builder().user(owner).name(name).build();
+        menu.setCustomNutrition(kcal, new Macros(carbs == null ? null : g(carbs), protein == null ? null : g(protein),
+                fat == null ? null : g(fat), fiber == null ? null : g(fiber)));
+        return menus.save(menu);
+    }
+
+    @Test void choosingReferenceCopiesMacrosAndCustomMacrosAreAllOrNothing() {
+        User owner = user("macros");
+        Menu menu = menu(owner, "김치찌개", null);
+        FoodReference kimchi = references.save(FoodReference.of(tag + "-macro", "김치찌개", "찌개", g("400.0"), 196, NOW)
+                .withMacros(g("12.8"), g("14.0"), g("10.4"), g("4.4")));
+        fixtureReferences.add(kimchi.getId());
+
+        var linked = service.updateMenuNutrition(owner.getId(), menu.getId(),
+                new NutritionDto.MenuNutritionRequest(kimchi.getId(), null, g("1.0"), g("1.0"), g("1.0"), null));
+        // 기준 음식이 있으면 적은 영양소는 무시하고 기준 값을 복사한다.
+        assertThat(linked.carbsG()).isEqualByComparingTo("12.8");
+        assertThat(linked.proteinG()).isEqualByComparingTo("14.0");
+        assertThat(linked.fatG()).isEqualByComparingTo("10.4");
+        assertThat(linked.fiberG()).isEqualByComparingTo("4.4");
+        assertThat(linked.foodReference().fiberG()).isEqualByComparingTo("4.4");
+
+        var custom = service.updateMenuNutrition(owner.getId(), menu.getId(),
+                new NutritionDto.MenuNutritionRequest(null, 600, g("80"), g("20.5"), g("15"), null));
+        assertThat(custom.carbsG()).isEqualByComparingTo("80");
+        assertThat(custom.fiberG()).as("식이섬유는 따로 비워 둘 수 있다").isNull();
+
+        assertThatThrownBy(() -> service.updateMenuNutrition(owner.getId(), menu.getId(),
+                new NutritionDto.MenuNutritionRequest(null, 600, g("80"), null, null, null)))
+                .as("탄단지 하나만은 안 된다")
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+        assertThatThrownBy(() -> service.updateMenuNutrition(owner.getId(), menu.getId(),
+                new NutritionDto.MenuNutritionRequest(null, null, null, null, null, g("3"))))
+                .as("열량 없이 영양소만은 안 된다")
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        var kcalOnly = service.updateMenuNutrition(owner.getId(), menu.getId(), new NutritionDto.MenuNutritionRequest(null, 500));
+        assertThat(kcalOnly.carbsG()).as("열량만 다시 적으면 이전 영양소는 남지 않는다").isNull();
+    }
+
+    @Test void summaryAveragesMacrosPerDayOverDaysWhereTheyAreKnown() {
+        User owner = user("macro-summary");
+        Menu stew = menuWithMacros(owner, "김치찌개", 500, "60", "30", "15", "5");
+        Menu salad = menuWithMacros(owner, "샐러드", 300, "20", "10", "12", null);
+        Menu kcalOnly = menu(owner, "열량만", 400);
+
+        // 오늘: 김치찌개 1.5인분 + 샐러드 1인분 + 열량만 아는 메뉴
+        historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                stew.getId(), TODAY.atTime(12, 0), null, null, null, g("1.5")));
+        historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                salad.getId(), TODAY.atTime(19, 0), null, null, null, null));
+        historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                kcalOnly.getId(), TODAY.atTime(8, 0), null, null, null, null));
+        // 3일 전: 샐러드만
+        historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                salad.getId(), TODAY.minusDays(3).atTime(12, 0), null, null, null, null));
+        // 2일 전: 열량만 아는 메뉴만 — 탄단지 평균의 분모에 들어가지 않는다
+        historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                kcalOnly.getId(), TODAY.minusDays(2).atTime(12, 0), null, null, null, null));
+
+        var macros = service.summarize(owner.getId(), 7).macros();
+        assertThat(macros.meals()).isEqualTo(3);
+        // 탄수화물: 오늘 90 + 20 = 110, 3일 전 20 → (110 + 20) / 2일 = 65
+        assertThat(macros.carbsG()).isEqualTo(65);
+        // 단백질: 오늘 45 + 10 = 55, 3일 전 10 → 32.5 → 33(반올림)
+        assertThat(macros.proteinG()).isEqualTo(33);
+        // 지방: 오늘 22.5 + 12 = 34.5, 3일 전 12 → 23.25 → 23
+        assertThat(macros.fatG()).isEqualTo(23);
+        // 식이섬유는 김치찌개만 안다: 7.5g, 하루 → 8(반올림)
+        assertThat(macros.fiberMeals()).isEqualTo(1);
+        assertThat(macros.fiberG()).isEqualTo(8);
+
+        User empty = user("macro-empty");
+        assertThat(service.summarize(empty.getId(), 7).macros()).isEqualTo(NutritionDto.MacroSummary.EMPTY);
     }
 
     @Test void othersMenusAndUnknownReferencesAreRejected() {

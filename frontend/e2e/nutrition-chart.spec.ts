@@ -29,6 +29,7 @@ function summary(periodDays: number) {
     }),
     totalKcal: total, knownMeals: known.length * 2, unknownMeals: days.reduce((n, d) => n + d.unknownMeals, 0),
     averageKcal: Math.round(total / known.length), truncated: false,
+    macros: { meals: known.length * 2, carbsG: 210, proteinG: 72, fatG: 55, fiberMeals: known.length, fiberG: 17 },
   };
 }
 
@@ -49,11 +50,12 @@ test("열량 기록을 끼니별 막대로 보여 주고 7일·30일을 바꿔 �
   });
   await page.goto("/history");
   const section = page.locator(".nutrition-summary");
-  await expect(section.getByText(/하루 평균/)).toBeVisible();
+  await expect(section.getByText(/최근 7일 · 하루 평균/)).toBeVisible();
   await expect(section.locator(".nutrition-chart svg")).toBeVisible();
   // 기록 없는 날은 막대가 없다: 7일 중 이틀이 비어 있어 점심 조각은 5개다.
   await expect(section.locator(".nutrition-chart svg .nutrition-seg-lunch")).toHaveCount(5);
 
+  await expect(section.getByRole("list", { name: "탄단지 하루 평균" })).toContainText("탄수화물 약 210g");
   await section.locator(".nutrition-chart-hit").last().hover();
   await expect(section.locator(".nutrition-chart-tooltip")).toContainText("10/9 (금)");
 

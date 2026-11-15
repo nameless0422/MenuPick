@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import { fetchNutritionSummary, type NutritionSummary as Summary } from "../api/nutrition";
 import NutritionSummary from "./NutritionSummary";
-import { niceTicks } from "./nutritionChartScale";
+import { energyShares, niceTicks } from "./nutritionChartScale";
 
 vi.mock("../api/nutrition", () => ({ fetchNutritionSummary: vi.fn() }));
 const fetchMock = vi.mocked(fetchNutritionSummary);
@@ -63,6 +63,28 @@ describe("열량 기록", () => {
     expect(container.querySelector(".nutrition-chart-tooltip")).toHaveTextContent("10/8 (목)약 600kcal점심 300저녁 300");
   });
 
+  it("탄단지 하루 평균과 열량 비율을 보여 주고, 몇 끼 기준인지 밝힌다", async () => {
+    fetchMock.mockResolvedValue(summary({
+      macros: { meals: 2, carbsG: 200, proteinG: 60, fatG: 50, fiberMeals: 1, fiberG: 12 },
+    }));
+    const { container } = renderWithProviders(<NutritionSummary />);
+    expect(await screen.findByRole("heading", { name: "탄수화물·단백질·지방" })).toBeVisible();
+    expect(screen.getByText(/먹은 4끼 중 2끼 기준/)).toBeVisible();
+    // 800 + 240 + 450 = 1490kcal → 53.7% / 16.1% / 30.2%
+    expect(within(screen.getByRole("list", { name: "탄단지 하루 평균" })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["탄수화물 약 200g 열량의 54%", "단백질 약 60g 열량의 16%", "지방 약 50g 열량의 30%", "식이섬유 약 12g (1끼 기준)"]);
+    expect(container.querySelector(".nutrition-macro-bar")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("탄단지를 아는 끼니가 없으면 어디서 채우는지 알려 주고, 예전 서버면 칸을 숨긴다", async () => {
+    fetchMock.mockResolvedValue(summary({
+      macros: { meals: 0, carbsG: null, proteinG: null, fatG: null, fiberMeals: 0, fiberG: null },
+    }));
+    renderWithProviders(<NutritionSummary />);
+    expect(await screen.findByText(/탄단지를 아는 메뉴로 먹은 끼니가 없어요/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "메뉴의 열량 칸" })).toHaveAttribute("href", "/menus");
+  });
+
   it("7일과 30일을 바꿔 본다", async () => {
     const user = userEvent.setup();
     renderWithProviders(<NutritionSummary />);
@@ -102,4 +124,14 @@ describe("niceTicks", () => {
   it.each([
     [0, [0, 500, 1000]], [1000, [0, 500, 1000]], [1010, [0, 500, 1000, 1500]], [2380, [0, 1000, 2000, 3000]],
   ])("%d → %j", (max, ticks) => expect(niceTicks(max)).toEqual(ticks));
+});
+
+describe("energyShares", () => {
+  it("열량 기준 몫을 정수로 내고 합을 100에 맞춘다", () => {
+    expect(energyShares(200, 60, 50)).toEqual([54, 16, 30]);
+    expect(energyShares(1, 1, 0)).toEqual([50, 50, 0]);
+    const thirds = energyShares(9, 9, 4)!;
+    expect(thirds[0] + thirds[1] + thirds[2]).toBe(100);
+    expect(energyShares(0, 0, 0)).toBeNull();
+  });
 });

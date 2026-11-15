@@ -52,6 +52,8 @@ public class FoodReference {
     private BigDecimal proteinG;
     @Column(name = "fat_g")
     private BigDecimal fatG;
+    @Column(name = "fiber_g")
+    private BigDecimal fiberG;
 
     /** 원본 데이터의 생성일. */
     private LocalDate sourceDate;
@@ -70,5 +72,18 @@ public class FoodReference {
         reference.kcalPerServing = kcalPerServing;
         reference.importedAt = importedAt;
         return reference;
+    }
+
+    /** 테스트 픽스처용. */
+    public FoodReference withMacros(BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG, BigDecimal fiberG) {
+        this.carbsG = carbsG;
+        this.proteinG = proteinG;
+        this.fatG = fatG;
+        this.fiberG = fiberG;
+        return this;
+    }
+
+    public com.nameless0422.MenuPick.domain.menu.Macros macros() {
+        return new com.nameless0422.MenuPick.domain.menu.Macros(carbsG, proteinG, fatG, fiberG);
     }
 }

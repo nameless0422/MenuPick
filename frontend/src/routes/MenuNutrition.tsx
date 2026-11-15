@@ -1,11 +1,13 @@
-import { useId, useState } from "react";
+import { type KeyboardEvent, useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchMenuNutrition,
   searchFoodReferences,
   updateMenuNutrition,
   type FoodReference,
+  type Macros,
   type MenuNutrition as Nutrition,
+  type MenuNutritionUpdate,
 } from "../api/nutrition";
 import { apiErrorMessage } from "../api/http";
 import "./MenuNutrition.css";
@@ -33,7 +35,7 @@ export default function MenuNutrition({ menuId, menuName, onVersionChange }: {
   const [message, setMessage] = useState("");
 
   const save = useMutation({
-    mutationFn: (body: { foodReferenceId?: number; kcalPerServing?: number }) => updateMenuNutrition(menuId, body),
+    mutationFn: (body: MenuNutritionUpdate) => updateMenuNutrition(menuId, body),
     onSuccess: (data) => {
       queryClient.setQueryData(["menu-nutrition", menuId], data);
       onVersionChange(data.version);
@@ -51,6 +53,7 @@ export default function MenuNutrition({ menuId, menuName, onVersionChange }: {
       {nutritionQuery.isPending && <p role="status">열량을 불러오는 중…</p>}
       {nutritionQuery.isError && <p className="error" role="alert">{apiErrorMessage(nutritionQuery.error)}</p>}
       {current && <p>{describe(current)}</p>}
+      {current && macroLine(current) && <p className="card-muted-hint">{macroLine(current)}</p>}
       <p role="status">{message}</p>
       {save.isError && <p className="error" role="alert">{apiErrorMessage(save.error)}</p>}
 
@@ -66,8 +69,8 @@ export default function MenuNutrition({ menuId, menuName, onVersionChange }: {
       )}
       {mode === "search" && <ReferenceSearch initial={menuName} busy={save.isPending}
         onPick={(reference) => save.mutate({ foodReferenceId: reference.id })} onCancel={() => setMode("view")} />}
-      {mode === "custom" && <CustomKcal initial={current?.kcalPerServing ?? null} busy={save.isPending}
-        onSave={(kcal) => save.mutate({ kcalPerServing: kcal })} onCancel={() => setMode("view")} />}
+      {mode === "custom" && <CustomKcal initial={current ?? null} busy={save.isPending}
+        onSave={(body) => save.mutate(body)} onCancel={() => setMode("view")} />}
     </section>
   );
 }
@@ -79,6 +82,20 @@ function describe(nutrition: Nutrition): string {
     return `1인분 약 ${nutrition.kcalPerServing}kcal · 기준: ${nutrition.foodReference.name}${grams ? ` (${grams}g)` : ""}`;
   }
   return `1인분 약 ${nutrition.kcalPerServing}kcal · 직접 적은 값`;
+}
+
+const MACRO_FIELDS = [
+  { key: "carbsG", label: "탄수화물" },
+  { key: "proteinG", label: "단백질" },
+  { key: "fatG", label: "지방" },
+  { key: "fiberG", label: "식이섬유" },
+] as const;
+
+/** 1인분 영양소 한 줄. 탄단지를 모르면 null — 식이섬유만 따로 아는 경우는 없다(열량·탄단지와 같이 온다). */
+function macroLine(values: Partial<Macros>): string | null {
+  if (values.carbsG == null || values.proteinG == null || values.fatG == null) return null;
+  return MACRO_FIELDS.filter((field) => values[field.key] != null)
+    .map((field) => `${field.label} ${values[field.key]}g`).join(" · ");
 }
 
 function ReferenceSearch({ initial, busy, onPick, onCancel }: {
@@ -120,6 +137,7 @@ function ReferenceSearch({ initial, busy, onPick, onCancel }: {
                 onClick={() => { if (!busy) onPick(reference); }}>
                 {reference.name} · 1인분 약 {reference.kcalPerServing}kcal
                 {reference.servingGrams ? ` (${reference.servingGrams}g)` : ""}
+                {macroLine(reference) && <span className="menu-nutrition-macros">{macroLine(reference)}</span>}
               </button>
             </li>
           ))}
@@ -130,27 +148,68 @@ function ReferenceSearch({ initial, busy, onPick, onCancel }: {
   );
 }
 
+/** 영양소 칸 한 개: 비우거나, 0~999.9를 소수점 한 자리까지. 서버 검증과 같다. */
+const MACRO_PATTERN = /^\d{1,3}(\.\d)?$/;
+
 function CustomKcal({ initial, busy, onSave, onCancel }: {
-  initial: number | null; busy: boolean; onSave: (kcal: number) => void; onCancel: () => void;
+  initial: Nutrition | null; busy: boolean; onSave: (body: MenuNutritionUpdate) => void; onCancel: () => void;
 }) {
   const id = useId();
-  const [value, setValue] = useState(initial != null ? String(initial) : "");
+  const [value, setValue] = useState(initial?.kcalPerServing != null ? String(initial.kcalPerServing) : "");
+  const [macros, setMacros] = useState<Record<keyof Macros, string>>(() => ({
+    carbsG: initial?.carbsG != null ? String(initial.carbsG) : "",
+    proteinG: initial?.proteinG != null ? String(initial.proteinG) : "",
+    fatG: initial?.fatG != null ? String(initial.fatG) : "",
+    fiberG: initial?.fiberG != null ? String(initial.fiberG) : "",
+  }));
   const kcal = Number(value);
-  const valid = /^\d+$/.test(value) && kcal >= 1 && kcal <= 5000;
+  const kcalValid = /^\d+$/.test(value) && kcal >= 1 && kcal <= 5000;
+  const badField = (key: keyof Macros) => macros[key] !== "" && !MACRO_PATTERN.test(macros[key]);
+  const trio = [macros.carbsG, macros.proteinG, macros.fatG];
+  // 탄단지는 셋을 함께 적거나 모두 비운다 — 하나만 있으면 비율을 그릴 수 없다.
+  const partial = trio.some((v) => v !== "") && trio.some((v) => v === "");
+  const valid = kcalValid && !MACRO_FIELDS.some((field) => badField(field.key)) && !partial;
+
+  const submit = () => {
+    if (!valid || busy) return;
+    const body: MenuNutritionUpdate = { kcalPerServing: kcal };
+    for (const field of MACRO_FIELDS) {
+      if (macros[field.key] !== "") body[field.key] = Number(macros[field.key]);
+    }
+    onSave(body);
+  };
+  const onEnter = (event: KeyboardEvent) => {
+    if (event.key === "Enter") { event.preventDefault(); submit(); }
+  };
+
   return (
     // 바깥 메뉴 수정 폼 안에 들어가므로 <form>을 중첩하지 않는다. Enter는 직접 받는다.
     <div className="menu-nutrition-custom" role="group" aria-labelledby={`${id}-label`}>
       <label id={`${id}-label`} htmlFor={`${id}-kcal`}>1인분 열량 (kcal)</label>
       <input id={`${id}-kcal`} type="number" inputMode="numeric" min={1} max={5000} step={1} value={value}
-        aria-invalid={value !== "" && !valid} aria-describedby={`${id}-help`}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") { event.preventDefault(); if (valid && !busy) onSave(kcal); }
-        }} />
+        aria-invalid={value !== "" && !kcalValid} aria-describedby={`${id}-help`}
+        onChange={(event) => setValue(event.target.value)} onKeyDown={onEnter} />
       <p id={`${id}-help`}>1~5,000 사이의 정수로 적어 주세요.</p>
+      <fieldset className="menu-nutrition-macro-fields" aria-describedby={`${id}-macro-help`}>
+        <legend>1인분 영양소 (선택, g)</legend>
+        {MACRO_FIELDS.map((field) => (
+          <label key={field.key}>
+            {field.label}
+            <input type="number" inputMode="decimal" min={0} max={999.9} step={0.1} value={macros[field.key]}
+              aria-invalid={badField(field.key) || (partial && field.key !== "fiberG" && macros[field.key] === "")}
+              onChange={(event) => setMacros((prev) => ({ ...prev, [field.key]: event.target.value }))}
+              onKeyDown={onEnter} />
+          </label>
+        ))}
+        <p id={`${id}-macro-help`} className={partial ? "error" : undefined}>
+          {partial ? "탄수화물·단백질·지방은 함께 적거나 모두 비워 주세요."
+            : "포장지·식당 안내문에 있으면 적어 두세요. 식이섬유는 비워도 돼요."}
+        </p>
+      </fieldset>
       <div className="card-actions">
-        <button type="button" aria-disabled={!valid || busy || undefined}
-          onClick={() => { if (valid && !busy) onSave(kcal); }}>{busy ? "저장 중…" : "열량 저장"}</button>
+        <button type="button" aria-disabled={!valid || busy || undefined} onClick={submit}>
+          {busy ? "저장 중…" : "열량 저장"}
+        </button>
         <button type="button" onClick={onCancel}>취소</button>
       </div>
     </div>
