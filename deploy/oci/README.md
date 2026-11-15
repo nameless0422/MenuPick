@@ -312,6 +312,34 @@ cat /var/lib/menupick/disk-watch.*      # 마운트별 "단계 마지막알림�
   대부분은 위 "배포" 절의 `docker image prune -a -f`로 해결된다. **볼륨은 지우지 않는다.**
 - 알림 전송이 실패하면 단계를 기록하지 않고 유닛이 실패한다 — 다음 회차에 다시 보낸다.
 
+## 칼로리 기준 데이터
+
+기준 음식 검색(D-082)은 `food_references` 테이블을 읽는다. 데이터는 저장소에 없고 서버에서 직접 넣는다.
+
+1. **사용자 작업**: 공공데이터포털에서 "전국통합식품영양성분정보(음식)표준데이터"
+   (data.go.kr/data/15100070)를 **CSV**로 내려받는다. 받기 전에 이용허락범위를 확인한다.
+2. 서버로 올려 SQL로 바꾸고, 건너뛴 행 수를 확인한 뒤 넣는다.
+
+```bash
+scp -i ssh-key-*.key 음식DB.csv opc@146.56.116.44:/tmp/food.csv
+# 서버에서
+cd ~/menupick
+python3 scripts/import-food-references.py /tmp/food.csv > /tmp/food.sql   # 표준 오류에 건너뛴 행 수
+head -c 600 /tmp/food.sql                                                  # 눈으로 한 번 본다
+set -a; . ./.env; set +a
+docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" menupick-mysql mysql -uroot menupick < /tmp/food.sql
+docker exec -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" menupick-mysql \
+  mysql -uroot menupick -e "SELECT COUNT(*), MAX(imported_at) FROM food_references"
+rm /tmp/food.csv /tmp/food.sql
+```
+
+- **다시 넣어도 된다.** 식품코드 기준 upsert라 새 판을 받으면 같은 절차를 반복한다. 행은 지우지 않는다 —
+  메뉴가 가리키고 있다. 끝에 연결된 메뉴의 열량도 새 값으로 맞춘다.
+- 1인분 무게(`식품중량`)나 기준량을 읽을 수 없는 행, 둘의 단위가 다른 행(g/ml)은 건너뛴다.
+  1인분 열량을 지어내지 않기 위해서다.
+- 데이터를 넣기 전에도 메뉴에 직접 적은 열량은 그대로 동작한다.
+
+
 ## 로그
 
 컨테이너 로그는 **호스트 journal로 보낸다**(`docker-compose.prod.yml`의 `x-logging`).

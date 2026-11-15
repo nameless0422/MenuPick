@@ -19,6 +19,7 @@ async function installApi(page: Page, options: { saveGate?: Promise<void>; failO
     const respond = (data: unknown) => route.fulfill({ contentType: "application/json",
       body: JSON.stringify({ success: true, data }) });
     if (p === "/api/v1/auth/refresh") return respond({ accessToken: "history-details-test-token" });
+    if (p === "/api/v1/history/nutrition") return respond({ periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false });
     if (p === "/api/v1/history/summary") return respond({ periodDays: 30, picks: 2, eaten: 1, categories: [], menus: [], forgottenMenus: [] });
     if (p === "/api/v1/history/calendar") return respond({ month: url.searchParams.get("month"), entries: [], truncated: false });
     if (p === "/api/v1/history") return respond({ histories: [

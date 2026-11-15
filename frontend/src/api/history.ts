@@ -40,6 +40,10 @@ export interface HistorySummary {
   source?: HistorySource;
   /** 고른 끼니, 없으면 서버가 시각으로 추정한 끼니. */
   mealSlot?: MealSlot | null;
+  /** 먹은 양(인분). 픽 기록은 1. */
+  servings?: number;
+  /** 열량 추정치(kcal). 메뉴 열량을 모르면 null — 0과 다르다. */
+  kcal?: number | null;
 }
 
 export type HistorySource = "PICK" | "MANUAL";
@@ -72,7 +76,12 @@ export interface ManualMealRequest {
   eatenAt: string;
   mealSlot?: MealSlot;
   memo?: string;
+  /** 먹은 양(인분). 0.5 단위, 0.5~5. 생략하면 1인분. */
+  servings?: number;
 }
+
+/** 폼이 내놓는 양 선택지. 서버는 0.5~5.0, 0.5 단위를 받는다. */
+export const SERVING_OPTIONS: readonly number[] = [0.5, 1, 1.5, 2, 2.5, 3];
 
 /** 추천 없이 먹은 끼니를 남긴다. 하루(먹은 날 기준) 10끼까지다. */
 export async function createManualMeal(request: ManualMealRequest) {

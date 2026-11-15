@@ -79,9 +79,16 @@ public class HistoryService {
             throw new BusinessException(ErrorCode.MANUAL_MEAL_DAILY_LIMIT_EXCEEDED);
         }
 
+        java.math.BigDecimal servings = request.servings();
+        // 0.5 단위만 받는다. 식당 양이 제각각이라 더 촘촘한 값은 정밀해 보이기만 한다(D-082).
+        if (servings != null && servings.multiply(java.math.BigDecimal.valueOf(2)).stripTrailingZeros().scale() > 0) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "양은 0.5인분 단위로 지정해주세요.");
+        }
+
         String memo = request.memo() == null ? null : request.memo().strip();
         History history = historyRepository.save(History.manual(user, menu, restaurant, eatenAt,
-                request.mealSlot(), memo == null || memo.isEmpty() ? null : memo));
+                request.mealSlot(), memo == null || memo.isEmpty() ? null : memo,
+                servings == null ? null : servings.setScale(1, java.math.RoundingMode.UNNECESSARY)));
         return toSummary(history);
     }
 
@@ -296,7 +303,9 @@ public class HistoryService {
                 conditions,
                 history.getMemo(),
                 history.getSource(),
-                history.effectiveMealSlot()
+                history.effectiveMealSlot(),
+                history.getServings(),
+                history.estimatedKcal()
         );
     }
 }

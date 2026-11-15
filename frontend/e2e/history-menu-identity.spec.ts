@@ -17,6 +17,7 @@ test("같은 이름의 예전 메뉴도 이력 ID에 맞는 식당으로 방문 
     });
     if (path === "/api/v1/auth/refresh") return respond({ accessToken: "e2e-token" });
     if (path === "/api/v1/history") return respond({ histories, nextCursor: null, hasNext: false });
+    if (path === "/api/v1/history/nutrition") return respond({ periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false });
     if (path === "/api/v1/history/summary") return respond({
       periodDays: 30, picks: 2, eaten: visits.length, categories: [], menus: [], forgottenMenus: [],
     });

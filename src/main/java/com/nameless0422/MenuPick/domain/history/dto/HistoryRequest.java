@@ -26,8 +26,19 @@ public class HistoryRequest {
             java.time.LocalDateTime eatenAt,
             com.nameless0422.MenuPick.domain.history.MealSlot mealSlot,
             Long restaurantId,
-            @Size(max = 500, message = "메모는 500자 이하여야 합니다.") String memo
-    ) {}
+            @Size(max = 500, message = "메모는 500자 이하여야 합니다.") String memo,
+            /** 먹은 양(인분). 비우면 1인분. 0.5~5.0, 0.5 단위 — 단위 검사는 서비스가 한다. */
+            @jakarta.validation.constraints.DecimalMin(value = "0.5", message = "양은 0.5인분 이상이어야 합니다.")
+            @jakarta.validation.constraints.DecimalMax(value = "5.0", message = "양은 5인분 이하여야 합니다.")
+            java.math.BigDecimal servings
+    ) {
+        /** 양을 받기 전 호출부 호환. */
+        public ManualMealRequest(Long menuId, java.time.LocalDateTime eatenAt,
+                                 com.nameless0422.MenuPick.domain.history.MealSlot mealSlot,
+                                 Long restaurantId, String memo) {
+            this(menuId, eatenAt, mealSlot, restaurantId, memo, null);
+        }
+    }
 
     public record VisitRequest(
             Long restaurantId

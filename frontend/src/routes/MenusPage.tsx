@@ -30,6 +30,7 @@ import { chipAction, chipToggle } from "../a11y/chipToggle";
 import { starToggle } from "../a11y/starToggle";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
 import LinkedRestaurants from "./LinkedRestaurants";
+import MenuNutrition from "./MenuNutrition";
 import MenuTrash from "./MenuTrash";
 import { CATEGORY_PRESETS } from "../constants";
 import { useCompactLayout } from "../a11y/useCompactLayout";
@@ -556,7 +557,9 @@ function MenuFormFields({
   // 기본값 0은 "모르면 막는다"다. menuId가 있으면 부모(MenuForm)가 상세가 도착한 뒤에야
   // 이 컴포넌트를 만들므로 initial은 반드시 있지만, 그 전제가 언젠가 깨지면 0이 나가
   // 서버가 409로 거절한다 — 조용히 덮어쓰는 것보다 거절이 낫다. 그래서 단언(!)을 쓰지 않는다.
-  const [version] = useState(initial?.version ?? 0);
+  // 열량 설정(MenuNutrition)은 따로 저장되며 메뉴 버전을 올린다. 그 새 버전을 받아 두어야
+  // 이 폼의 저장이 "다른 곳에서 먼저 수정했다"로 막히지 않는다.
+  const [version, setVersion] = useState(initial?.version ?? 0);
   const queryClient = useQueryClient();
   const headingRef = useFocusOnMount<HTMLHeadingElement>();
   const weightLabelId = useId();
@@ -679,6 +682,7 @@ function MenuFormFields({
 
       {/* 새 메뉴에는 아직 연결이 있을 수 없다 — 저장 전에는 menuId도 없다. */}
       {menuId != null && <LinkedRestaurants menuId={menuId} />}
+      {menuId != null && <MenuNutrition menuId={menuId} menuName={initial?.name ?? name} onVersionChange={setVersion} />}
 
       {menuId != null && (
         <label className="inline">

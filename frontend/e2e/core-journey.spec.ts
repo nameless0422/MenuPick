@@ -164,6 +164,7 @@ async function installFakeApi(page: Page) {
     if (path === "/api/v1/onboarding" && method === "GET") {
       return api(route, { needed: false, menus: [] });
     }
+    if (path === "/api/v1/history/nutrition" && method === "GET") return api(route, { periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false });
     if (path === "/api/v1/history/summary" && method === "GET") {
       return api(route, {
         periodDays: 30, picks: picked ? 1 : 0, eaten: visited ? 1 : 0,

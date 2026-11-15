@@ -70,6 +70,16 @@ describe("식사 직접 기록", () => {
     expect(screen.getByRole("button", { name: "식사 직접 기록" })).toHaveFocus();
   });
 
+  it("양을 고르면 함께 보내고, 1인분은 기본값이라 보내지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ManualMealForm />);
+    await open(user);
+    await user.selectOptions(screen.getByRole("combobox", { name: "먹은 메뉴" }), "3");
+    await user.selectOptions(screen.getByRole("combobox", { name: "먹은 양" }), "1.5");
+    await user.click(screen.getByRole("button", { name: "기록하기" }));
+    expect(createMock).toHaveBeenCalledWith(expect.objectContaining({ servings: 1.5 }));
+  });
+
   it("끼니는 직접 고르기 전까지 시각을 따라가고, 고른 뒤에는 시각을 바꿔도 유지한다", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ManualMealForm />);

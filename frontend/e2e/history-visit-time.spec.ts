@@ -12,6 +12,7 @@ test("방문 일시를 다른 달로 옮겨 달력·목록을 갱신하고 충�
     const request = route.request(); const url = new URL(request.url());
     const respond = (data: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true, data }) });
     if (url.pathname === "/api/v1/auth/refresh") return respond({ accessToken: "e2e-token" });
+    if (url.pathname === "/api/v1/history/nutrition") return respond({ periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false });
     if (url.pathname === "/api/v1/history/summary") {
       summaryReads += 1;
       return respond({ periodDays: 30, picks: 1, eaten: 1, categories: [], menus: [], forgottenMenus: [] });

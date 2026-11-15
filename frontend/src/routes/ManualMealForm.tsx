@@ -6,6 +6,7 @@ import {
   MEAL_SLOT_LABELS,
   MEAL_SLOTS,
   mealSlotAt,
+  SERVING_OPTIONS,
   type MealSlot,
 } from "../api/history";
 import { fetchMenus } from "../api/menus";
@@ -72,6 +73,7 @@ function ManualMealEditor({ onCancel, onSaved }: { onCancel: () => void; onSaved
   const [chosenSlot, setChosenSlot] = useState<MealSlot | null>(null);
   const slot = chosenSlot ?? mealSlotAt(time || "12:00");
   const [memo, setMemo] = useState("");
+  const [servings, setServings] = useState(1);
   const searchRef = useFocusOnMount<HTMLInputElement>();
 
   const menusQuery = useQuery({
@@ -88,6 +90,8 @@ function ManualMealEditor({ onCancel, onSaved }: { onCancel: () => void; onSaved
       eatenAt: `${date}T${time.length === 5 ? `${time}:00` : time}`,
       mealSlot: slot,
       memo: memo.trim() || undefined,
+      // 1인분은 서버 기본값이라 보내지 않는다 — 양을 모르는 구버전 서버에도 그대로 통한다.
+      servings: servings === 1 ? undefined : servings,
     }),
     onSuccess: (created) => {
       for (const key of ["history", "history-calendar"]) void queryClient.invalidateQueries({ queryKey: [key] });
@@ -149,6 +153,11 @@ function ManualMealEditor({ onCancel, onSaved }: { onCancel: () => void; onSaved
           </label>
         ))}
       </fieldset>
+
+      <label htmlFor={`${id}-servings`}>먹은 양</label>
+      <select id={`${id}-servings`} value={servings} onChange={(event) => setServings(Number(event.target.value))}>
+        {SERVING_OPTIONS.map((option) => <option key={option} value={option}>{option}인분</option>)}
+      </select>
 
       <label htmlFor={`${id}-memo`}>메모 (선택)</label>
       <textarea id={`${id}-memo`} value={memo} maxLength={500} rows={2}

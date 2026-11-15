@@ -25,6 +25,8 @@ async function installApi(page: Page) {
       "/api/v1/history": { histories: [{ id: 1, menuId: 1, menuName: menu.name, restaurantName: "동네 식탁",
         isVisited: true, visitedAt: "2026-10-19T12:30:00", recommendedAt: "2026-10-19T12:00:00",
         memo: null, filterConditions: [], recommendationFeedback: null }], hasNext: false, nextCursor: null },
+      "/api/v1/history/nutrition": { periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false },
+      "/api/v1/menus/1/nutrition": { menuId: 1, kcalPerServing: null, foodReference: null, version: 0 },
       "/api/v1/history/summary": { periodDays: 30, picks: 1, eaten: 1, categories: [], menus: [], forgottenMenus: [] },
       "/api/v1/history/calendar": { month: url.searchParams.get("month"), entries: [], truncated: false },
       "/api/v1/pick": { historyId: 1, menu, restaurants: [], reasons: [] },
