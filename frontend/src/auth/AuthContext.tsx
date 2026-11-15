@@ -17,7 +17,7 @@ interface AuthContextValue {
   sessionExpired: boolean;
   login: (token: string) => void;
   logout: () => Promise<void>;
-  withdraw: () => Promise<void>;
+  withdraw: (password?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -82,8 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 탈퇴 성공 시에만 정리한다 — 요청이 실패하면 계정은 그대로 살아 있으므로
   // 로그인 상태를 유지하고 에러를 화면으로 올려보낸다.
-  async function withdraw() {
-    await apiWithdraw();
+  async function withdraw(password?: string) {
+    await apiWithdraw(password);
     clearSession();
   }
 

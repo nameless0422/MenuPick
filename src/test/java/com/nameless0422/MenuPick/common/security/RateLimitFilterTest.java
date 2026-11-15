@@ -213,6 +213,22 @@ class RateLimitFilterTest {
     }
 
     @Test
+    @DisplayName("탈퇴(POST)도 비밀번호를 대조하므로 인증 버킷에 집계된다")
+    @SuppressWarnings("unchecked")
+    void withdraw_isRateLimited() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/withdraw");
+        request.setRemoteAddr("10.0.0.5");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        given(redisTemplate.execute(any(RedisScript.class), eq(List.of("rl:auth:10.0.0.5")), eq("60")))
+                .willReturn(11L);
+
+        rateLimitFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
     @DisplayName("비밀번호 재설정 확인(POST)과 변경(PATCH)은 같은 IP 버킷을 공유한다")
     @SuppressWarnings("unchecked")
     void passwordChangeAndResetConfirm_shareBucket() throws ServletException, IOException {
