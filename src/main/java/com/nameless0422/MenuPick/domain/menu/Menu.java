@@ -59,6 +59,18 @@ public class Menu extends BaseTimeEntity {
     @Column(nullable = false)
     private int weight = DEFAULT_WEIGHT;
 
+    /**
+     * 1인분 열량(kcal) 추정치. 모르면 null이다 — 0과 다르다.
+     *
+     * <p>기준 음식({@link #foodReferenceId})을 고르면 그 값을 <b>복사</b>해 둔다. 기록·요약이 열량을
+     * 읽을 때마다 참조 테이블을 조인하지 않으려는 것이다(픽 경로의 쿼리 예산). 참조 데이터를 다시
+     * 가져오면 가져오기 스크립트가 연결된 메뉴의 값도 함께 갱신한다. 근거는 D-082.
+     */
+    private Integer kcalPerServing;
+
+    /** 열량을 가져온 기준 음식. 직접 적은 열량이면 null이다. 관계가 아니라 id만 둔다 — 위와 같은 이유. */
+    private Long foodReferenceId;
+
     private LocalDateTime deletedAt;
 
     /**
@@ -125,6 +137,18 @@ public class Menu extends BaseTimeEntity {
      * <p>이미 쉬는 중이어도 그냥 덮어쓴다 — 더 짧게 바꾸는 것도 사용자의 정당한 의사다
      * ("2주 쉬게 했는데 내일부터 다시 보고 싶다"). 기간 상한은 서비스가 검증한다.
      */
+    /** 기준 음식에서 열량을 가져온다. */
+    public void useFoodReference(Long foodReferenceId, int kcalPerServing) {
+        this.foodReferenceId = java.util.Objects.requireNonNull(foodReferenceId);
+        this.kcalPerServing = kcalPerServing;
+    }
+
+    /** 열량을 직접 적는다. null이면 열량을 지운다(모름). */
+    public void setCustomKcal(Integer kcalPerServing) {
+        this.foodReferenceId = null;
+        this.kcalPerServing = kcalPerServing;
+    }
+
     public void pause(LocalDateTime until) {
         this.pausedUntil = until;
     }

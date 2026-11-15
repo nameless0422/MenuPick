@@ -6,6 +6,11 @@ import HistoryPage from "./HistoryPage";
 import { fetchHistories, fetchMenuRestaurants, markVisited, unmarkVisited } from "../api/history";
 import { fetchMenus } from "../api/menus";
 
+vi.mock("../api/nutrition", () => ({
+  fetchNutritionSummary: vi.fn().mockResolvedValue({
+    periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false,
+  }),
+}));
 vi.mock("../api/history", () => ({
   fetchHistories: vi.fn(),
   fetchHistoryCsv: vi.fn(),
@@ -500,7 +505,7 @@ describe("직접 남긴 식사 기록", () => {
       histories: [{
         ...KIMCHI_PICK, id: 11, isVisited: true, restaurantName: null,
         recommendedAt: "2026-08-21T12:10:00", visitedAt: "2026-08-21T12:10:00",
-        source: "MANUAL", mealSlot: "LUNCH",
+        source: "MANUAL", mealSlot: "LUNCH", servings: 1.5, kcal: 735,
       }],
       nextCursor: null, hasNext: false,
     });
@@ -508,6 +513,8 @@ describe("직접 남긴 식사 기록", () => {
     renderWithProviders(<HistoryPage />);
     const card = (await screen.findByText("직접 기록")).closest("li")!;
     expect(within(card).getByText("점심")).toBeVisible();
+    expect(within(card).getByText("1.5인분")).toBeVisible();
+    expect(within(card).getByText("약 735kcal")).toBeVisible();
     expect(within(card).queryByText("방문완료")).not.toBeInTheDocument();
     expect(within(card).queryByText(/방문 시각/)).not.toBeInTheDocument();
 

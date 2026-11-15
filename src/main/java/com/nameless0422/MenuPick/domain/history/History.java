@@ -63,6 +63,13 @@ public class History {
     @Column(length = 500)
     private String memo;
 
+    /**
+     * 먹은 양(인분). 열량은 {@code 메뉴의 1인분 열량 × 이 값}이다. 픽 기록은 1인분으로 본다.
+     * 0.5 단위만 받는다 — 식당 양이 제각각이라 그보다 촘촘한 값은 정밀해 보이기만 한다.
+     */
+    @Column(nullable = false, precision = 3, scale = 1)
+    private java.math.BigDecimal servings = java.math.BigDecimal.ONE;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -85,6 +92,16 @@ public class History {
      * 이 컬럼을 기준으로 돈다. 따로 두면 "어제 먹은 것"이 그 쿼리들에서 빠진다.
      */
     public static History manual(User user, Menu menu, Restaurant restaurant,
+                                 LocalDateTime eatenAt, MealSlot mealSlot, String memo,
+                                 java.math.BigDecimal servings) {
+        History history = manual(user, menu, restaurant, eatenAt, mealSlot, memo);
+        if (servings != null) {
+            history.servings = servings;
+        }
+        return history;
+    }
+
+    public static History manual(User user, Menu menu, Restaurant restaurant,
                                  LocalDateTime eatenAt, MealSlot mealSlot, String memo) {
         History history = new History(user, menu, restaurant, Objects.requireNonNull(eatenAt));
         history.source = HistorySource.MANUAL;
@@ -92,6 +109,16 @@ public class History {
         history.markVisited(eatenAt);
         history.memo = memo;
         return history;
+    }
+
+    /**
+     * 이 끼니의 열량 추정치. 메뉴 열량을 모르거나 메뉴가 없으면 null이다.
+     * 메뉴의 현재 값으로 계산한다 — 나중에 메뉴 열량을 고치면 지난 기록의 추정치도 바뀐다(D-082).
+     */
+    public Integer estimatedKcal() {
+        if (menu == null || menu.getKcalPerServing() == null) return null;
+        return servings.multiply(java.math.BigDecimal.valueOf(menu.getKcalPerServing()))
+                .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
     }
 
     public boolean isManual() {

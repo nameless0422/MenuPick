@@ -1,0 +1,24 @@
+/* 메뉴 열량 설정 (D-082). 메뉴 화면에서 쓰므로 기록 화면 CSS에 기대지 않는다. */
+.menu-nutrition-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.menu-nutrition-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.menu-nutrition-results {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.menu-nutrition-results button {
+  width: 100%;
+  text-align: left;
+}

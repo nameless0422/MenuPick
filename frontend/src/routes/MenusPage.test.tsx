@@ -18,6 +18,11 @@ import {
 } from "../api/menus";
 import { searchTags } from "../api/tags";
 
+vi.mock("../api/nutrition", () => ({
+  fetchMenuNutrition: vi.fn().mockResolvedValue({ menuId: 1, kcalPerServing: null, foodReference: null, version: 0 }),
+  searchFoodReferences: vi.fn().mockResolvedValue([]),
+  updateMenuNutrition: vi.fn(),
+}));
 vi.mock("../api/menus", () => ({
   batchUpdateExclusions: vi.fn(),
   createBulkMenus: vi.fn(),

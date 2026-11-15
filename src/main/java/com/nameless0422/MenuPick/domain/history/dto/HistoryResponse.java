@@ -35,8 +35,22 @@ public class HistoryResponse {
             /** 픽에서 생긴 기록인지 직접 적은 끼니인지. 직접 기록은 방문 취소가 없다. */
             HistorySource source,
             /** 고른 끼니, 없으면 시각으로 추정한 끼니. 늘 채워져 있다. */
-            MealSlot mealSlot
+            MealSlot mealSlot,
+            /** 먹은 양(인분). 픽 기록은 1. */
+            java.math.BigDecimal servings,
+            /** 열량 추정치(kcal). 메뉴 열량을 모르면 null이다 — 0과 다르다(D-082). */
+            Integer kcal
     ) {
+        /** 열량 전 호출부 호환. */
+        public HistorySummary(Long id, Long menuId, String menuName, String restaurantName, boolean isVisited,
+                              LocalDateTime recommendedAt, LocalDateTime visitedAt,
+                              RecommendationFeedback recommendationFeedback,
+                              List<FilterCondition> filterConditions, String memo,
+                              HistorySource source, MealSlot mealSlot) {
+            this(id, menuId, menuName, restaurantName, isVisited, recommendedAt, visitedAt,
+                    recommendationFeedback, filterConditions, memo, source, mealSlot, java.math.BigDecimal.ONE, null);
+        }
+
         /** 끼니 구분 전 호출부 호환. 픽 기록으로 보고 끼니는 비운다. */
         public HistorySummary(Long id, Long menuId, String menuName, String restaurantName, boolean isVisited,
                               LocalDateTime recommendedAt, LocalDateTime visitedAt,

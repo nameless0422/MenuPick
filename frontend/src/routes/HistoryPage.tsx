@@ -20,6 +20,7 @@ import HistoryMemo from "./HistoryMemo";
 import HistoryVisitTime from "./HistoryVisitTime";
 import HistoryExport from "./HistoryExport";
 import ManualMealForm from "./ManualMealForm";
+import NutritionSummary from "./NutritionSummary";
 import { useCompactLayout } from "../a11y/useCompactLayout";
 import MobileSection from "../components/MobileSection";
 
@@ -129,6 +130,7 @@ export default function HistoryPage() {
 
   const overview = <div className="history-overview">
     <MobileSection title="식사 통계"><EatingSummary /></MobileSection>
+    <MobileSection title="열량 기록"><NutritionSummary /></MobileSection>
     <MobileSection title="방문 달력"><VisitCalendar /></MobileSection>
   </div>;
 
@@ -264,6 +266,9 @@ export default function HistoryPage() {
                 <span className="chip">미방문</span>
               )}
               {history.mealSlot && <span className="chip">{MEAL_SLOT_LABELS[history.mealSlot]}</span>}
+              {history.servings != null && history.servings !== 1 && <span className="chip">{history.servings}인분</span>}
+              {/* 추정치라 "약"을 붙인다. 모르면 아무것도 띄우지 않는다 — 0kcal로 보이면 틀린 말이다. */}
+              {history.kcal != null && <span className="chip">약 {history.kcal}kcal</span>}
             </div>
 
             <p className="history-restaurant">

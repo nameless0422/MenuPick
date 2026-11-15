@@ -226,3 +226,38 @@
   gap: 0.25rem;
   align-items: center;
 }
+
+/* 열량 기록 (D-082). 막대는 장식이고 값은 글자가 말한다. */
+.nutrition-days {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.nutrition-days li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.nutrition-bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  overflow: hidden;
+}
+
+.nutrition-bar > span {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.nutrition-day-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

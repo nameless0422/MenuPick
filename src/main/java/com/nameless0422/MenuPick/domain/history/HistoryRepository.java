@@ -310,6 +310,29 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
                                  @Param("from") LocalDateTime from,
                                  @Param("to") LocalDateTime to);
 
+    /**
+     * 기간 내 내가 먹은 끼니의 열량 계산 재료. 먹은 시각은 방문 시각, 없으면(수락만 했으면) 뽑은 시각이다.
+     * "먹었다"의 정의는 위 요약과 같다. 메뉴가 지워졌어도 남은 열량 값으로 센다 — 먹은 사실은 남는다.
+     */
+    @Query("select coalesce(h.visitedAt, h.recommendedAt) as eatenAt, h.mealSlot as mealSlot, " +
+            "h.recommendedAt as recommendedAt, h.servings as servings, m.kcalPerServing as kcalPerServing " +
+            "from History h left join h.menu m " +
+            "where h.user.id = :userId and h.recommendedAt >= :since " +
+            "and (h.isVisited = true or h.recommendationFeedback = :accepted) " +
+            "order by h.recommendedAt desc")
+    List<NutritionRow> findMyEatenNutritionSince(@Param("userId") Long userId,
+                                                 @Param("since") LocalDateTime since,
+                                                 @Param("accepted") RecommendationFeedback accepted,
+                                                 Pageable pageable);
+
+    interface NutritionRow {
+        LocalDateTime getEatenAt();
+        MealSlot getMealSlot();
+        LocalDateTime getRecommendedAt();
+        java.math.BigDecimal getServings();
+        Integer getKcalPerServing();
+    }
+
     /** 사용자별 첫 픽 시각. 7일 리텐션 코호트를 만드는 근거. */
     @Query("select h.user.id, min(h.recommendedAt) from History h " +
             "where h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK group by h.user.id")
