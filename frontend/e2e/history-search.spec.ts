@@ -15,6 +15,7 @@ test("식당 이름으로 검색한 기록을 더 보고 방문 처리한 뒤 �
     const url = new URL(request.url());
     const respond = (data: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true, data }) });
     if (url.pathname === "/api/v1/auth/refresh") return respond({ accessToken: "e2e-token" });
+    if (url.pathname === "/api/v1/history/nutrition") return respond({ periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false });
     if (url.pathname === "/api/v1/history/summary") return respond({ periodDays: 30, picks: 0, eaten: 0, categories: [], menus: [], forgottenMenus: [] });
     if (url.pathname === "/api/v1/history/calendar") return respond({ month: url.searchParams.get("month"), entries: [], truncated: false });
     if (url.pathname === "/api/v1/history/42/visit" && request.method() === "PATCH") {

@@ -14,6 +14,7 @@ test("선택한 조건의 다음 페이지 기록도 CSV로 받고 초과 오류
       contentType: "application/json", body: JSON.stringify({ success: true, data }),
     });
     if (url.pathname === "/api/v1/auth/refresh") return respond({ accessToken: "e2e-token" });
+    if (url.pathname === "/api/v1/history/nutrition") return respond({ periodDays: 7, days: [], slots: [], totalKcal: 0, knownMeals: 0, unknownMeals: 0, averageKcal: null, truncated: false });
     if (url.pathname === "/api/v1/history/summary") return respond({ periodDays: 30, picks: 0, eaten: 0, categories: [], menus: [], forgottenMenus: [] });
     if (url.pathname === "/api/v1/history/calendar") return respond({ month: url.searchParams.get("month"), entries: [], truncated: false });
     if (url.pathname === "/api/v1/history") {
