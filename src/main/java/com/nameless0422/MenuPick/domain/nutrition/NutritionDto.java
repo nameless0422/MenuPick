@@ -38,8 +38,16 @@ public final class NutritionDto {
      */
     public record MenuNutrition(Long menuId, Integer kcalPerServing, FoodReferenceSummary foodReference, long version) {}
 
-    /** 하루치. {@code unknownMeals}는 메뉴 열량을 몰라 합계에서 빠진 끼니 수다. */
-    public record DayNutrition(LocalDate date, int kcal, int meals, int unknownMeals) {}
+    /**
+     * 하루치. {@code unknownMeals}는 메뉴 열량을 몰라 합계에서 빠진 끼니 수다.
+     * {@code slots}는 그날 열량을 끼니별로 나눈 것으로, 늘 네 끼니가 {@link MealSlot} 순서로 온다
+     * (그래프가 막대를 끼니별로 쌓는다). 열량을 모르는 끼니는 어느 끼니에도 들어가지 않는다.
+     */
+    public record DayNutrition(LocalDate date, int kcal, int meals, int unknownMeals, List<SlotNutrition> slots) {
+        public DayNutrition(LocalDate date, int kcal, int meals, int unknownMeals) {
+            this(date, kcal, meals, unknownMeals, List.of());
+        }
+    }
 
     public record SlotNutrition(MealSlot slot, int kcal, int meals) {}
 

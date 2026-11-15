@@ -192,8 +192,16 @@ class NutritionIntegrationTest extends AbstractIntegrationTest {
         assertThat(summary.periodDays()).isEqualTo(7);
         assertThat(summary.days()).hasSize(7);
         assertThat(summary.days().get(0).date()).isEqualTo(TODAY.minusDays(6));
-        assertThat(summary.days().get(6)).isEqualTo(new NutritionDto.DayNutrition(TODAY, 750, 2, 1));
-        assertThat(summary.days().get(4)).isEqualTo(new NutritionDto.DayNutrition(TODAY.minusDays(2), 600, 2, 0));
+        assertThat(summary.days().get(6)).extracting("date", "kcal", "meals", "unknownMeals")
+                .containsExactly(TODAY, 750, 2, 1);
+        assertThat(summary.days().get(4)).extracting("date", "kcal", "meals", "unknownMeals")
+                .containsExactly(TODAY.minusDays(2), 600, 2, 0);
+        assertThat(summary.days().get(6).slots()).as("모르는 저녁은 어느 끼니에도 안 들어간다")
+                .extracting(NutritionDto.SlotNutrition::kcal).containsExactly(0, 750, 0, 0);
+        assertThat(summary.days().get(4).slots())
+                .extracting(NutritionDto.SlotNutrition::kcal).containsExactly(0, 300, 300, 0);
+        assertThat(summary.days().get(0).slots()).as("기록 없는 날도 네 끼니가 온다")
+                .extracting(NutritionDto.SlotNutrition::meals).containsExactly(0, 0, 0, 0);
         assertThat(summary.totalKcal()).isEqualTo(1350);
         assertThat(summary.knownMeals()).isEqualTo(3);
         assertThat(summary.unknownMeals()).isEqualTo(1);

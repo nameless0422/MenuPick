@@ -25,8 +25,9 @@ export interface MenuNutrition {
   version: number;
 }
 
-export interface DayNutrition { date: string; kcal: number; meals: number; unknownMeals: number; }
 export interface SlotNutrition { slot: MealSlot; kcal: number; meals: number; }
+/** 하루치. `slots`는 그날 열량의 끼니별 몫이다(네 끼니, 순서 고정). 예전 서버는 주지 않는다. */
+export interface DayNutrition { date: string; kcal: number; meals: number; unknownMeals: number; slots?: SlotNutrition[]; }
 
 /** 기간 열량 요약. 전부 추정치다. `averageKcal`은 열량을 아는 끼니가 있던 날로만 나눈 값이고, 없으면 null. */
 export interface NutritionSummary {

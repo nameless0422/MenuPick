@@ -635,6 +635,12 @@ input[type='radio'] {
   gap: 6px;
 }
 
+/* 목록(ul)으로 쓸 때 브라우저 기본 글머리표와 들여쓰기를 지운다. */
+ul.chip-row {
+  list-style: none;
+  padding-left: 0;
+}
+
 .chip {
   font-size: var(--fs-xs);
   font-weight: 500;
