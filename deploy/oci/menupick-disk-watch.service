@@ -1,0 +1,14 @@
+[Unit]
+Description=MenuPick 디스크 사용률 감시
+# 감시 자체가 실패하면(알림 전송 실패 등) 그것도 알린다.
+OnFailure=menupick-alert@%n.service
+
+[Service]
+Type=oneshot
+
+# /var/lib/menupick에 상태를 쓰고 /etc/menupick/alert.env를 읽으므로 root로 돈다.
+# 리포의 scripts/check-disk.sh가 원본이고 이건 사본이다 — 고치면 다시 설치한다.
+ExecStart=/usr/local/bin/menupick-disk-watch
+
+StandardOutput=journal
+StandardError=journal

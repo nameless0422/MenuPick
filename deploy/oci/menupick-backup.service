@@ -25,6 +25,15 @@ User=opc
 # 다시 설치해야 한다.
 ExecStart=/usr/local/bin/menupick-backup
 
+# 덤프가 검증까지 통과했을 때만 서버 밖(OCI Object Storage)으로 한 벌 올린다.
+# ExecStartPost는 ExecStart가 성공해야 돌고, 실패하면 유닛이 실패해 위의 OnFailure 알림이 간다.
+# /etc/menupick/offsite.env가 없으면 경고만 남기고 성공으로 끝난다(아직 버킷을 안 만든 서버).
+#
+# 이 단계만 root로 돈다(`+`). 업로드 URL은 자격증명이라 alert.env와 같이 0700 root인
+# /etc/menupick 아래에 0600으로 둔다 — opc로 돌면 파일이 있는지조차 볼 수 없어, 설정을
+# 넣어 놓고도 "설정 없음"으로 조용히 건너뛰게 된다. 덤프는 여전히 opc로 돈다.
+ExecStartPost=+/usr/local/bin/menupick-offsite
+
 # $HOME에 기대지 않는다. systemd가 User= 에 대해 HOME을 채워 주기는 하지만,
 # 백업 대상 경로가 실행 환경에 따라 달라지는 것은 이 스크립트에서 특히 위험하다 —
 # 엉뚱한 곳에 쓰고도 "성공"으로 끝날 수 있다.
