@@ -91,23 +91,23 @@ public class NutritionService {
         }
 
         Map<LocalDate, int[]> byDay = new LinkedHashMap<>();
+        Map<LocalDate, Map<MealSlot, int[]>> byDaySlot = new LinkedHashMap<>();
         for (LocalDate day = first; !day.isAfter(today); day = day.plusDays(1)) {
             byDay.put(day, new int[3]); // kcal, 끼니 수, 열량 모르는 끼니 수
+            byDaySlot.put(day, emptySlots());
         }
-        Map<MealSlot, int[]> bySlot = new EnumMap<>(MealSlot.class);
-        for (MealSlot slot : MealSlot.values()) {
-            bySlot.put(slot, new int[2]); // kcal, 열량을 아는 끼니 수
-        }
+        Map<MealSlot, int[]> bySlot = emptySlots();
 
         int total = 0;
         int known = 0;
         int unknown = 0;
         for (HistoryRepository.NutritionRow row : rows) {
             // 먹은 날로 센다. 뽑은 날은 기간 안인데 먹은 날이 밖이면(미래 시각 같은 이상값) 뽑은 날로 센다.
-            int[] dayTotals = byDay.get(row.getEatenAt().toLocalDate());
-            if (dayTotals == null) {
-                dayTotals = byDay.get(row.getRecommendedAt().toLocalDate());
+            LocalDate day = row.getEatenAt().toLocalDate();
+            if (!byDay.containsKey(day)) {
+                day = row.getRecommendedAt().toLocalDate();
             }
+            int[] dayTotals = byDay.get(day);
             if (dayTotals == null) {
                 continue;
             }
@@ -123,6 +123,9 @@ public class NutritionService {
                     ? row.getMealSlot() : MealSlot.at(row.getEatenAt().toLocalTime());
             bySlot.get(slot)[0] += kcal;
             bySlot.get(slot)[1]++;
+            int[] daySlot = byDaySlot.get(day).get(slot);
+            daySlot[0] += kcal;
+            daySlot[1]++;
             total += kcal;
             known++;
         }
@@ -131,15 +134,29 @@ public class NutritionService {
         int daysWithKnown = 0;
         for (Map.Entry<LocalDate, int[]> entry : byDay.entrySet()) {
             int[] v = entry.getValue();
-            dayList.add(new NutritionDto.DayNutrition(entry.getKey(), v[0], v[1], v[2]));
+            dayList.add(new NutritionDto.DayNutrition(entry.getKey(), v[0], v[1], v[2],
+                    toSlotList(byDaySlot.get(entry.getKey()))));
             if (v[1] > v[2]) daysWithKnown++;
         }
-        List<NutritionDto.SlotNutrition> slotList = bySlot.entrySet().stream()
-                .map(entry -> new NutritionDto.SlotNutrition(entry.getKey(), entry.getValue()[0], entry.getValue()[1]))
-                .toList();
+        List<NutritionDto.SlotNutrition> slotList = toSlotList(bySlot);
         // 기록이 없는 날을 0kcal로 넣으면 "적게 먹었다"는 틀린 이야기가 된다. 아는 끼니가 있던 날로만 나눈다.
         Integer average = daysWithKnown == 0 ? null : Math.round((float) total / daysWithKnown);
         return new NutritionDto.NutritionSummary(days, dayList, slotList, total, known, unknown, average, truncated);
+    }
+
+    /** 끼니마다 [열량, 열량을 아는 끼니 수]. */
+    private static Map<MealSlot, int[]> emptySlots() {
+        Map<MealSlot, int[]> slots = new EnumMap<>(MealSlot.class);
+        for (MealSlot slot : MealSlot.values()) {
+            slots.put(slot, new int[2]);
+        }
+        return slots;
+    }
+
+    private static List<NutritionDto.SlotNutrition> toSlotList(Map<MealSlot, int[]> slots) {
+        return slots.entrySet().stream()
+                .map(entry -> new NutritionDto.SlotNutrition(entry.getKey(), entry.getValue()[0], entry.getValue()[1]))
+                .toList();
     }
 
     private static Integer kcalOf(HistoryRepository.NutritionRow row) {

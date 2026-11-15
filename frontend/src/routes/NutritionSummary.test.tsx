@@ -1,18 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import { fetchNutritionSummary, type NutritionSummary as Summary } from "../api/nutrition";
 import NutritionSummary from "./NutritionSummary";
+import { niceTicks } from "./nutritionChartScale";
 
 vi.mock("../api/nutrition", () => ({ fetchNutritionSummary: vi.fn() }));
 const fetchMock = vi.mocked(fetchNutritionSummary);
+
+function slotsOf(breakfast: number, lunch: number, dinner: number, snack: number) {
+  return ([["BREAKFAST", breakfast], ["LUNCH", lunch], ["DINNER", dinner], ["SNACK", snack]] as const)
+    .map(([slot, kcal]) => ({ slot, kcal, meals: kcal > 0 ? 1 : 0 }));
+}
 
 const summary = (overrides: Partial<Summary> = {}): Summary => ({
   periodDays: 3,
   days: [
     { date: "2026-10-07", kcal: 0, meals: 0, unknownMeals: 0 },
-    { date: "2026-10-08", kcal: 600, meals: 2, unknownMeals: 0 },
-    { date: "2026-10-09", kcal: 750, meals: 2, unknownMeals: 1 },
+    { date: "2026-10-08", kcal: 600, meals: 2, unknownMeals: 0, slots: slotsOf(0, 300, 300, 0) },
+    { date: "2026-10-09", kcal: 750, meals: 2, unknownMeals: 1, slots: slotsOf(0, 750, 0, 0) },
   ],
   slots: [
     { slot: "BREAKFAST", kcal: 0, meals: 0 },
@@ -27,21 +34,58 @@ const summary = (overrides: Partial<Summary> = {}): Summary => ({
 beforeEach(() => fetchMock.mockReset().mockResolvedValue(summary()));
 
 describe("열량 기록", () => {
-  it("하루 평균과 날짜별 값을 추정치로 보여 주고, 기록 없는 날은 0kcal이 아니라 기록 없음이다", async () => {
+  it("하루 평균과 날짜·끼니별 값을 표로도 말하고, 기록 없는 날은 0kcal이 아니라 기록 없음이다", async () => {
     renderWithProviders(<NutritionSummary />);
     expect(await screen.findByText(/하루 평균/)).toHaveTextContent("약 675kcal");
-    const days = within(screen.getByRole("list", { name: "최근 3일 하루 열량" })).getAllByRole("listitem");
+    const rows = within(screen.getByRole("table", { name: /최근 3일 하루 열량/ })).getAllByRole("row");
+    expect(within(rows[0]).getAllByRole("columnheader").map((th) => th.textContent))
+      .toEqual(["날짜", "아침", "점심", "저녁", "간식", "합계", "모름"]);
     // 2026-10-07은 수요일이다. 시간대와 무관해야 한다.
-    expect(days[0]).toHaveTextContent("10/7 (수)기록 없음");
-    expect(days[1]).toHaveTextContent("약 600kcal");
-    expect(days[2]).toHaveTextContent("약 750kcal · 모름 1끼");
+    expect(rows[1]).toHaveTextContent("10/7 (수)기록 없음");
+    expect(within(rows[2]).getAllByRole("cell").map((td) => td.textContent)).toEqual(["–", "300", "300", "–", "600", "–"]);
+    expect(within(rows[3]).getAllByRole("cell").map((td) => td.textContent)).toEqual(["–", "750", "–", "–", "750", "1끼"]);
+  });
+
+  it("그래프는 끼니별로 쌓고, 기록 없는 날은 막대를 그리지 않으며, 모르는 끼니가 있던 날에 ?를 단다", async () => {
+    const { container } = renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    const svg = container.querySelector(".nutrition-chart svg")!;
+    expect(svg).toHaveAttribute("aria-hidden", "true");
+    expect(svg.querySelectorAll(".nutrition-seg-lunch")).toHaveLength(2);
+    expect(svg.querySelectorAll(".nutrition-seg-dinner")).toHaveLength(1);
+    expect(svg.querySelectorAll(".nutrition-seg-breakfast, .nutrition-seg-snack")).toHaveLength(0);
+    expect([...svg.querySelectorAll(".nutrition-chart-unknown")].map((el) => el.textContent)).toEqual(["?"]);
+    expect(svg.querySelector(".nutrition-chart-average")).not.toBeNull();
+    expect(within(screen.getByRole("list", { name: "그래프 색: 끼니" })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["아침", "점심", "저녁", "간식", "? 모르는 끼니 있음"]);
+
+    fireEvent.mouseEnter(svg.querySelectorAll(".nutrition-chart-hit")[1]);
+    expect(container.querySelector(".nutrition-chart-tooltip")).toHaveTextContent("10/8 (목)약 600kcal점심 300저녁 300");
+  });
+
+  it("7일과 30일을 바꿔 본다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    expect(fetchMock).toHaveBeenLastCalledWith(7);
+    expect(screen.getByRole("button", { name: "열량 7일" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "열량 30일" }));
+    expect(fetchMock).toHaveBeenLastCalledWith(30);
+    expect(screen.getByRole("button", { name: "열량 30일" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("예전 서버처럼 끼니별 몫이 없으면 합계 한 조각으로 그린다", async () => {
+    fetchMock.mockResolvedValue(summary({ days: [{ date: "2026-10-09", kcal: 500, meals: 1, unknownMeals: 0 }] }));
+    const { container } = renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    expect(container.querySelectorAll(".nutrition-seg-total")).toHaveLength(1);
   });
 
   it("먹은 끼니만 끼니별로 보여 주고, 모르는 끼니가 있으면 메뉴에 열량을 정하러 가게 한다", async () => {
     renderWithProviders(<NutritionSummary />);
     const slots = await screen.findByRole("list", { name: "끼니별 열량" });
     expect(within(slots).getAllByRole("listitem").map((li) => li.textContent))
-      .toEqual(["점심 약 1050kcal", "저녁 약 300kcal"]);
+      .toEqual(["점심 약 1,050kcal", "저녁 약 300kcal"]);
     expect(screen.getByText(/열량을 모르는 끼니 1번은 합계에서 빠졌어요/)).toBeVisible();
     expect(screen.getByRole("link", { name: "메뉴에 열량 정하기 →" })).toHaveAttribute("href", "/menus");
   });
@@ -52,4 +96,10 @@ describe("열량 기록", () => {
     expect(await screen.findByText(/2끼 모두 열량을 모르는 메뉴예요/)).toBeVisible();
     expect(screen.queryByText(/하루 평균/)).not.toBeInTheDocument();
   });
+});
+
+describe("niceTicks", () => {
+  it.each([
+    [0, [0, 500, 1000]], [1000, [0, 500, 1000]], [1010, [0, 500, 1000, 1500]], [2380, [0, 1000, 2000, 3000]],
+  ])("%d → %j", (max, ticks) => expect(niceTicks(max)).toEqual(ticks));
 });

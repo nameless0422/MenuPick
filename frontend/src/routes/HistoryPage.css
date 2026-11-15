@@ -227,37 +227,183 @@
   align-items: center;
 }
 
-/* 열량 기록 (D-082). 막대는 장식이고 값은 글자가 말한다. */
-.nutrition-days {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0;
-  display: grid;
+/* 열량 기록 (D-082, D-083). 끼니 색은 dataviz 기본 팔레트 1~4번(인접 쌍 색각 검증 통과).
+   밝은 화면에서 점심·간식 색은 대비가 3:1 아래라 "숫자로 보기" 표가 값을 대신 말한다. */
+.nutrition-summary {
+  --slot-breakfast: #2a78d6;
+  --slot-lunch: #eb6834;
+  --slot-dinner: #1baf7a;
+  --slot-snack: #eda100;
+  --slot-total: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  .nutrition-summary {
+    --slot-breakfast: #3987e5;
+    --slot-lunch: #d95926;
+    --slot-dinner: #199e70;
+    --slot-snack: #c98500;
+  }
+}
+
+.nutrition-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.nutrition-period {
+  display: inline-flex;
   gap: 0.25rem;
 }
 
-.nutrition-days li {
-  display: grid;
-  grid-template-columns: 5.5rem 1fr auto;
-  gap: 0.5rem;
-  align-items: center;
+.nutrition-period button[aria-pressed="true"] {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--text-h);
+  font-weight: 600;
 }
 
-.nutrition-bar {
-  height: 0.5rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  overflow: hidden;
+.nutrition-chart {
+  position: relative;
+  margin: 0.5rem 0;
+  min-width: 0;
 }
 
-.nutrition-bar > span {
+.nutrition-chart svg {
   display: block;
-  height: 100%;
-  background: currentColor;
-  opacity: 0.55;
+  overflow: visible;
 }
 
-.nutrition-day-value {
+.nutrition-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.nutrition-chart-axis {
+  stroke: var(--field-border);
+  stroke-width: 1;
+}
+
+.nutrition-chart-tick {
+  fill: var(--text);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.nutrition-chart-unknown {
+  fill: var(--text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.nutrition-chart-average {
+  stroke: var(--text-h);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+
+.nutrition-chart-average-label {
+  fill: var(--text-h);
+  font-size: 0.6875rem;
+}
+
+.nutrition-chart-hit {
+  fill: transparent;
+}
+
+.nutrition-chart g.is-dimmed .nutrition-seg {
+  opacity: 0.35;
+}
+
+.nutrition-seg-breakfast { fill: var(--slot-breakfast); background: var(--slot-breakfast); }
+.nutrition-seg-lunch { fill: var(--slot-lunch); background: var(--slot-lunch); }
+.nutrition-seg-dinner { fill: var(--slot-dinner); background: var(--slot-dinner); }
+.nutrition-seg-snack { fill: var(--slot-snack); background: var(--slot-snack); }
+.nutrition-seg-total { fill: var(--slot-total); background: var(--slot-total); }
+
+.nutrition-chart-tooltip {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text-h);
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.nutrition-chart-tooltip strong {
+  font-weight: 600;
+}
+
+.nutrition-swatch {
+  display: inline-block;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 2px;
+  margin-right: 0.25rem;
+  vertical-align: baseline;
+}
+
+.nutrition-legend {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.nutrition-legend b {
+  margin-right: 0.25rem;
+}
+
+.nutrition-table summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+
+.nutrition-table-scroll {
+  overflow-x: auto;
+}
+
+.nutrition-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.nutrition-table caption {
+  text-align: left;
+  padding: 0.25rem 0;
+  color: var(--text);
+}
+
+.nutrition-table th,
+.nutrition-table td {
+  padding: 0.25rem 0.375rem;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.nutrition-table th[scope="row"],
+.nutrition-table thead th:first-child {
+  text-align: left;
+}
+
+.nutrition-table td[colspan] {
+  text-align: left;
+  color: var(--text);
 }
