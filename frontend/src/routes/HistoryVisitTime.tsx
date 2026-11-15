@@ -88,7 +88,8 @@ function VisitTimeForm({ initial, label, onClose, onSaved, onBusy }: {
           setClock(event.target.value.slice(11));
         }} />
     </>}
-    <p id={`${id}-help`}>추천 기록이 생성된 날짜부터 조회 시점의 현재 시각까지 입력할 수 있습니다. 식당·메모·추천 피드백은 유지됩니다.</p>
+    {/* 범위는 서버가 준다. 픽 기록은 추천일부터, 직접 기록은 최근 1년부터다 — 문구가 한쪽만 말하면 틀린다. */}
+    <p id={`${id}-help`}>{original.earliestVisitAt.slice(0, 10)}부터 조회 시점의 현재 시각까지 입력할 수 있습니다. 식당·메모·추천 피드백은 유지됩니다.</p>
     {update.isError && <p role="alert" className="error">{apiErrorMessage(update.error)}</p>}
     {conflict && <p role="status">입력한 일시는 유지했습니다. 편집을 취소한 뒤 다시 열어 최신 기록을 확인하세요.</p>}
     <div className="card-actions">

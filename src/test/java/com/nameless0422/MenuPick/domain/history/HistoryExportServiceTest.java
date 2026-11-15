@@ -25,12 +25,14 @@ class HistoryExportServiceTest {
         when(row.getRecommendedAt()).thenReturn(LocalDateTime.of(2026, 10, 16, 12, 0));
         when(row.getMenuName()).thenReturn("국수, \"곱빼기\"");
         when(row.getMemo()).thenReturn("첫 줄\r\n둘째 줄");
+        // 픽 기록은 끼니가 비어 있어 시각(12:00)으로 추정한다.
+        when(row.getSource()).thenReturn(HistorySource.PICK);
         when(histories.findExportRows(anyLong(), any(), any(), any(), any())).thenReturn(List.of(row));
         var file = service.export(1L, 30, false, "  100%_!  ");
         assertThat(file.filename()).isEqualTo("menupick-history-2026-10-16.csv");
         String csv = new String(file.content(), StandardCharsets.UTF_8);
         assertThat(csv).startsWith("\uFEFF\"기록 ID\"").endsWith(
-                "\"7\",\"2026-10-16 12:00:00\",\"국수, \"\"곱빼기\"\"\",\"\",\"미방문\",\"\",\"\",\"첫 줄\r\n둘째 줄\"\r\n");
+                "\"7\",\"2026-10-16 12:00:00\",\"국수, \"\"곱빼기\"\"\",\"\",\"미방문\",\"\",\"\",\"첫 줄\r\n둘째 줄\",\"추천\",\"점심\"\r\n");
         verify(histories).findExportRows(eq(1L), eq(LocalDateTime.of(2026, 9, 16, 12, 0)),
                 eq(false), eq("%100!%!_!!%"), argThat(p -> p.getPageSize() == 1001));
     }
@@ -44,7 +46,7 @@ class HistoryExportServiceTest {
     @Test void emptyExportStillContainsHeaderAndDefaultPeriod() {
         when(histories.findExportRows(anyLong(), any(), any(), any(), any())).thenReturn(List.of());
         assertThat(new String(service.export(1L, null, null, " ").content(), StandardCharsets.UTF_8))
-                .isEqualTo("\uFEFF\"기록 ID\",\"추천 시각(KST)\",\"메뉴\",\"식당\",\"방문 여부\",\"방문 시각(KST)\",\"추천 피드백\",\"메모\"\r\n");
+                .isEqualTo("\uFEFF\"기록 ID\",\"추천 시각(KST)\",\"메뉴\",\"식당\",\"방문 여부\",\"방문 시각(KST)\",\"추천 피드백\",\"메모\",\"구분\",\"끼니\"\r\n");
         verify(histories).findExportRows(eq(1L), eq(LocalDateTime.of(2026, 10, 9, 12, 0)),
                 isNull(), isNull(), any(Pageable.class));
     }

@@ -29,15 +29,33 @@ public class HistoryExportService {
                 PageRequest.of(0, MAX_ROWS + 1));
         if (rows.size() > MAX_ROWS) throw new BusinessException(ErrorCode.HISTORY_EXPORT_LIMIT_EXCEEDED);
         StringBuilder csv = new StringBuilder("\uFEFF");
-        appendRow(csv, "기록 ID", "추천 시각(KST)", "메뉴", "식당", "방문 여부", "방문 시각(KST)", "추천 피드백", "메모");
+        // 새 열은 맨 뒤에 붙인다. 기존 열 위치에 기대 가공하던 스프레드시트가 깨지지 않게 한다.
+        appendRow(csv, "기록 ID", "추천 시각(KST)", "메뉴", "식당", "방문 여부", "방문 시각(KST)", "추천 피드백", "메모",
+                "구분", "끼니");
         for (var row : rows) {
             appendRow(csv, row.getId().toString(), time(row.getRecommendedAt()), row.getMenuName(),
                     row.getRestaurantName(), row.getVisited() ? "방문" : "미방문", time(row.getVisitedAt()),
                     row.getFeedback() == null ? "" : row.getFeedback() == RecommendationFeedback.ACCEPTED ? "수락" : "거절",
-                    row.getMemo());
+                    row.getMemo(),
+                    row.getSource() == HistorySource.MANUAL ? "직접 기록" : "추천",
+                    mealSlotLabel(row));
         }
         return new ExportFile("menupick-history-" + LocalDate.now(clock) + ".csv",
                 csv.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String mealSlotLabel(HistoryRepository.ExportRow row) {
+        MealSlot slot = row.getMealSlot();
+        if (slot == null) {
+            LocalDateTime at = row.getVisitedAt() != null ? row.getVisitedAt() : row.getRecommendedAt();
+            slot = MealSlot.at(at.toLocalTime());
+        }
+        return switch (slot) {
+            case BREAKFAST -> "아침";
+            case LUNCH -> "점심";
+            case DINNER -> "저녁";
+            case SNACK -> "간식";
+        };
     }
 
     private static String time(LocalDateTime value) { return value == null ? "" : TIME.format(value); }

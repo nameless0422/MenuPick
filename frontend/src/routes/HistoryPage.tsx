@@ -6,6 +6,7 @@ import {
   fetchHistories,
   fetchMenuRestaurants,
   markVisited,
+  MEAL_SLOT_LABELS,
   unmarkVisited,
   type HistoryFilterCondition,
   type HistorySummary,
@@ -18,6 +19,7 @@ import EatingSummary from "./EatingSummary";
 import HistoryMemo from "./HistoryMemo";
 import HistoryVisitTime from "./HistoryVisitTime";
 import HistoryExport from "./HistoryExport";
+import ManualMealForm from "./ManualMealForm";
 import { useCompactLayout } from "../a11y/useCompactLayout";
 import MobileSection from "../components/MobileSection";
 
@@ -141,6 +143,8 @@ export default function HistoryPage() {
 
       {!compact && overview}
 
+      <ManualMealForm />
+
       <form className="menu-search" role="search" aria-label="픽 기록 검색"
         onSubmit={(event) => { event.preventDefault(); setKeyword(searchInput.trim()); }}>
         <label htmlFor={searchId}>픽 기록 검색</label>
@@ -244,6 +248,7 @@ export default function HistoryPage() {
         {histories.map((history) => {
           // 화면에 보이는 이름, 버튼 이름, 확인 대화상자가 전부 같은 말을 쓰게 한 번만 만든다.
           const label = history.menuName ?? "삭제된 메뉴";
+          const manual = history.source === "MANUAL";
           return (
           <li key={history.id} className="card history-card">
             <div className="card-main">
@@ -251,11 +256,14 @@ export default function HistoryPage() {
               <time className="history-time" dateTime={history.recommendedAt}>
                 {formatDateTime(history.recommendedAt)}
               </time>
-              {history.isVisited ? (
+              {manual ? (
+                <span className="chip chip-tag">직접 기록</span>
+              ) : history.isVisited ? (
                 <span className="chip chip-tag">방문완료</span>
               ) : (
                 <span className="chip">미방문</span>
               )}
+              {history.mealSlot && <span className="chip">{MEAL_SLOT_LABELS[history.mealSlot]}</span>}
             </div>
 
             <p className="history-restaurant">
@@ -265,7 +273,7 @@ export default function HistoryPage() {
             <div className="card-actions">
               {history.isVisited ? (
                 <>
-                  {history.visitedAt && (
+                  {history.visitedAt && !manual && (
                     <span className="history-visited-at">
                       방문 시각{" "}
                       <time dateTime={history.visitedAt}>{formatDateTime(history.visitedAt)}</time>
@@ -307,7 +315,8 @@ export default function HistoryPage() {
                   label={`${label} (${formatDateTime(history.recommendedAt)})`} />}
 
                 <div className="card-actions">
-                  {history.isVisited && (
+                  {/* 직접 기록은 "먹었다"는 사실 자체라 방문 취소가 없다(서버도 거절한다). 잘못 적었으면 지운다. */}
+                  {history.isVisited && !manual && (
                     <button
                       type="button"
                       disabled={undoVisitMutation.isPending}

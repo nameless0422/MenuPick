@@ -5,7 +5,11 @@ import com.nameless0422.MenuPick.common.domain.VersionGuard;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryRequest;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.dto.HistoryResponse;
+import com.nameless0422.MenuPick.domain.menu.Menu;
+import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.restaurant.Restaurant;
+import com.nameless0422.MenuPick.domain.user.User;
+import com.nameless0422.MenuPick.domain.user.UserRepository;
 import com.nameless0422.MenuPick.domain.restaurant.RestaurantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -30,8 +34,60 @@ public class HistoryService {
 
     private final HistoryRepository historyRepository;
     private final RestaurantRepository restaurantRepository;
+    private final MenuRepository menuRepository;
+    private final UserRepository userRepository;
     /** 기준 시간대(KST) 고정 — days 필터 경계가 서버 JVM 시간대에 좌우되지 않게 한다. */
     private final Clock clock;
+
+    /** 하루(KST, 먹은 시각 기준)에 직접 남길 수 있는 끼니 수. 근거는 D-081. */
+    static final int MANUAL_MEALS_PER_DAY = 10;
+    /** 직접 기록으로 남길 수 있는 가장 오래된 날. 그보다 오래된 끼니는 기억이 아니라 추정이다. */
+    static final int MANUAL_MEAL_MAX_AGE_DAYS = 365;
+
+    /**
+     * 추천 없이 먹은 끼니를 남긴다. 만들 때부터 먹은 기록이다 — {@link History#manual}.
+     *
+     * <p>하루 상한은 D-077과 같은 이유다: 기록 총량에 상한이 없어 계정 하나가 저장 공간과 조회
+     * 성능을 깎을 수 있다. 픽 기록과 달리 여기는 사람이 손으로 적는 경로라 하루 10끼면 넉넉하다.
+     * 판정은 사용자 행을 잠근 뒤 한다(D-040) — 잠금이 트랜잭션의 첫 조회여야 동시 요청이 옛 개수를
+     * 보지 않는다.
+     */
+    @Transactional
+    public HistoryResponse.HistorySummary createManualMeal(Long userId, HistoryRequest.ManualMealRequest request) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .filter(found -> !found.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        LocalDateTime now = LocalDateTime.now(clock).withNano(0);
+        LocalDateTime eatenAt = request.eatenAt().withNano(0);
+        if (eatenAt.isAfter(now) || eatenAt.isBefore(manualEarliest(now))) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "먹은 시각은 최근 " + MANUAL_MEAL_MAX_AGE_DAYS + "일 안에서 현재 시각까지 지정해주세요.");
+        }
+
+        Menu menu = menuRepository.findByIdAndUserIdAndDeletedAtIsNull(request.menuId(), userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MENU_NOT_FOUND));
+        Restaurant restaurant = null;
+        if (request.restaurantId() != null) {
+            restaurant = restaurantRepository.findByIdAndUserIdAndDeletedAtIsNull(request.restaurantId(), userId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.RESTAURANT_NOT_FOUND));
+        }
+
+        LocalDateTime dayStart = eatenAt.toLocalDate().atStartOfDay();
+        if (historyRepository.countManualMealsBetween(userId, dayStart, dayStart.plusDays(1))
+                >= MANUAL_MEALS_PER_DAY) {
+            throw new BusinessException(ErrorCode.MANUAL_MEAL_DAILY_LIMIT_EXCEEDED);
+        }
+
+        String memo = request.memo() == null ? null : request.memo().strip();
+        History history = historyRepository.save(History.manual(user, menu, restaurant, eatenAt,
+                request.mealSlot(), memo == null || memo.isEmpty() ? null : memo));
+        return toSummary(history);
+    }
+
+    private static LocalDateTime manualEarliest(LocalDateTime now) {
+        return now.toLocalDate().minusDays(MANUAL_MEAL_MAX_AGE_DAYS).atStartOfDay();
+    }
 
     public HistoryResponse.HistoryListResponse getHistories(Long userId, Long cursor, Integer days, Boolean visited, int size) {
         return getHistories(userId, cursor, days, visited, size, null);
@@ -112,9 +168,12 @@ public class HistoryService {
         VersionGuard.requireCurrentVersion(history.getVersion(), request.version());
         LocalDateTime at = request.visitedAt().withNano(0);
         // 추천일의 한국 시간 00:00부터 현재 시각까지 초 단위로 수정한다.
-        if (at.isBefore(history.getRecommendedAt().toLocalDate().atStartOfDay())
+        // 직접 기록은 추천일이 따로 없다 — 만들 때와 같은 범위(최근 1년) 안에서 옮길 수 있다.
+        if (at.isBefore(earliestVisitAt(history))
                 || at.isAfter(LocalDateTime.now(clock).withNano(0))) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "방문 일시는 추천일 이후부터 현재 시각까지 지정해주세요.");
+            throw new BusinessException(ErrorCode.INVALID_INPUT, history.isManual()
+                    ? "먹은 시각은 최근 " + MANUAL_MEAL_MAX_AGE_DAYS + "일 안에서 현재 시각까지 지정해주세요."
+                    : "방문 일시는 추천일 이후부터 현재 시각까지 지정해주세요.");
         }
         history.changeVisitedAt(at);
         historyRepository.flush();
@@ -132,7 +191,13 @@ public class HistoryService {
 
     private HistoryResponse.VisitTimeResponse visitTimeResponse(History history) {
         return new HistoryResponse.VisitTimeResponse(history.getId(), history.getVisitedAt(),
-                history.getRecommendedAt().toLocalDate().atStartOfDay(), LocalDateTime.now(clock).withNano(0), history.getVersion());
+                earliestVisitAt(history), LocalDateTime.now(clock).withNano(0), history.getVersion());
+    }
+
+    private LocalDateTime earliestVisitAt(History history) {
+        return history.isManual()
+                ? manualEarliest(LocalDateTime.now(clock))
+                : history.getRecommendedAt().toLocalDate().atStartOfDay();
     }
 
     @Transactional
@@ -229,7 +294,9 @@ public class HistoryService {
                 history.getVisitedAt(),
                 history.getRecommendationFeedback(),
                 conditions,
-                history.getMemo()
+                history.getMemo(),
+                history.getSource(),
+                history.effectiveMealSlot()
         );
     }
 }

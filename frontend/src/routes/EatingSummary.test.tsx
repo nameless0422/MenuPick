@@ -93,3 +93,13 @@ describe("내 식사 기록 요약", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 });
+
+describe("직접 기록이 섞인 요약", () => {
+  it("먹은 수가 뽑은 수보다 많아도 말이 되게 직접 기록 수를 밝힌다", async () => {
+    fetchMock.mockResolvedValue(summary({ picks: 2, eaten: 5, logged: 4 }));
+    renderWithProviders(<EatingSummary />);
+    const line = await screen.findByText(/뽑은/);
+    expect(line).toHaveTextContent("뽑은 2번 · 먹은 5번 (직접 기록 4번 포함)");
+    expect(line).not.toHaveTextContent("중");
+  });
+});

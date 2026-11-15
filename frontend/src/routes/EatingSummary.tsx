@@ -41,20 +41,31 @@ export default function EatingSummary() {
   }
 
   const { periodDays, picks, eaten, categories, menus, forgottenMenus } = summaryQuery.data;
+  const logged = summaryQuery.data.logged ?? 0;
 
   return (
     <section className="card eating-summary" aria-labelledby={headingId}>
       <h2 id={headingId}>내 식사 기록</h2>
 
-      <p className="settings-desc">
-        최근 {periodDays}일 · 뽑은 <strong>{picks}번</strong> 중{" "}
-        <strong>{eaten}번</strong> 드셨어요
-      </p>
+      {/* 직접 기록은 먹은 수에만 들어간다. 그때 "뽑은 N번 중 M번"이라고 쓰면 M이 N보다 큰
+          이상한 문장이 되므로, 직접 기록이 있으면 두 수를 나란히 놓고 출처를 밝힌다. */}
+      {logged > 0 ? (
+        <p className="settings-desc">
+          최근 {periodDays}일 · 뽑은 <strong>{picks}번</strong> · 먹은 <strong>{eaten}번</strong>{" "}
+          (직접 기록 {logged}번 포함)
+        </p>
+      ) : (
+        <p className="settings-desc">
+          최근 {periodDays}일 · 뽑은 <strong>{picks}번</strong> 중{" "}
+          <strong>{eaten}번</strong> 드셨어요
+        </p>
+      )}
 
       {eaten === 0 ? (
         // 0건이 지금의 기본 상태다. 무엇을 누르면 채워지는지까지 말한다.
         <p className="card-muted-hint">
-          아직 먹은 기록이 없어요. 뽑은 메뉴를 드셨다면 <strong>방문했어요</strong>를 눌러 주세요.
+          아직 먹은 기록이 없어요. 뽑은 메뉴를 드셨다면 <strong>방문했어요</strong>를, 추천 없이 드셨다면{" "}
+          <strong>식사 직접 기록</strong>을 눌러 주세요.
           {picks === 0 && (
             <>
               {" "}
