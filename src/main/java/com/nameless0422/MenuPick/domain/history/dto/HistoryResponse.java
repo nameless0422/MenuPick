@@ -1,5 +1,8 @@
 package com.nameless0422.MenuPick.domain.history.dto;
 
+import com.nameless0422.MenuPick.domain.history.HistorySource;
+import com.nameless0422.MenuPick.domain.history.MealSlot;
+
 import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 
 import java.time.LocalDateTime;
@@ -28,8 +31,21 @@ public class HistoryResponse {
              */
             RecommendationFeedback recommendationFeedback,
             List<FilterCondition> filterConditions,
-            String memo
-    ) {}
+            String memo,
+            /** 픽에서 생긴 기록인지 직접 적은 끼니인지. 직접 기록은 방문 취소가 없다. */
+            HistorySource source,
+            /** 고른 끼니, 없으면 시각으로 추정한 끼니. 늘 채워져 있다. */
+            MealSlot mealSlot
+    ) {
+        /** 끼니 구분 전 호출부 호환. 픽 기록으로 보고 끼니는 비운다. */
+        public HistorySummary(Long id, Long menuId, String menuName, String restaurantName, boolean isVisited,
+                              LocalDateTime recommendedAt, LocalDateTime visitedAt,
+                              RecommendationFeedback recommendationFeedback,
+                              List<FilterCondition> filterConditions, String memo) {
+            this(id, menuId, menuName, restaurantName, isVisited, recommendedAt, visitedAt,
+                    recommendationFeedback, filterConditions, memo, HistorySource.PICK, null);
+        }
+    }
 
     public record MemoResponse(Long historyId, String memo, Long version) {}
 
@@ -68,8 +84,19 @@ public class HistoryResponse {
             List<LabelCount> categories,
             List<LabelCount> menus,
             /** 오래 안 뽑힌 메뉴. 이것만 기간을 보지 않는다 — 근거는 EatingSummaryService. */
-            List<ForgottenMenu> forgottenMenus
-    ) {}
+            List<ForgottenMenu> forgottenMenus,
+            /**
+             * 추천 없이 직접 남긴 끼니 수. {@code eaten}에 이미 들어 있다 — 그래서 {@code eaten}이
+             * {@code picks}보다 클 수 있다. 따로 주는 이유는 "뽑은 10번 중 12번 먹었다"를 설명하기 위해서다.
+             */
+            long logged
+    ) {
+        /** 직접 기록 전 호출부 호환. */
+        public EatingSummaryResponse(int periodDays, long picks, long eaten, List<LabelCount> categories,
+                                     List<LabelCount> menus, List<ForgottenMenu> forgottenMenus) {
+            this(periodDays, picks, eaten, categories, menus, forgottenMenus, 0);
+        }
+    }
 
     public record LabelCount(String label, long count) {}
 

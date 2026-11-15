@@ -150,7 +150,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** 호출마다 히스토리 행을 남기는 픽. 이 필터는 JWT 필터보다 먼저 돌아 IP로 센다(D-077). */
     private static final List<RequestMatcher> PICK_RATE_LIMITED_MATCHERS = List.of(
             PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick"),
-            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/presets/*/pick")
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/pick/presets/*/pick"),
+            // 직접 식사 기록도 기록을 남기는 경로다. 하루 상한(D-081)과 별개로 몰아치기를 막는다.
+            PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/v1/history")
     );
 
     private static final List<RequestMatcher> PROXY_RATE_LIMITED_MATCHERS = List.of(

@@ -33,6 +33,51 @@ export interface HistorySummary {
   recommendationFeedback: RecommendationFeedback | null;
   filterConditions: HistoryFilterCondition[];
   memo?: string | null;
+  /**
+   * 픽에서 생긴 기록인지 직접 남긴 끼니인지. 직접 기록은 만들 때부터 먹은 것이라 방문 취소가 없다.
+   * 구버전 서버가 생략하면 픽 기록으로 읽는다.
+   */
+  source?: HistorySource;
+  /** 고른 끼니, 없으면 서버가 시각으로 추정한 끼니. */
+  mealSlot?: MealSlot | null;
+}
+
+export type HistorySource = "PICK" | "MANUAL";
+export type MealSlot = "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
+
+export const MEAL_SLOTS: readonly MealSlot[] = ["BREAKFAST", "LUNCH", "DINNER", "SNACK"];
+
+export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
+  BREAKFAST: "아침",
+  LUNCH: "점심",
+  DINNER: "저녁",
+  SNACK: "간식",
+};
+
+/**
+ * 시각("HH:mm" 또는 "HH:mm:ss")으로 끼니를 추정한다. 서버 MealSlot.at과 같은 경계다 —
+ * 폼이 미리 골라 두는 값이 저장 뒤에 다른 끼니로 바뀌어 보이면 안 된다.
+ */
+export function mealSlotAt(time: string): MealSlot {
+  const hour = Number(time.slice(0, 2));
+  if (hour >= 5 && hour < 11) return "BREAKFAST";
+  if (hour >= 11 && hour < 16) return "LUNCH";
+  if (hour >= 16 && hour < 22) return "DINNER";
+  return "SNACK";
+}
+
+export interface ManualMealRequest {
+  menuId: number;
+  /** 시간대 없는 KST, 초까지("2026-10-20T12:30:00"). */
+  eatenAt: string;
+  mealSlot?: MealSlot;
+  memo?: string;
+}
+
+/** 추천 없이 먹은 끼니를 남긴다. 하루(먹은 날 기준) 10끼까지다. */
+export async function createManualMeal(request: ManualMealRequest) {
+  const res = await http.post<ApiResponse<HistorySummary>>("/api/v1/history", request);
+  return unwrap(res);
 }
 
 export interface HistoryMemoResponse { historyId: number; memo: string | null; version: number; }
@@ -168,6 +213,11 @@ export interface EatingSummary {
   menus: LabelCount[];
   /** 오래 안 뽑힌 내 메뉴. 이것만 집계 기간과 무관하게 전 기간을 본다. */
   forgottenMenus: ForgottenMenu[];
+  /**
+   * 추천 없이 직접 남긴 끼니 수. `eaten`에 이미 들어 있어서 `eaten`이 `picks`보다 클 수 있다.
+   * 구버전 서버는 보내지 않는다 — 0으로 읽는다.
+   */
+  logged?: number;
 }
 
 export async function fetchEatingSummary(days?: number) {

@@ -46,6 +46,8 @@ class HistoryServiceTest {
 
     @Mock private HistoryRepository historyRepository;
     @Mock private RestaurantRepository restaurantRepository;
+    @Mock private com.nameless0422.MenuPick.domain.menu.MenuRepository menuRepository;
+    @Mock private com.nameless0422.MenuPick.domain.user.UserRepository userRepository;
 
     private HistoryService historyService;
 
@@ -104,7 +106,7 @@ class HistoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        historyService = new HistoryService(historyRepository, restaurantRepository, FIXED_CLOCK);
+        historyService = new HistoryService(historyRepository, restaurantRepository, menuRepository, userRepository, FIXED_CLOCK);
 
         user = User.builder().email("test@test.com").nickname("tester").build();
         ReflectionTestUtils.setField(user, "id", 1L);

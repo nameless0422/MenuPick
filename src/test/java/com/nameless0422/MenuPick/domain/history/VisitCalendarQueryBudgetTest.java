@@ -57,7 +57,7 @@ class VisitCalendarQueryBudgetTest extends AbstractIntegrationTest {
         statistics.setStatisticsEnabled(true);
         statistics.clear();
 
-        HistoryService service = new HistoryService(historyRepository, restaurantRepository, CLOCK);
+        HistoryService service = new HistoryService(historyRepository, restaurantRepository, null, null, CLOCK);
         var response = service.getVisitCalendar(user.getId(), "2026-01");
 
         assertThat(response.entries()).hasSize(40);

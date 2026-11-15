@@ -16,7 +16,9 @@ class HistoryVisitTimeTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-20T03:00:00Z"), ZoneId.of("Asia/Seoul"));
     private static final LocalDateTime NOW = LocalDateTime.now(CLOCK);
     private final HistoryRepository repository = mock(HistoryRepository.class);
-    private final HistoryService service = new HistoryService(repository, mock(RestaurantRepository.class), CLOCK);
+    private final HistoryService service = new HistoryService(repository, mock(RestaurantRepository.class),
+            mock(com.nameless0422.MenuPick.domain.menu.MenuRepository.class),
+            mock(com.nameless0422.MenuPick.domain.user.UserRepository.class), CLOCK);
     private History row;
     @BeforeEach void setup() {
         row = History.builder().recommendedAt(NOW.minusDays(2).withHour(14)).build();

@@ -56,6 +56,34 @@ class HistoryControllerTest extends AbstractControllerTest {
         verify(historyService, never()).updateVisitTime(any(), any(), any());
     }
 
+    @Test void manualMealIsCreatedWithStrictTimeAndOptionalSlot() throws Exception {
+        var at = LocalDateTime.of(2026, 10, 20, 12, 30);
+        var created = new HistoryResponse.HistorySummary(9L, 3L, "김밥", null, true, at, at, null, List.of(), null,
+                HistorySource.MANUAL, MealSlot.LUNCH);
+        given(historyService.createManualMeal(eq(1L), any())).willReturn(created);
+        mockMvc.perform(post("/api/v1/history").with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"menuId\":3,\"eatenAt\":\"2026-10-20T12:30:00\",\"mealSlot\":\"LUNCH\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.source").value("MANUAL"))
+                .andExpect(jsonPath("$.data.mealSlot").value("LUNCH"))
+                .andExpect(jsonPath("$.data.isVisited").value(true));
+    }
+
+    @Test void manualMealRejectsMissingFieldsZonedTimesAndUnknownSlots() throws Exception {
+        mockMvc.perform(post("/api/v1/history").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"menuId\":3,\"eatenAt\":\"2026-10-20T12:30:00\"}")).andExpect(status().isUnauthorized());
+        for (String body : List.of("{}", "{\"menuId\":3}", "{\"eatenAt\":\"2026-10-20T12:30:00\"}",
+                "{\"menuId\":3,\"eatenAt\":\"2026-10-20T12:30:00Z\"}",
+                "{\"menuId\":3,\"eatenAt\":\"2026-02-30T12:30:00\"}",
+                "{\"menuId\":3,\"eatenAt\":\"2026-10-20T12:30:00\",\"mealSlot\":\"BRUNCH\"}",
+                "{\"menuId\":3,\"eatenAt\":\"2026-10-20T12:30:00\",\"memo\":\"" + "가".repeat(501) + "\"}")) {
+            mockMvc.perform(post("/api/v1/history").with(authentication(AUTH))
+                    .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
+        }
+        verify(historyService, never()).createManualMeal(any(), any());
+    }
+
     @MockitoBean private HistoryService historyService;
     @MockitoBean private HistoryPlaceService historyPlaceService;
     @MockitoBean private EatingSummaryService eatingSummaryService;

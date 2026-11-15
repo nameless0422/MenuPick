@@ -185,3 +185,44 @@
     padding-inline: 8px;
   }
 }
+
+/* 식사 직접 기록 (D-081). 메모 편집 폼의 세로 배치를 그대로 쓰고 끼니만 한 줄에 둔다. */
+.manual-meal {
+  margin: 0.75rem 0;
+}
+
+.manual-meal-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.manual-meal-search label {
+  flex-basis: 100%;
+}
+
+.manual-meal-search input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.manual-meal-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border: 0;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.manual-meal-slots legend {
+  padding: 0;
+  margin-bottom: 0.25rem;
+}
+
+.manual-meal-slots label {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}

@@ -22,6 +22,7 @@ vi.mock("../api/history", () => ({
   markVisited: vi.fn(),
   unmarkVisited: vi.fn(),
   deleteHistory: vi.fn(),
+  MEAL_SLOT_LABELS: { BREAKFAST: "아침", LUNCH: "점심", DINNER: "저녁", SNACK: "간식" },
 }));
 vi.mock("../api/menus", () => ({
   fetchMenus: vi.fn().mockRejectedValue(new Error("방문 기록은 메뉴 목록에 의존하지 않는다")),
@@ -490,5 +491,29 @@ describe("방문 상태 필터", () => {
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "픽 히스토리" })).toHaveFocus());
     await screen.findByText("선택한 방문 상태의 픽 기록이 없어요.");
+  });
+});
+
+describe("직접 남긴 식사 기록", () => {
+  it("직접 기록으로 표시하고 끼니를 보여 주며 방문 취소는 내놓지 않는다", async () => {
+    fetchHistoriesMock.mockResolvedValue({
+      histories: [{
+        ...KIMCHI_PICK, id: 11, isVisited: true, restaurantName: null,
+        recommendedAt: "2026-08-21T12:10:00", visitedAt: "2026-08-21T12:10:00",
+        source: "MANUAL", mealSlot: "LUNCH",
+      }],
+      nextCursor: null, hasNext: false,
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<HistoryPage />);
+    const card = (await screen.findByText("직접 기록")).closest("li")!;
+    expect(within(card).getByText("점심")).toBeVisible();
+    expect(within(card).queryByText("방문완료")).not.toBeInTheDocument();
+    expect(within(card).queryByText(/방문 시각/)).not.toBeInTheDocument();
+
+    const details = within(card).queryByRole("button", { name: /기록 상세/ });
+    if (details) await user.click(details);
+    expect(within(card).queryByRole("button", { name: /방문 처리 취소/ })).not.toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /픽 기록 삭제/ })).toBeInTheDocument();
   });
 });

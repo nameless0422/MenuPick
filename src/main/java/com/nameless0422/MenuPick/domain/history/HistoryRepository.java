@@ -89,7 +89,8 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     @Query("""
             select h.id as id, h.recommendedAt as recommendedAt, m.name as menuName,
                    r.name as restaurantName, h.isVisited as visited, h.visitedAt as visitedAt,
-                   h.recommendationFeedback as feedback, h.memo as memo
+                   h.recommendationFeedback as feedback, h.memo as memo,
+                   h.source as source, h.mealSlot as mealSlot
             from History h left join h.menu m left join h.restaurant r
             where h.user.id = :userId and h.recommendedAt > :after
               and (:visited is null or h.isVisited = :visited)
@@ -109,6 +110,9 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
         LocalDateTime getVisitedAt();
         RecommendationFeedback getFeedback();
         String getMemo();
+        HistorySource getSource();
+        /** 직접 기록에서 고른 끼니. 픽 기록은 null이라 서비스가 시각으로 추정한다. */
+        MealSlot getMealSlot();
     }
 
     /**
@@ -141,13 +145,17 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     // 표본이 한 자릿수일 때 30%라는 숫자를 목표 달성으로 읽게 된다.
     // ---------------------------------------------------------------
 
+    // 아래 KPI는 전부 "추천"의 지표라 직접 기록(MANUAL)을 세지 않는다. 직접 기록은 만들 때부터
+    // 방문 처리돼 있어서, 섞으면 픽 후 방문율이 실제와 무관하게 올라간다(D-081).
+
     /** 기간 내 픽 수와 그중 방문 처리된 수. 픽 후 방문율의 분모·분자. */
     @Query("select count(h), sum(case when h.isVisited = true then 1 else 0 end) " +
-            "from History h where h.recommendedAt >= :since")
+            "from History h where h.recommendedAt >= :since and h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK")
     List<Object[]> countPicksAndVisitsSince(@Param("since") LocalDateTime since);
 
     /** 기간 내 한 번이라도 픽한 사용자 수. 재픽률의 분모. */
-    @Query("select count(distinct h.user.id) from History h where h.recommendedAt >= :since")
+    @Query("select count(distinct h.user.id) from History h where h.recommendedAt >= :since " +
+            "and h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK")
     long countDistinctUsersSince(@Param("since") LocalDateTime since);
 
     /**
@@ -159,7 +167,7 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
      */
     @Query("select count(distinct u) from (" +
             "select h.user.id as u, function('date', h.recommendedAt) as d, count(h) as c " +
-            "from History h where h.recommendedAt >= :since " +
+            "from History h where h.recommendedAt >= :since and h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK " +
             "group by h.user.id, function('date', h.recommendedAt) having count(h) >= 2)")
     long countUsersWithSameDayRepick(@Param("since") LocalDateTime since);
 
@@ -226,9 +234,14 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     // 두 곳이 다른 기준을 쓰면 같은 화면 안에서 숫자가 어긋나 보인다.
     // ---------------------------------------------------------------
 
-    /** 기간 내 내 픽 수와 그중 먹은 수. 비율이 아니라 둘 다 준다 — 0건과 0%는 다른 상태다. */
-    @Query("select count(h), sum(case when h.isVisited = true " +
-            "or h.recommendationFeedback = :accepted then 1 else 0 end) " +
+    /**
+     * 기간 내 내 픽 수, 먹은 수, 그중 직접 기록 수. 비율이 아니라 셋 다 준다 — 0건과 0%는 다른 상태다.
+     *
+     * <p>픽 수는 PICK만 센다. 먹은 수는 직접 기록을 포함한다 — 추천 없이 먹은 것도 먹은 것이다.
+     */
+    @Query("select sum(case when h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK then 1 else 0 end), " +
+            "sum(case when h.isVisited = true or h.recommendationFeedback = :accepted then 1 else 0 end), " +
+            "sum(case when h.source = com.nameless0422.MenuPick.domain.history.HistorySource.MANUAL then 1 else 0 end) " +
             "from History h where h.user.id = :userId and h.recommendedAt >= :since")
     List<Object[]> countMyPicksAndEatenSince(@Param("userId") Long userId,
                                             @Param("since") LocalDateTime since,
@@ -287,8 +300,19 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
         LocalDateTime getLastPickedAt();
     }
 
+    /**
+     * 그날(KST) 직접 남긴 끼니 수. 하루 상한 판정에 쓴다 — 호출자가 사용자 행을 잠근 뒤 부른다(D-040).
+     * 먹은 시각 기준으로 센다. 지난 날짜를 몰아서 적는 정상 사용을 막지 않기 위해서다.
+     */
+    @Query("select count(h) from History h where h.user.id = :userId " +
+            "and h.source = com.nameless0422.MenuPick.domain.history.HistorySource.MANUAL and h.recommendedAt >= :from and h.recommendedAt < :to")
+    long countManualMealsBetween(@Param("userId") Long userId,
+                                 @Param("from") LocalDateTime from,
+                                 @Param("to") LocalDateTime to);
+
     /** 사용자별 첫 픽 시각. 7일 리텐션 코호트를 만드는 근거. */
-    @Query("select h.user.id, min(h.recommendedAt) from History h group by h.user.id")
+    @Query("select h.user.id, min(h.recommendedAt) from History h " +
+            "where h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK group by h.user.id")
     List<Object[]> findFirstPickPerUser();
 
     /**
@@ -301,6 +325,7 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
      *
      * <p>대상은 코호트로 이미 좁혀져 들어온다. 전 사용자의 전 픽을 올리는 쿼리가 아니다.
      */
-    @Query("select h.user.id, h.recommendedAt from History h where h.user.id in :userIds")
+    @Query("select h.user.id, h.recommendedAt from History h where h.user.id in :userIds " +
+            "and h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK")
     List<Object[]> findPickTimesForUsers(@Param("userIds") List<Long> userIds);
 }

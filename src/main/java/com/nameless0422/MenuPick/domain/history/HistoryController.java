@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -40,6 +41,15 @@ public class HistoryController {
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(file.filename()).build().toString())
                 .body(file.content());
+    }
+
+    /** 추천 없이 먹은 끼니를 남긴다. 근거는 D-081. */
+    @PostMapping
+    public ResponseEntity<ApiResponse<HistoryResponse.HistorySummary>> createManualMeal(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody HistoryRequest.ManualMealRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok(historyService.createManualMeal(userId, request)));
     }
 
     @GetMapping("/{historyId}/memo")

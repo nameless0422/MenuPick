@@ -60,6 +60,8 @@ public class EatingSummaryService {
                 .get(0);
         long picks = toLong(totals[0]);
         long eaten = toLong(totals[1]);
+        // 직접 기록은 eaten에 이미 들어 있다. 따로 세는 것은 eaten > picks를 화면이 설명하게 하려는 것이다.
+        long logged = totals.length > 2 ? toLong(totals[2]) : 0;
 
         List<HistoryResponse.LabelCount> categories = historyRepository
                 .countMyEatenByCategorySince(userId, since, RecommendationFeedback.ACCEPTED, top)
@@ -80,7 +82,7 @@ public class EatingSummaryService {
                         row.getMenuId(), row.getName(), row.getLastPickedAt()))
                 .toList();
 
-        return new HistoryResponse.EatingSummaryResponse(days, picks, eaten, categories, menus, forgotten);
+        return new HistoryResponse.EatingSummaryResponse(days, picks, eaten, categories, menus, forgotten, logged);
     }
 
     /**
