@@ -67,6 +67,39 @@ describe("메뉴 열량", () => {
     expect(await screen.findByText(/직접 적은 값/)).toBeVisible();
   });
 
+  it("직접 적을 때 탄단지·식이섬유를 함께 보내고, 탄단지 중 일부만 적으면 막는다", async () => {
+    updateMock.mockResolvedValue({ menuId: 3, kcalPerServing: 650, foodReference: null, version: 5,
+      carbsG: 80, proteinG: 20.5, fatG: 15, fiberG: null });
+    const user = userEvent.setup();
+    render();
+    await user.click(await screen.findByRole("button", { name: "직접 적기" }));
+    await user.type(screen.getByRole("spinbutton", { name: "1인분 열량 (kcal)" }), "650");
+    await user.type(screen.getByRole("spinbutton", { name: "탄수화물" }), "80");
+    await user.click(screen.getByRole("button", { name: "열량 저장" }));
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(screen.getByText("탄수화물·단백질·지방은 함께 적거나 모두 비워 주세요.")).toBeVisible();
+    expect(screen.getByRole("spinbutton", { name: "단백질" })).toHaveAttribute("aria-invalid", "true");
+
+    await user.type(screen.getByRole("spinbutton", { name: "단백질" }), "20.55");
+    await user.type(screen.getByRole("spinbutton", { name: "지방" }), "15");
+    await user.click(screen.getByRole("button", { name: "열량 저장" }));
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("spinbutton", { name: "단백질" })).toHaveAttribute("aria-invalid", "true");
+
+    await user.clear(screen.getByRole("spinbutton", { name: "단백질" }));
+    await user.type(screen.getByRole("spinbutton", { name: "단백질" }), "20.5{Enter}");
+    expect(updateMock).toHaveBeenCalledWith(3, { kcalPerServing: 650, carbsG: 80, proteinG: 20.5, fatG: 15 });
+    expect(await screen.findByText("탄수화물 80g · 단백질 20.5g · 지방 15g")).toBeVisible();
+  });
+
+  it("기준 음식 후보에 탄단지를 같이 보여 준다", async () => {
+    searchMock.mockResolvedValue([{ ...KIMCHI, fiberG: 4.4 }]);
+    const user = userEvent.setup();
+    render();
+    await user.click(await screen.findByRole("button", { name: "기준 음식에서 찾기" }));
+    expect(await screen.findByRole("button", { name: /탄수화물 12.4g · 단백질 14g · 지방 9.6g · 식이섬유 4.4g/ })).toBeVisible();
+  });
+
   it("정해 둔 열량은 지울 수 있다", async () => {
     fetchMock.mockResolvedValue({ menuId: 3, kcalPerServing: 500, foodReference: null, version: 4 });
     updateMock.mockResolvedValue({ menuId: 3, kcalPerServing: null, foodReference: null, version: 5 });

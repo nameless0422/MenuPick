@@ -22,3 +22,33 @@
   width: 100%;
   text-align: left;
 }
+
+.menu-nutrition-macros {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+/* 테두리·legend는 .menu-form fieldset 규약을 따르고, 칸 배치만 두 줄 격자로 바꾼다. */
+.menu-form .menu-nutrition-macro-fields,
+.menu-nutrition .menu-nutrition-macro-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0.5rem 0;
+}
+
+.menu-nutrition-macro-fields label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--fs-sm);
+}
+
+.menu-nutrition-macro-fields input {
+  min-width: 0;
+}
+
+.menu-nutrition-macro-fields p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--fs-xs);
+}

@@ -11,6 +11,16 @@ export interface FoodReference {
   carbsG: number | null;
   proteinG: number | null;
   fatG: number | null;
+  /** 원본에 없는 음식이 많다. 예전 서버는 주지 않는다. */
+  fiberG?: number | null;
+}
+
+/** 1인분 탄수화물·단백질·지방·식이섬유(g). 모르면 null(D-084). 탄단지는 셋이 함께 있거나 함께 없다. */
+export interface Macros {
+  carbsG: number | null;
+  proteinG: number | null;
+  fatG: number | null;
+  fiberG: number | null;
 }
 
 /**
@@ -18,7 +28,7 @@ export interface FoodReference {
  * `version`은 메뉴의 낙관적 락 버전이다 — 열량을 바꾸면 메뉴 버전도 오르므로, 열려 있는 메뉴
  * 수정 폼은 이 값으로 다음 저장을 보내야 한다.
  */
-export interface MenuNutrition {
+export interface MenuNutrition extends Partial<Macros> {
   menuId: number;
   kcalPerServing: number | null;
   foodReference: FoodReference | null;
@@ -39,6 +49,21 @@ export interface NutritionSummary {
   unknownMeals: number;
   averageKcal: number | null;
   truncated: boolean;
+  /** 예전 서버는 주지 않는다. */
+  macros?: MacroSummary;
+}
+
+/**
+ * 탄단지·식이섬유 하루 평균(g, 정수). 그 영양소를 아는 끼니가 있던 날로만 나눈다.
+ * `meals`는 탄단지를 아는 끼니 수, `fiberMeals`는 식이섬유를 아는 끼니 수다.
+ */
+export interface MacroSummary {
+  meals: number;
+  carbsG: number | null;
+  proteinG: number | null;
+  fatG: number | null;
+  fiberMeals: number;
+  fiberG: number | null;
 }
 
 export async function searchFoodReferences(q: string, size = 10) {
@@ -51,8 +76,13 @@ export async function fetchMenuNutrition(menuId: number) {
   return unwrap(res);
 }
 
-/** 기준 음식을 고르거나(`foodReferenceId`), 직접 적거나(`kcalPerServing`), 둘 다 비워 지운다. */
-export async function updateMenuNutrition(menuId: number, body: { foodReferenceId?: number; kcalPerServing?: number }) {
+/**
+ * 기준 음식을 고르거나(`foodReferenceId`), 직접 적거나(`kcalPerServing`, 탄단지·식이섬유는 선택), 모두 비워 지운다.
+ * 탄단지는 셋을 함께 보내거나 모두 빼야 한다.
+ */
+export type MenuNutritionUpdate = { foodReferenceId?: number; kcalPerServing?: number } & Partial<Macros>;
+
+export async function updateMenuNutrition(menuId: number, body: MenuNutritionUpdate) {
   const res = await http.put<ApiResponse<MenuNutrition>>(`/api/v1/menus/${menuId}/nutrition`, body);
   return unwrap(res);
 }

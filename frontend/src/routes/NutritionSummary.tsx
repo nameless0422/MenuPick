@@ -5,6 +5,7 @@ import { MEAL_SLOT_LABELS, MEAL_SLOTS } from "../api/history";
 import { fetchNutritionSummary } from "../api/nutrition";
 import { apiErrorMessage } from "../api/http";
 import NutritionChart from "./NutritionChart";
+import NutritionMacros from "./NutritionMacros";
 import { dayLabel } from "./nutritionChartScale";
 
 /** 볼 수 있는 기간. 서버 상한(31일) 안이다. */
@@ -37,7 +38,7 @@ export default function NutritionSummary() {
       </section>
     );
   }
-  const { periodDays, days, slots, knownMeals, unknownMeals, averageKcal, truncated } = query.data;
+  const { periodDays, days, slots, knownMeals, unknownMeals, averageKcal, truncated, macros } = query.data;
 
   return (
     <section className="card nutrition-summary" aria-labelledby={headingId} aria-busy={query.isFetching}>
@@ -73,6 +74,7 @@ export default function NutritionSummary() {
               </li>
             ))}
           </ul>
+          <NutritionMacros macros={macros} eatenMeals={knownMeals + unknownMeals} />
           <details className="nutrition-table">
             <summary>숫자로 보기</summary>
             <div className="nutrition-table-scroll">

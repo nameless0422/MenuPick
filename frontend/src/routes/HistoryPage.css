@@ -235,6 +235,10 @@
   --slot-dinner: #1baf7a;
   --slot-snack: #eda100;
   --slot-total: var(--text);
+  /* 탄단지(D-084): 같은 팔레트 5~7번. 끼니 색과 겹치지 않게 다음 칸을 쓴다. */
+  --macro-carbs: #e87ba4;
+  --macro-protein: #008300;
+  --macro-fat: #6250d6;
 }
 @media (prefers-color-scheme: dark) {
   .nutrition-summary {
@@ -242,6 +246,9 @@
     --slot-lunch: #d95926;
     --slot-dinner: #199e70;
     --slot-snack: #c98500;
+    --macro-carbs: #d55181;
+    --macro-protein: #0ca30c;
+    --macro-fat: #9085e9;
   }
 }
 
@@ -366,6 +373,48 @@
 
 .nutrition-legend b {
   margin-right: 0.25rem;
+}
+
+.nutrition-macro-carbs { background: var(--macro-carbs); }
+.nutrition-macro-protein { background: var(--macro-protein); }
+.nutrition-macro-fat { background: var(--macro-fat); }
+
+.nutrition-macros {
+  margin: 0.75rem 0;
+}
+
+.nutrition-macros h3 {
+  font-size: var(--fs-sm);
+  margin: 0 0 0.25rem;
+}
+
+/* 열량 비율 띠. 조각 사이 2px 틈, 양 끝만 둥글게. */
+.nutrition-macro-bar {
+  display: flex;
+  gap: 2px;
+  height: 0.75rem;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.nutrition-macro-bar > span {
+  flex-basis: 0;
+  min-width: 2px;
+}
+
+.nutrition-macro-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-size: var(--fs-sm);
+}
+
+.nutrition-macro-list strong {
+  font-weight: 600;
 }
 
 .nutrition-table summary {

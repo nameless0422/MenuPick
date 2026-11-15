@@ -1,6 +1,10 @@
 package com.nameless0422.MenuPick.domain.nutrition;
 
 import com.nameless0422.MenuPick.domain.history.MealSlot;
+import com.nameless0422.MenuPick.domain.menu.Macros;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 
@@ -13,30 +17,67 @@ public final class NutritionDto {
 
     public record FoodReferenceSummary(
             Long id, String name, String category, BigDecimal servingGrams, int kcalPerServing,
-            BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG) {
+            BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG, BigDecimal fiberG) {
+        public FoodReferenceSummary(Long id, String name, String category, BigDecimal servingGrams, int kcalPerServing,
+                                    BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG) {
+            this(id, name, category, servingGrams, kcalPerServing, carbsG, proteinG, fatG, null);
+        }
+
         static FoodReferenceSummary of(FoodReference reference) {
             return new FoodReferenceSummary(reference.getId(), reference.getName(), reference.getCategory(),
                     reference.getServingGrams(), reference.getKcalPerServing(),
-                    reference.getCarbsG(), reference.getProteinG(), reference.getFatG());
+                    reference.getCarbsG(), reference.getProteinG(), reference.getFatG(), reference.getFiberG());
         }
     }
 
     /**
      * 메뉴 열량 설정. {@code foodReferenceId}가 있으면 그 음식의 값을 쓰고 {@code kcalPerServing}은 무시한다.
      * 둘 다 비우면 열량을 지운다(모름).
+     *
+     * <p>직접 적을 때 탄단지(g)를 함께 줄 수 있다. 셋은 함께 주거나 함께 비운다 — 하나만 있으면 비율을
+     * 그릴 수 없다. 식이섬유는 따로 비워 둘 수 있다. 기준 음식을 고르면 이 값들은 무시한다(D-084).
      */
     public record MenuNutritionRequest(
             Long foodReferenceId,
             @Min(value = 1, message = "열량은 1kcal 이상이어야 합니다.")
             @Max(value = 5000, message = "1인분 열량은 5,000kcal 이하로 적어주세요.")
-            Integer kcalPerServing
-    ) {}
+            Integer kcalPerServing,
+            @DecimalMin(value = "0.0", message = "탄수화물은 0g 이상이어야 합니다.")
+            @DecimalMax(value = "999.9", message = "탄수화물은 999.9g 이하로 적어주세요.")
+            @Digits(integer = 3, fraction = 1, message = "탄수화물은 소수점 한 자리까지 적어주세요.")
+            BigDecimal carbsG,
+            @DecimalMin(value = "0.0", message = "단백질은 0g 이상이어야 합니다.")
+            @DecimalMax(value = "999.9", message = "단백질은 999.9g 이하로 적어주세요.")
+            @Digits(integer = 3, fraction = 1, message = "단백질은 소수점 한 자리까지 적어주세요.")
+            BigDecimal proteinG,
+            @DecimalMin(value = "0.0", message = "지방은 0g 이상이어야 합니다.")
+            @DecimalMax(value = "999.9", message = "지방은 999.9g 이하로 적어주세요.")
+            @Digits(integer = 3, fraction = 1, message = "지방은 소수점 한 자리까지 적어주세요.")
+            BigDecimal fatG,
+            @DecimalMin(value = "0.0", message = "식이섬유는 0g 이상이어야 합니다.")
+            @DecimalMax(value = "999.9", message = "식이섬유는 999.9g 이하로 적어주세요.")
+            @Digits(integer = 3, fraction = 1, message = "식이섬유는 소수점 한 자리까지 적어주세요.")
+            BigDecimal fiberG
+    ) {
+        public MenuNutritionRequest(Long foodReferenceId, Integer kcalPerServing) {
+            this(foodReferenceId, kcalPerServing, null, null, null, null);
+        }
+
+        Macros macros() {
+            return new Macros(carbsG, proteinG, fatG, fiberG);
+        }
+    }
 
     /**
      * 메뉴의 열량 설정. {@code foodReference}가 null이고 {@code kcalPerServing}이 있으면 직접 적은 값이다.
      * {@code version}은 메뉴의 낙관적 락 버전 — 열량을 바꾸면 메뉴 버전도 오른다.
      */
-    public record MenuNutrition(Long menuId, Integer kcalPerServing, FoodReferenceSummary foodReference, long version) {}
+    public record MenuNutrition(Long menuId, Integer kcalPerServing, FoodReferenceSummary foodReference, long version,
+                                BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG, BigDecimal fiberG) {
+        public MenuNutrition(Long menuId, Integer kcalPerServing, FoodReferenceSummary foodReference, long version) {
+            this(menuId, kcalPerServing, foodReference, version, null, null, null, null);
+        }
+    }
 
     /**
      * 하루치. {@code unknownMeals}는 메뉴 열량을 몰라 합계에서 빠진 끼니 수다.
@@ -59,5 +100,21 @@ public final class NutritionDto {
      */
     public record NutritionSummary(
             int periodDays, List<DayNutrition> days, List<SlotNutrition> slots,
-            int totalKcal, int knownMeals, int unknownMeals, Integer averageKcal, boolean truncated) {}
+            int totalKcal, int knownMeals, int unknownMeals, Integer averageKcal, boolean truncated,
+            MacroSummary macros) {
+        public NutritionSummary(int periodDays, List<DayNutrition> days, List<SlotNutrition> slots,
+                                int totalKcal, int knownMeals, int unknownMeals, Integer averageKcal, boolean truncated) {
+            this(periodDays, days, slots, totalKcal, knownMeals, unknownMeals, averageKcal, truncated, MacroSummary.EMPTY);
+        }
+    }
+
+    /**
+     * 기간 탄단지·식이섬유 <b>하루 평균</b>(g, 반올림한 정수). 열량 평균과 같이, 그 영양소를 아는 끼니가 있던
+     * 날로만 나눈다. {@code meals}는 탄단지를 아는 끼니 수, {@code fiberMeals}는 식이섬유를 아는 끼니 수다.
+     * 모르면 평균은 null이다(D-084).
+     */
+    public record MacroSummary(int meals, Integer carbsG, Integer proteinG, Integer fatG,
+                               int fiberMeals, Integer fiberG) {
+        public static final MacroSummary EMPTY = new MacroSummary(0, null, null, null, 0, null);
+    }
 }
