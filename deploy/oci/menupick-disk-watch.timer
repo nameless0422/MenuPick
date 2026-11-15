@@ -1,0 +1,13 @@
+[Unit]
+Description=MenuPick 디스크 사용률을 30분마다 본다
+
+[Timer]
+# 부팅 직후에도 한 번 본다. 꺼져 있는 동안은 디스크가 늘지 않지만, 켜자마자
+# 배포(이미지 pull)를 하면 그때 가장 빨리 찬다.
+OnBootSec=3min
+OnUnitActiveSec=30min
+Persistent=false
+RandomizedDelaySec=1m
+
+[Install]
+WantedBy=timers.target

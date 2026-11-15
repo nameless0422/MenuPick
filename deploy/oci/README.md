@@ -28,6 +28,8 @@
 | `menupick-error-watch.timer` | `/etc/systemd/system/` | 15분마다 앱 ERROR 로그 감시 |
 | `menupick-heal.service` | `/etc/systemd/system/` | `scripts/heal-unhealthy.sh` 실행 |
 | `menupick-heal.timer` | `/etc/systemd/system/` | 2분마다 unhealthy 컨테이너 복구 |
+| `menupick-disk-watch.service` | `/etc/systemd/system/` | `scripts/check-disk.sh` 실행 |
+| `menupick-disk-watch.timer` | `/etc/systemd/system/` | 30분마다 디스크 사용률 감시 |
 | `journald-menupick.conf` | `/etc/systemd/journald.conf.d/menupick.conf` | 영구 보관 + 상한(컨테이너 로그가 여기로 온다) |
 
 **여기 없는 것**(서버에만 있고 앞으로도 커밋하지 않는다):
@@ -35,6 +37,7 @@
 - `certs/` — 자체 서명 인증서와 개인키. `.gitignore`가 `*.key`/`*.pem`을 막는다.
 - `/etc/menupick/alert.env` — 웹훅 URL. **URL 자체가 자격증명이다**(그것만 있으면 누구나 그
   채널에 글을 쓴다). 0600 root 소유로 두고 커밋하지 않는다.
+- `/etc/menupick/offsite.env` — 오프사이트 백업용 쓰기 전용 PAR URL. 역시 자격증명이다(0600 root).
 
 ## 배포
 
@@ -187,13 +190,15 @@ NFS를 쓰게 되면 되살려야 한다.
 `menupick-mysql 가 healthy가 아니다`), 그 사실은 `journalctl`에만 남아 10-02에 사람이 열어
 볼 때까지 아무도 몰랐다. 백업에서 가장 무서운 것은 실패가 아니라 **아무도 모르는 실패**다.
 
-알림을 보내는 경로는 셋이다.
+알림을 보내는 경로는 다섯이다.
 
 | 언제 | 보내는 것 |
 | --- | --- |
 | `menupick-backup.service` 실패 | `OnFailure=menupick-alert@%n.service` → 유닛 이름·결과·journal 꼬리 12줄 |
 | 앱 컨테이너에 ERROR 로그 발생 | `menupick-error-watch.timer`(15분) → 건수와 샘플 5줄 |
 | ERROR 감시 자체가 실패 | 감시 유닛에도 `OnFailure=`가 걸려 있다 |
+| 디스크 80%·90% 도달, 회복 | `menupick-disk-watch.timer`(30분) → 사용률과 무엇이 차지하는지 |
+| 오프사이트 업로드 실패 | 백업 유닛의 `ExecStartPost`가 실패 → 위 `OnFailure` |
 
 앱 안에서 도는 스케줄러 세 개(집단 통계 04:10, 방 정리 04:20, 탈퇴 정리)는 실패를 잡아서
 로그만 남기고 다음 회차를 유지한다 — 유닛이 실패하지 않으므로 `OnFailure`가 걸릴 자리가 없다.
@@ -276,6 +281,37 @@ ls /var/lib/menupick/heal/            # 컨테이너별 카운터(복구되면 �
 조치·포기·복구는 모두 웹훅으로 알린다(`/etc/menupick/alert.env`의 URL이 비어 있으면 journal에만
 남는다). 재시작은 `docker restart`라 컨테이너가 바뀌지 않으므로 로그도 끊기지 않는다.
 
+## 디스크 감시
+
+**왜**: 2026-10-03에 배포마다 쌓인 이미지 72개가 9.2GB를 먹어 루트가 77%였고, 2026-11에는
+23GB까지 찼다. 둘 다 사람이 우연히 `df`를 보고서야 알았다. 이 서버는 루트 하나(30GB)에 MySQL
+데이터·도커 이미지·journal·백업이 전부 올라가 있어, 가득 차면 MySQL이 쓰기를 못 해 먼저 죽고
+백업도 같이 실패한다.
+
+```bash
+# 설치 (최초 1회)
+sudo install -m 0755 scripts/check-disk.sh /usr/local/bin/menupick-disk-watch
+sudo cp deploy/oci/menupick-disk-watch.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now menupick-disk-watch.timer
+
+# 상태 확인
+systemctl list-timers menupick-disk-watch.timer
+journalctl -u menupick-disk-watch -n 10
+cat /var/lib/menupick/disk-watch.*      # 마운트별 "단계 마지막알림시각"
+```
+
+30분마다 `/`, `/var/lib/docker`, `~/backups`가 올라간 파일시스템을 본다(같은 것은 한 번만 —
+지금은 전부 루트다). 블록과 inode 중 높은 쪽으로 판정한다.
+
+- **80% 경고, 90% 위험.** 단계가 **오를 때** 바로 알린다.
+- 같은 단계에 머무르면 **6시간에 한 번만** 다시 알린다(`DISK_WATCH_COOLDOWN`).
+- **정상으로 돌아오면 한 번 알린다.** 정리했는데 확인이 안 오면 감시가 죽은 것과 구분되지 않는다.
+- 위험 → 경고처럼 내려가기만 한 것은 알리지 않는다.
+- 알림에는 `docker system df`(회수 가능 용량 포함), journal 사용량, 백업 폴더 크기가 같이 실린다.
+  대부분은 위 "배포" 절의 `docker image prune -a -f`로 해결된다. **볼륨은 지우지 않는다.**
+- 알림 전송이 실패하면 단계를 기록하지 않고 유닛이 실패한다 — 다음 회차에 다시 보낸다.
+
 ## 칼로리 기준 데이터
 
 기준 음식 검색(D-082)은 `food_references` 테이블을 읽는다. 데이터는 저장소에 없고 서버에서 직접 넣는다.
@@ -302,6 +338,7 @@ rm /tmp/food.csv /tmp/food.sql
 - 1인분 무게(`식품중량`)나 기준량을 읽을 수 없는 행, 둘의 단위가 다른 행(g/ml)은 건너뛴다.
   1인분 열량을 지어내지 않기 위해서다.
 - 데이터를 넣기 전에도 메뉴에 직접 적은 열량은 그대로 동작한다.
+
 
 ## 로그
 
@@ -388,14 +425,62 @@ zcat ~/backups/menupick-<타임스탬프>.sql.gz \
 복원 후에는 **Flyway 이력도 함께 돌아온다**(덤프에 `flyway_schema_history`가 포함된다).
 그 시점보다 새로운 마이그레이션이 앱 이미지에 들어 있으면 다음 기동에서 적용된다.
 
-### 남은 위험 — 백업이 서버 안에만 있다
+### 오프사이트 — 서버 밖에 한 벌
 
 `~/backups/`는 **인스턴스의 부트 볼륨 위**에 있다. 인스턴스를 재생성하면 백업도 함께
 사라진다 — 2026-08-19에 데이터가 사라졌을 때 정확히 그래서 남은 것이 없었다.
-진짜 오프사이트로 만들려면 OCI Object Storage에 올려야 하고, 그러려면 콘솔에서
-동적 그룹과 정책을 만들어 인스턴스 프린시펄 인증을 켜야 한다(사용자 소유 작업).
-그 전까지는 주기적으로 로컬로 내려받아 두는 것이 최선이다:
+
+그래서 백업 유닛이 덤프 검증을 통과하면 `ExecStartPost=+/usr/local/bin/menupick-offsite`로 그
+파일을 **OCI Object Storage**에 올린다. 인증은 **쓰기 전용 사전 인증 요청(PAR)** URL 하나다.
+
+- CLI, API 키, 인스턴스 프린시펄이 필요 없다. 서버에 있는 `curl` 하나로 끝난다.
+- 권한이 좁다. 쓰기만 되고 **읽기, 목록, 삭제는 안 된다.** 서버가 털려도 침입자가 이 URL로
+  기존 백업을 내려받거나 지울 수 없다. 덮어쓰기는 되므로 버킷의 **객체 버전 관리**를 켜 둔다.
+- `Content-MD5`를 같이 보낸다. 전송 중에 내용이 바뀌면 Object Storage가 400으로 거절하므로,
+  200을 받으면 같은 내용이 저장됐다는 뜻이다(쓰기 전용이라 다시 읽어 비교할 수가 없다).
+- 최신 백업이 1시간보다 오래됐으면 올리지 않고 실패한다. 이번 덤프가 조용히 안 만들어졌는데
+  며칠 전 파일을 올리고 "성공"하면, 오프사이트가 낡았다는 것을 아무도 모르게 된다.
+- 업로드가 실패하면 백업 유닛이 실패하고 **기존 `OnFailure` 알림이 그대로 간다.**
+
+**버킷 준비 (사용자 작업, OCI 콘솔 — 최초 1회)**
+
+1. Storage → Buckets → **Create Bucket**. 이름 예: `menupick-backups`. 기본 Standard 티어, 가시성은
+   **Private**(기본값). 생성 후 **Object Versioning: Enable**.
+2. 버킷 → **Lifecycle Policy Rules** → 규칙 추가: 대상 `Latest version and previous versions`,
+   **30일 뒤 Delete**. 이 규칙이 없으면 백업이 영원히 쌓인다(지금 덤프는 수 KB라 무료 한도
+   20GB와는 거리가 멀지만, 보관 기간은 정해 두는 것이 맞다).
+3. 버킷 → **Pre-Authenticated Requests** → Create:
+   - Target: **Bucket**
+   - Access Type: **Permit object writes** (읽기·목록 권한을 주지 않는다)
+   - Expiration: 원하는 만큼(예: 1년). **만료되면 업로드가 실패하고 알림이 온다** — 그때 새로 만든다.
+4. 만들어진 URL(`https://objectstorage.<region>.oraclecloud.com/p/<토큰>/n/<네임스페이스>/b/<버킷>/o/`)은
+   **그 창에서 한 번만 보인다.** 바로 서버에 넣는다.
 
 ```bash
-scp -i ssh-key-*.key opc@146.56.116.44:backups/'*.sql.gz' ./local-backups/
+# 설치 (최초 1회)
+sudo install -m 0755 scripts/offsite-backup.sh /usr/local/bin/menupick-offsite
+sudo cp deploy/oci/menupick-backup.service /etc/systemd/system/   # ExecStartPost 추가됨
+sudo systemctl daemon-reload
+
+# PAR URL 넣기 (사용자 작업 — URL 자체가 자격증명이다, 화면·채팅에 붙이지 말 것)
+sudo install -m 0600 /dev/null /etc/menupick/offsite.env
+sudo vi /etc/menupick/offsite.env
+#   OFFSITE_PAR_URL=https://objectstorage.<region>.oraclecloud.com/p/.../o/
+#   OFFSITE_PREFIX=db/
+
+# 점검 — 백업을 한 번 돌리고 업로드 줄을 확인한다
+sudo systemctl start menupick-backup.service
+journalctl -u menupick-backup -n 5 -o cat    # "오프사이트 업로드 완료: db/menupick-…"
 ```
+
+`offsite.env`가 없으면 경고 한 줄만 남기고 성공으로 끝난다(아직 버킷을 만들지 않은 서버).
+**있는데 읽을 수 없으면 실패로 본다** — 설정을 넣어 두고도 조용히 건너뛰는 것이 제일 나쁘다.
+
+**오프사이트에서 복원**: 쓰기 전용 URL로는 내려받을 수 없다. 콘솔에서 버킷 → 객체 → Download로
+받거나, 그 순간에만 쓸 **읽기 전용 PAR**을 짧은 만료로 만들어 `curl -o`로 받는다. 받은 뒤 복원
+절차는 위와 같다.
+
+**알아 둘 것 — 서버 쪽 암호화는 Object Storage 기본값이다.** 덤프에는 이메일, 비밀번호 해시,
+식사 기록이 들어 있다. 버킷은 Private이고 OCI가 저장 시 암호화하지만, 클라이언트 쪽에서 한 번 더
+암호화하지는 않는다. 키를 서버에만 두면 인스턴스를 잃을 때 키도 같이 잃어 백업이 쓸모없어지고,
+키를 따로 보관하는 절차를 만들 만큼의 규모가 아니라고 판단했다(D-080).
