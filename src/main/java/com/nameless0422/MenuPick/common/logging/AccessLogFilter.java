@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -92,13 +94,50 @@ public class AccessLogFilter extends OncePerRequestFilter {
         }
     }
 
+    /** 한 줄에 싣는 파라미터 이름의 최대 개수. 넘는 만큼은 개수로만 적는다. */
+    static final int MAX_LOGGED_PARAM_NAMES = 20;
+
+    /** 이름 하나의 최대 길이. 이 서비스의 실제 파라미터 이름은 전부 이보다 훨씬 짧다. */
+    static final int MAX_PARAM_NAME_LENGTH = 40;
+
     /**
      * 파라미터 이름만 정렬해 돌려준다. 값은 담지 않는다.
      *
      * <p>정렬하는 이유는 같은 엔드포인트의 줄이 파라미터 순서 때문에 달라 보이지 않게 하기 위한 것이다.
+     *
+     * <h2>이름도 사용자 입력이다</h2>
+     *
+     * <p>값을 안 찍으니 안전하다고 보기 쉽지만, <b>이름도 요청을 보낸 쪽이 정한다.</b>
+     * 인증이 필요 없고(이 필터는 시큐리티보다 먼저 돈다) URL 디코딩까지 끝난 문자열이다.
+     * 그래서 두 가지를 여기서 묶는다.
+     *
+     * <ul>
+     *   <li><b>폭주</b> — 폼 본문의 파라미터도 여기 잡힌다. 이름만 수천 개 채운 요청 하나가
+     *       수 MB짜리 로그 한 줄이 되고, journal은 상한(1GB)에 닿으면 오래된 것부터 지우므로
+     *       그게 곧 <b>진짜 로그를 밀어내는 수단</b>이 된다. 개수와 길이를 자른다.</li>
+     *   <li><b>위조</b> — 줄바꿈이 든 이름으로 가짜 로그 줄을 만드는 것은 레이아웃이 막는다
+     *       ({@link CrlfSafeMessageConverter}). 여기서 따로 씻지 않는 이유는 한 곳에서 막아야
+     *       다른 로그 문장도 같이 보호받기 때문이다.</li>
+     * </ul>
+     *
+     * <p>잘린 사실은 감추지 않는다({@code …}, {@code +N more}) — 조사하는 사람이 "이 요청은
+     * 정상이 아니었다"를 한눈에 알아야 한다.
      */
     private String parameterNames(HttpServletRequest request) {
         Set<String> names = new TreeSet<>(request.getParameterMap().keySet());
-        return names.isEmpty() ? "" : " params=" + names;
+        if (names.isEmpty()) {
+            return "";
+        }
+        List<String> shown = new ArrayList<>(Math.min(names.size(), MAX_LOGGED_PARAM_NAMES));
+        for (String name : names) {
+            if (shown.size() == MAX_LOGGED_PARAM_NAMES) {
+                break;
+            }
+            shown.add(name.length() <= MAX_PARAM_NAME_LENGTH
+                    ? name
+                    : name.substring(0, MAX_PARAM_NAME_LENGTH) + "…");
+        }
+        int hidden = names.size() - shown.size();
+        return " params=" + shown + (hidden > 0 ? " +" + hidden + " more" : "");
     }
 }

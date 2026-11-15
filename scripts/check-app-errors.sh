@@ -27,10 +27,23 @@ STATE_DIR="${ERROR_WATCH_STATE_DIR:-/var/lib/menupick}"
 STAMP="$STATE_DIR/error-watch.last"
 NOTIFY="${ERROR_WATCH_NOTIFY:-/usr/local/bin/menupick-alert}"
 
+# ERROR 줄의 모양. **줄 어딘가에 ERROR가 있는가**가 아니라 **레벨 칸이 ERROR인가**를 본다.
+#
+# 전에는 ' ERROR ' 부분 문자열로 찾았다. 그런데 접근 로그는 요청의 파라미터 이름을 찍고
+# (AccessLogFilter), 그 이름은 인증 없이도 누구나 정한다 — `?x%20ERROR%20y=1` 한 번이면
+# INFO 줄에 " ERROR "가 들어가 이 감시에 걸렸고, 그 줄이 그대로 운영 채널로 나갔다.
+# 즉 아무나 가짜 장애 알림을 띄우고 본문까지 고를 수 있었다(2026-11-13 점검).
+#
+# Boot의 줄은 `시각 레벨 [traceId,userId] PID --- ...` 순서다. 시각으로 시작하고, 레벨이
+# 바로 뒤에 오며, 레벨 뒤에 `[`가 따라온다(application.yml의 logging.pattern.level).
+# 이 세 가지를 모두 요구하면 메시지 안의 문자열은 여기에 닿지 못한다. 줄바꿈으로 줄 머리를
+# 흉내 내는 것은 앱이 메시지의 줄바꿈을 이스케이프해서 막는다(CrlfSafeMessageConverter).
+ERROR_LINE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+(Z|[+-][0-9]{2}:?[0-9]{2})? +ERROR +\['
+
 log() { printf '%s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 
 lines="$(journalctl CONTAINER_NAME="$CONTAINER" --since "-$SINCE" --no-pager -o cat 2>/dev/null \
-    | grep -E ' ERROR ' || true)"
+    | grep -E "$ERROR_LINE" || true)"
 count="$(printf '%s' "$lines" | grep -c . || true)"
 
 if [ "${count:-0}" -eq 0 ]; then

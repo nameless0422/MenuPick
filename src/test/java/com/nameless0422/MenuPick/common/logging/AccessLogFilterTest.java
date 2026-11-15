@@ -155,4 +155,53 @@ class AccessLogFilterTest {
 
         assertThat(appender.list).hasSize(1);
     }
+
+    /**
+     * 이름도 사용자 입력이다. 인증 전에 도는 필터라 누구나 보낼 수 있고, 폼 본문의 파라미터까지
+     * 잡히므로 이름만 수천 개 채운 요청 하나가 수 MB짜리 로그 한 줄이 된다. journal은 상한에
+     * 닿으면 오래된 것부터 지우므로 그게 곧 진짜 로그를 밀어내는 수단이다.
+     */
+    @Test
+    @DisplayName("파라미터 이름이 많으면 앞의 일부만 싣고 나머지는 개수로 적는다")
+    void capsNumberOfParameterNames() throws Exception {
+        MockHttpServletRequest request = get("/api/v1/menus");
+        for (int i = 0; i < 500; i++) {
+            request.setParameter(String.format("p%03d", i), "x");
+        }
+
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        String logged = onlyEvent().getFormattedMessage();
+        assertThat(logged).contains("p000", "p019").doesNotContain("p020");
+        assertThat(logged).contains("+480 more");
+        assertThat(logged.length()).isLessThan(400);
+    }
+
+    @Test
+    @DisplayName("긴 파라미터 이름은 잘라서 싣고 잘린 사실을 표시한다")
+    void truncatesLongParameterNames() throws Exception {
+        MockHttpServletRequest request = get("/api/v1/menus");
+        request.setParameter("a".repeat(5_000), "x");
+
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        String logged = onlyEvent().getFormattedMessage();
+        assertThat(logged).contains("a".repeat(AccessLogFilter.MAX_PARAM_NAME_LENGTH) + "…");
+        assertThat(logged).doesNotContain("a".repeat(AccessLogFilter.MAX_PARAM_NAME_LENGTH + 1));
+    }
+
+    /** 평소 요청의 줄은 한 글자도 달라지면 안 된다 — 이 줄을 읽는 사람과 도구가 있다. */
+    @Test
+    @DisplayName("이름이 적고 짧으면 예전과 같은 형식 그대로다")
+    void ordinaryRequestLineIsUnchanged() throws Exception {
+        MockHttpServletRequest request = get("/api/v1/kakao/search");
+        request.setParameter("query", "x");
+        request.setParameter("size", "20");
+
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        assertThat(onlyEvent().getFormattedMessage())
+                .contains("params=[query, size]")
+                .doesNotContain("more", "…");
+    }
 }

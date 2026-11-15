@@ -214,7 +214,7 @@ public class AuthController {
         return responseWithExpiredCookie();
     }
 
-    /** 비밀번호를 본문에 담으므로 본문 처리가 정의되지 않은 DELETE 대신 POST를 쓴다. 근거는 D-078. */
+    /** 비밀번호를 본문에 담으므로 본문 처리가 정의되지 않은 DELETE 대신 POST를 쓴다. 근거는 D-079. */
     @PostMapping("/withdraw")
     public ResponseEntity<ApiResponse<Void>> withdraw(
             @AuthenticationPrincipal Long userId,

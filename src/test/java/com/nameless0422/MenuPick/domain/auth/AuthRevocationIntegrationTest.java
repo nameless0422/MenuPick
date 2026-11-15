@@ -307,7 +307,7 @@ class AuthRevocationIntegrationTest extends AbstractIntegrationTest {
         assertAccepted(localAuthService.login(email, ORIGINAL).accessToken());
     }
 
-    // ---- 탈퇴 재인증(D-078) ----
+    // ---- 탈퇴 재인증(D-079) ----
 
     @Test
     @DisplayName("비밀번호가 틀리거나 없으면 탈퇴하지 않고 세션도 유지한다")

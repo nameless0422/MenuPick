@@ -123,7 +123,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             //      IP당 10회/분")가 이 경로에서만 무너져 있었다.
             // PATCH라 authMatcher(POST 고정)로는 잡히지 않는다.
             PathPatternRequestMatcher.pathPattern(HttpMethod.PATCH, "/api/v1/auth/password"),
-            // 탈퇴도 비밀번호를 대조하므로 비밀번호 변경과 같은 이유로 센다(D-078).
+            // 탈퇴도 비밀번호를 대조하므로 비밀번호 변경과 같은 이유로 센다(D-079).
             authMatcher("/api/v1/auth/withdraw")
     );
 

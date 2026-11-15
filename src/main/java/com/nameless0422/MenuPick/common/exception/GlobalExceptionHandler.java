@@ -84,7 +84,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
-        log.warn("IllegalArgumentException: {}", e.getMessage());
+        log.warn("IllegalArgumentException: {}", abbreviate(e.getMessage()));
         return ResponseEntity
                 .status(ErrorCode.INVALID_INPUT.getHttpStatus())
                 .body(ApiResponse.error(ErrorCode.INVALID_INPUT, ErrorCode.INVALID_INPUT.getMessage()));
@@ -146,10 +146,18 @@ public class GlobalExceptionHandler {
     /**
      * JSON 파싱 실패 처리 — malformed JSON body 등.
      * 400 Bad Request를 반환한다.
+     *
+     * <p><b>예외 메시지를 로그에 남기지 않는다.</b> 파서는 "여기서 막혔다"를 설명하려고 그 자리의
+     * 토큰을 메시지에 인용한다({@code Unrecognized token 'hunter2': was expecting ...}).
+     * 로그인·가입·비밀번호 변경 본문이 깨져서 오면 그 토큰이 비밀번호일 수 있고(따옴표 하나만
+     * 빠져도 그렇게 된다), 로그는 평문으로 journal에 남으며 알림 채널로도 나갈 수 있다.
+     * 원인을 가릴 만큼의 정보는 예외의 <b>종류</b>에 있다 — 문법 오류인지, 타입이 안 맞는지,
+     * 본문이 비었는지. 그래서 가장 안쪽 원인의 클래스 이름만 남긴다.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
-        log.warn("HttpMessageNotReadableException: {}", e.getMessage());
+        log.warn("HttpMessageNotReadableException: [{}]",
+                e.getMostSpecificCause().getClass().getSimpleName());
         return error(ErrorCode.MALFORMED_REQUEST_BODY);
     }
 
@@ -159,7 +167,10 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
-        log.warn("MethodArgumentTypeMismatchException: param={}, value={}", e.getName(), e.getValue());
+        // 값은 사용자가 보낸 그대로라 잘라서 남긴다. 무엇이 왔는지 짐작할 만큼이면 충분하고,
+        // 전체를 찍으면 URL에 실려 온 긴 문자열이 통째로 로그에 들어간다.
+        log.warn("MethodArgumentTypeMismatchException: param={}, value={}",
+                e.getName(), abbreviate(e.getValue()));
         return error(ErrorCode.INVALID_INPUT,
                 "'" + e.getName() + "' 파라미터의 타입이 올바르지 않습니다.");
     }
@@ -247,5 +258,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ApiResponse.error(errorCode, message));
+    }
+
+    /** 로그에 싣는 사용자 값의 최대 길이. */
+    private static final int MAX_LOGGED_VALUE_LENGTH = 64;
+
+    /**
+     * 로그에 남길 사용자 값을 줄인다. 줄바꿈·제어 문자는 여기서 다루지 않는다 —
+     * 레이아웃이 모든 메시지에 대해 한 번에 막는다({@code CrlfSafeMessageConverter}).
+     */
+    private static String abbreviate(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        String text = String.valueOf(value);
+        return text.length() <= MAX_LOGGED_VALUE_LENGTH
+                ? text
+                : text.substring(0, MAX_LOGGED_VALUE_LENGTH) + "…(" + text.length() + "자)";
     }
 }
