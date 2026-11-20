@@ -74,9 +74,53 @@
 .calendar-table li span { display: block; color: var(--text); }
 .calendar-notice { color: var(--text); }
 
+/* 날짜를 눌러 보는 단추와 아래 목록은 좁은 화면 전용이다. 넓은 화면은 칸 안에 목록이 다 보인다. */
+.calendar-day-pick, .calendar-day-detail { display: none; }
+
 @media (max-width: 640px) {
+  .visit-calendar { padding: 16px; }
   .visit-calendar-heading-row { align-items: stretch; flex-direction: column; }
   .calendar-navigation { justify-content: center; }
+  /* 7칸이 화면 폭에 그대로 맞는다 — 가로로 밀어 보는 표를 만들지 않는다. */
+  .calendar-scroll { overflow: visible; }
+  .calendar-table { min-width: 0; }
+  .calendar-table caption { padding: 4px 0 8px; font-size: var(--fs-sm); }
+  .calendar-table th, .calendar-table td { padding: 2px; text-align: center; vertical-align: top; }
+  .calendar-table td { position: relative; height: 52px; padding-top: 6px; }
+  .calendar-table td > ul { display: none; }
+  .calendar-day { margin: 0; font-weight: 600; font-size: var(--fs-sm); }
+  /* 칸 전체가 누르는 자리다(44px 넘게). 숫자는 기록 수 배지로만 보인다. */
+  .calendar-day-pick {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .calendar-day-pick span {
+    position: absolute;
+    left: 50%;
+    bottom: 4px;
+    transform: translateX(-50%);
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--surface);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 16px;
+  }
+  .calendar-day-pick[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+  .calendar-day-detail { display: block; margin-top: 12px; }
+  .calendar-day-detail h3 { margin: 0 0 8px; font-size: var(--fs-sm); }
+  .calendar-day-detail ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .calendar-day-detail li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+  .calendar-day-detail li span { display: block; margin-top: 2px; color: var(--text); font-size: var(--fs-xs); }
 }
 
 /* 내 식사 기록 요약. 히스토리 화면 맨 위의 짧은 요약이라 목록보다 조용해야 한다. */
@@ -272,6 +316,17 @@
   gap: 0.25rem 0.75rem;
 }
 
+/* 좁은 화면: 세 묶음을 폭에 꽉 찬 분할 단추로. [기간 | 종류] 한 줄, 그 아래 [막대 | 선 | 원] 한 줄. */
+@media (max-width: 640px) {
+  .nutrition-summary-head { flex-direction: column; align-items: stretch; }
+  .nutrition-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .nutrition-period { display: flex; }
+  .nutrition-period button { flex: 1 1 0; min-width: 0; min-height: 44px; padding-inline: 0.25rem; white-space: nowrap; }
+  .nutrition-period-kind { grid-column: 1 / -1; order: 3; }
+  /* 탄단지 묶음이 없으면(탄단지를 아는 날이 없을 때) 기간 묶음이 한 줄을 다 쓴다. */
+  .nutrition-period-days:has(+ .nutrition-period-kind:last-child) { grid-column: 1 / -1; }
+}
+
 .nutrition-period button[aria-pressed="true"] {
   background: var(--accent-bg);
   border-color: var(--accent-border);
@@ -340,6 +395,29 @@
 .nutrition-seg-carbs { fill: var(--macro-carbs); background: var(--macro-carbs); }
 .nutrition-seg-protein { fill: var(--macro-protein); background: var(--macro-protein); }
 .nutrition-seg-fat { fill: var(--macro-fat); background: var(--macro-fat); }
+
+/* 꺾은선(선 그래프). 선은 2px, 표시점은 지름 8px에 카드색 테두리를 둘러 선과 겹쳐도 떨어져 보인다. */
+.nutrition-line-path { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.nutrition-line-marker { stroke: var(--surface); stroke-width: 2; }
+.nutrition-line-total .nutrition-line-path { stroke: var(--slot-total); }
+.nutrition-line-total .nutrition-line-marker { fill: var(--slot-total); }
+.nutrition-line-carbs .nutrition-line-path { stroke: var(--macro-carbs); }
+.nutrition-line-carbs .nutrition-line-marker { fill: var(--macro-carbs); }
+.nutrition-line-protein .nutrition-line-path { stroke: var(--macro-protein); }
+.nutrition-line-protein .nutrition-line-marker { fill: var(--macro-protein); }
+.nutrition-line-fat .nutrition-line-path { stroke: var(--macro-fat); }
+.nutrition-line-fat .nutrition-line-marker { fill: var(--macro-fat); }
+.nutrition-chart-crosshair { stroke: var(--field-border); stroke-width: 1; }
+.nutrition-chart-series-label { fill: var(--text-h); font-size: 0.6875rem; }
+
+/* 원(도넛). 조각 사이는 카드색 2px 틈이다. 좁은 화면에서는 목록이 도넛 아래로 내려간다. */
+.nutrition-donut { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
+.nutrition-donut-slice { stroke: var(--surface); stroke-width: 2; }
+.nutrition-donut-slice.is-dimmed, .nutrition-donut-legend li.is-dimmed { opacity: 0.35; }
+.nutrition-donut-center { fill: var(--text-h); font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.nutrition-donut-caption { margin: 0 0 0.375rem; color: var(--text); font-size: var(--fs-xs); }
+.nutrition-donut-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; font-size: var(--fs-sm); }
+.nutrition-donut-legend strong { font-variant-numeric: tabular-nums; }
 
 .nutrition-chart-tooltip {
   position: absolute;

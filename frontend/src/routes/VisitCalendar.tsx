@@ -13,6 +13,13 @@ export default function VisitCalendar({ initialMonth }: { initialMonth?: string 
   const entriesByDay = groupCalendarEntries(query.data?.entries ?? []);
   const [year, monthNumber] = month.split("-").map(Number);
   const monthLabel = `${year}년 ${monthNumber}월`;
+  // 좁은 화면에서는 칸 안에 목록을 넣지 않고 날짜를 눌러 아래에서 본다(가로 스크롤 없이 7칸이 폭에 맞는다).
+  // 고른 날이 없으면 그달 기록이 있는 마지막 날을 보인다.
+  const [picked, setPicked] = useState<{ month: string; day: number } | null>(null);
+  const daysWithEntries = [...entriesByDay.keys()].sort((a, b) => a - b);
+  const selectedDay = picked?.month === month && entriesByDay.has(picked.day)
+    ? picked.day : daysWithEntries[daysWithEntries.length - 1];
+  const selectedEntries = selectedDay != null ? entriesByDay.get(selectedDay) ?? [] : [];
   return (
     <section className="visit-calendar" aria-labelledby="visit-calendar-heading">
       <div className="visit-calendar-heading-row">
@@ -34,11 +41,26 @@ export default function VisitCalendar({ initialMonth }: { initialMonth?: string 
           ? <td key={`empty-${dayIndex}`} className="calendar-outside" aria-hidden="true" />
           : <td key={day} aria-label={`${monthNumber}월 ${day}일, 방문 기록 ${entriesByDay.get(day)?.length ?? 0}개`}>
               <time dateTime={`${month}-${String(day).padStart(2, "0")}`} className="calendar-day">{day}</time>
+              {entriesByDay.has(day) && (
+                <button type="button" className="calendar-day-pick" aria-pressed={selectedDay === day}
+                  aria-label={`${monthNumber}월 ${day}일 방문 기록 ${entriesByDay.get(day)!.length}개 보기`}
+                  onClick={() => setPicked({ month, day })}>
+                  <span aria-hidden="true">{entriesByDay.get(day)!.length}</span>
+                </button>
+              )}
               {entriesByDay.has(day) && <ul role="list">{entriesByDay.get(day)!.map((entry) => <li key={entry.id}>
                 <strong>{entry.menuName ?? "삭제된 메뉴"}</strong><span>{entry.restaurantName ?? "삭제되었거나 기록되지 않은 식당"}</span>
               </li>)}</ul>}
             </td>)}</tr>)}</tbody>
       </table></div>}
+      {query.isSuccess && selectedDay != null && (
+        <div className="calendar-day-detail" aria-live="polite">
+          <h3>{monthNumber}월 {selectedDay}일</h3>
+          <ul role="list">{selectedEntries.map((entry) => <li key={entry.id}>
+            <strong>{entry.menuName ?? "삭제된 메뉴"}</strong><span>{entry.restaurantName ?? "삭제되었거나 기록되지 않은 식당"}</span>
+          </li>)}</ul>
+        </div>
+      )}
     </section>
   );
 }
