@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import { fetchNutritionSummary, type NutritionSummary as Summary } from "../api/nutrition";
 import NutritionSummary from "./NutritionSummary";
-import { energyShares, niceTicks } from "./nutritionChartScale";
+import { energyShares, niceTicks, percentShares } from "./nutritionChartScale";
 
 vi.mock("../api/nutrition", () => ({ fetchNutritionSummary: vi.fn() }));
 const fetchMock = vi.mocked(fetchNutritionSummary);
@@ -31,7 +31,10 @@ const summary = (overrides: Partial<Summary> = {}): Summary => ({
   ...overrides,
 });
 
-beforeEach(() => fetchMock.mockReset().mockResolvedValue(summary()));
+beforeEach(() => {
+  fetchMock.mockReset().mockResolvedValue(summary());
+  window.localStorage.clear();
+});
 
 describe("열량 기록", () => {
   it("하루 평균과 날짜·끼니별 값을 표로도 말하고, 기록 없는 날은 0kcal이 아니라 기록 없음이다", async () => {
@@ -140,6 +143,62 @@ describe("열량 기록", () => {
     expect(within(rows[3]).getAllByRole("cell").map((td) => td.textContent)).toEqual(["45", "18", "0", "1끼"]);
   });
 
+  it("선 그래프는 기록 없는 날에서 끊기고, 표시점에 마우스를 대면 그날 값을 말한다", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    await user.click(screen.getByRole("button", { name: "선" }));
+    expect(screen.getByRole("button", { name: "선" })).toHaveAttribute("aria-pressed", "true");
+
+    const svg = container.querySelector(".nutrition-chart svg")!;
+    expect(svg.querySelectorAll(".nutrition-seg")).toHaveLength(0);
+    // 10/7은 기록이 없어 점이 둘이고, 경로는 그 둘만 잇는다(M…L…).
+    expect(svg.querySelectorAll(".nutrition-line-marker")).toHaveLength(2);
+    expect(svg.querySelector(".nutrition-line-path")!.getAttribute("d")).toMatch(/^M[\d.,]+L[\d.,]+$/);
+    fireEvent.mouseEnter(svg.querySelectorAll(".nutrition-chart-hit")[2]);
+    expect(container.querySelector(".nutrition-chart-tooltip")).toHaveTextContent("10/9 (금)약 750kcal모름 1끼");
+    // 고른 모양은 다음에 열어도 그대로다.
+    expect(window.localStorage.getItem("menupick.nutritionChartKind")).toBe("line");
+  });
+
+  it("원그래프는 기간 열량을 끼니별 몫(%)으로 나누고, 같은 값을 말하는 끼니 칩은 숨긴다", async () => {
+    window.localStorage.setItem("menupick.nutritionChartKind", "donut");
+    const { container } = renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    expect(screen.getByRole("button", { name: "원" })).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelectorAll(".nutrition-donut-slice")).toHaveLength(2);
+    expect(within(screen.getByRole("list", { name: /끼니별 열량 몫/ })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["점심 78% 약 1,050kcal", "저녁 22% 약 300kcal"]);
+    expect(screen.queryByRole("list", { name: "끼니별 열량" })).not.toBeInTheDocument();
+  });
+
+  it("탄단지 원그래프는 하루 평균 g을 열량 비율로 나눈다", async () => {
+    fetchMock.mockResolvedValue(summary({
+      days: [{ date: "2026-10-09", kcal: 600, meals: 2, unknownMeals: 0, slots: slotsOf(0, 300, 300, 0),
+        macros: { meals: 2, carbsG: 200, proteinG: 60, fatG: 50 } }],
+      macros: { meals: 2, carbsG: 200, proteinG: 60, fatG: 50, fiberMeals: 0, fiberG: null },
+    }));
+    const user = userEvent.setup();
+    renderWithProviders(<NutritionSummary />);
+    await user.click(await screen.findByRole("button", { name: "원" }));
+    await user.click(screen.getByRole("button", { name: "탄단지" }));
+    expect(within(screen.getByRole("list", { name: /탄단지 열량 비율/ })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["탄수화물 54% 하루 200g", "단백질 16% 하루 60g", "지방 30% 하루 50g"]);
+  });
+
+  it("저장소가 막혀 있어도 막대로 시작하고 모양을 바꿀 수 있다", async () => {
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    const user = userEvent.setup();
+    renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    expect(screen.getByRole("button", { name: "막대" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "원" }));
+    expect(screen.getByRole("button", { name: "원" })).toHaveAttribute("aria-pressed", "true");
+    get.mockRestore();
+    set.mockRestore();
+  });
+
   it("탄단지를 아는 날이 없으면 그래프 종류를 고르지 않는다", async () => {
     renderWithProviders(<NutritionSummary />);
     await screen.findByText(/하루 평균/);
@@ -185,6 +244,14 @@ describe("niceTicks", () => {
   it.each([
     [0, [0, 500, 1000]], [1000, [0, 500, 1000]], [1010, [0, 500, 1000, 1500]], [2380, [0, 1000, 2000, 3000]],
   ])("%d → %j", (max, ticks) => expect(niceTicks(max)).toEqual(ticks));
+});
+
+describe("percentShares", () => {
+  it("몇 개든 정수 몫의 합을 100에 맞춘다", () => {
+    expect(percentShares([1, 1, 1])).toEqual([34, 33, 33]);
+    expect(percentShares([1050, 300])).toEqual([78, 22]);
+    expect(percentShares([0, 0])).toBeNull();
+  });
 });
 
 describe("energyShares", () => {

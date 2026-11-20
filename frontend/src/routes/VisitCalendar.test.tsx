@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/renderWithProviders";
 import { fetchHistoryCalendar } from "../api/history";
@@ -42,6 +42,24 @@ describe("방문 기록 달력 화면", () => {
     expect(table).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "일" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: /1일, 방문 기록 1개/ })).toHaveTextContent("삭제된 메뉴삭제되었거나 기록되지 않은 식당");
+  });
+
+  it("좁은 화면용으로 날짜를 누르면 그날 기록을 아래에 보이고, 처음에는 기록이 있는 마지막 날을 보인다", async () => {
+    const user = userEvent.setup();
+    const month = currentKstMonth();
+    fetchMock.mockResolvedValue({ month, truncated: false, entries: [
+      { id: 1, menuName: "김치찌개", restaurantName: "동네 식탁", visitedAt: `${month}-02T12:00:00` },
+      { id: 2, menuName: "짬뽕", restaurantName: null, visitedAt: `${month}-05T12:00:00` },
+      { id: 3, menuName: "초밥", restaurantName: "스시집", visitedAt: `${month}-05T19:00:00` },
+    ] });
+    renderWithProviders(<VisitCalendar />);
+    const day5 = await screen.findByRole("button", { name: /5일 방문 기록 2개 보기/ });
+    expect(day5).toHaveAttribute("aria-pressed", "true");
+    const monthNumber = Number(month.slice(5));
+    expect(screen.getByRole("heading", { name: `${monthNumber}월 5일` })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /2일 방문 기록 1개 보기/ }));
+    const detail = screen.getByRole("heading", { name: `${monthNumber}월 2일` }).parentElement!;
+    expect(within(detail).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["김치찌개동네 식탁"]);
   });
 
   it("이전 달로 이동하고 현재 달에서는 다음 달을 막는다", async () => {
