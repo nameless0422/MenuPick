@@ -4,6 +4,7 @@ import com.nameless0422.MenuPick.domain.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nameless0422.MenuPick.common.security.CustomAccessDeniedHandler;
 import com.nameless0422.MenuPick.common.security.CustomAuthenticationEntryPoint;
+import com.nameless0422.MenuPick.common.security.AuthVersionCache;
 import com.nameless0422.MenuPick.common.security.JwtAuthenticationFilter;
 import com.nameless0422.MenuPick.common.security.JwtTokenProvider;
 import com.nameless0422.MenuPick.common.security.RateLimitFilter;
@@ -51,4 +52,6 @@ public abstract class AbstractControllerTest {
     @MockitoBean protected JwtTokenProvider jwtTokenProvider;
     @MockitoBean protected StringRedisTemplate redisTemplate;
     @MockitoBean protected UserRepository userRepository;
+    /** 목이라 언제나 빈 값(=인증 안 됨)을 준다. 컨텍스트를 공유하는 테스트끼리 캐시된 값이 새지 않는다. */
+    @MockitoBean protected AuthVersionCache authVersionCache;
 }

@@ -36,7 +36,8 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthenticationFilter(jwtTokenProvider, userRepository);
+        // 캐시는 테스트마다 새로 만든다 — 앞 테스트가 넣은 값이 다음 테스트의 스텁을 가리지 않게.
+        filter = new JwtAuthenticationFilter(jwtTokenProvider, new AuthVersionCache(userRepository));
         SecurityContextHolder.clearContext();
     }
 

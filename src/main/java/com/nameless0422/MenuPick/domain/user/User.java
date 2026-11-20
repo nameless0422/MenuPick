@@ -1,6 +1,7 @@
 package com.nameless0422.MenuPick.domain.user;
 
 import com.nameless0422.MenuPick.common.domain.BaseTimeEntity;
+import com.nameless0422.MenuPick.common.security.UserAuthStateListener;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -12,6 +13,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
+@EntityListeners(UserAuthStateListener.class)
 @DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

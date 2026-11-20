@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nameless0422.MenuPick.common.dto.ApiResponse;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.common.logging.TraceIdFilter;
-import com.nameless0422.MenuPick.domain.user.UserRepository;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,7 +29,8 @@ import java.util.Optional;
  *
  * <p>서명·만료·종류에 더해 토큰의 {@code ver}가 계정의 현재 {@code auth_version}과 같은지 본다.
  * 로그아웃·탈퇴·비밀번호 변경 후에도 토큰이 만료까지 통하던 창을 닫으려면 요청마다 서버 상태를
- * 봐야 한다. 지금 규모에서는 PK 한 건 조회로 충분해 Redis 블랙리스트를 따로 두지 않는다.
+ * 봐야 한다. 그 값은 {@link AuthVersionCache}가 앱 메모리에 들고 있다가 계정이 바뀌면 커밋 직후
+ * 지운다(D-088) — 요청마다 커넥션을 한 번 더 빌리지 않으면서도 무효화는 즉시다.
  *
  * <p>DB 조회가 실패하면 통과시키지 않고 503을 준다. 어차피 대부분의 API가 DB 없이는 응답할 수
  * 없고, 401을 주면 프론트가 멀쩡한 세션을 로그아웃시킨다.
@@ -41,7 +41,7 @@ import java.util.Optional;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final UserRepository userRepository;
+    private final AuthVersionCache authVersionCache;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -60,7 +60,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             boolean current;
             try {
                 long tokenVersion = jwtTokenProvider.getAuthVersion(claims.get());
-                current = userRepository.findActiveAuthVersion(userId)
+                current = authVersionCache.findActiveAuthVersion(userId)
                         .filter(version -> version == tokenVersion)
                         .isPresent();
             } catch (DataAccessException | TransactionException e) {
