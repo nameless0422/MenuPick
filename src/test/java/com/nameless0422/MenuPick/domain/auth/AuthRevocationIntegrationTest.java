@@ -299,12 +299,25 @@ class AuthRevocationIntegrationTest extends AbstractIntegrationTest {
     @DisplayName("탈퇴하면 토큰이 거부되고, 유예기간 안에 로그인하면 새 토큰으로 복구된다")
     void withdrawRevokesTokens() throws Exception {
         TokenResponse tokens = verifiedAccount();
+        assertAccepted(tokens.accessToken()); // 인증 버전 캐시(D-088)에 올려 둔 뒤에도 즉시 끊겨야 한다
 
         authService.withdraw(userId());
 
         assertRejected(tokens.accessToken());
         assertFails(ErrorCode.UNAUTHORIZED, () -> authService.refresh(tokens.refreshToken()));
         assertAccepted(localAuthService.login(email, ORIGINAL).accessToken());
+    }
+
+    @Test
+    @DisplayName("비밀번호를 바꾸면 캐시에 올라 있던 옛 Access Token도 바로 거부된다")
+    void passwordChangeRevokesCachedAccessToken() throws Exception {
+        TokenResponse tokens = verifiedAccount();
+        assertAccepted(tokens.accessToken());
+
+        localAuthService.changePassword(userId(), ORIGINAL, REPLACEMENT);
+
+        assertRejected(tokens.accessToken());
+        assertAccepted(localAuthService.login(email, REPLACEMENT).accessToken());
     }
 
     // ---- 탈퇴 재인증(D-079) ----
