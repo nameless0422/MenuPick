@@ -12,7 +12,11 @@ function daysEnding(count: number) {
       .map(([slot, kcal]) => ({ slot, kcal, meals: kcal ? 1 : 0 }));
     const kcal = b + l + dn + s;
     out.push({ date: d, kcal, meals: empty ? 0 : slots.filter((x) => x.meals).length + (i % 5 === 1 ? 1 : 0),
-      unknownMeals: !empty && i % 5 === 1 ? 1 : 0, slots });
+      unknownMeals: !empty && i % 5 === 1 ? 1 : 0, slots,
+      // 탄단지는 열량을 대략 55·15·30%로 나눈 값이다.
+      macros: empty ? { meals: 0, carbsG: null, proteinG: null, fatG: null }
+        : { meals: slots.filter((x) => x.meals).length, carbsG: Math.round(kcal * 0.55 / 4),
+          proteinG: Math.round(kcal * 0.15 / 4), fatG: Math.round(kcal * 0.3 / 9) } });
   }
   return out;
 }
@@ -29,7 +33,8 @@ function summary(periodDays: number) {
     }),
     totalKcal: total, knownMeals: known.length * 2, unknownMeals: days.reduce((n, d) => n + d.unknownMeals, 0),
     averageKcal: Math.round(total / known.length), truncated: false,
-    macros: { meals: known.length * 2, carbsG: 210, proteinG: 72, fatG: 55, fiberMeals: known.length, fiberG: 17 },
+    macros: { meals: known.length * 2, carbsG: 210, proteinG: 72, fatG: 55, fiberMeals: known.length, fiberG: 17,
+      sugarsMeals: known.length, sugarsG: 41, sodiumMeals: known.length * 2, sodiumMg: 3120 },
   };
 }
 
@@ -66,6 +71,14 @@ test("열량 기록을 끼니별 막대로 보여 주고 7일·30일을 바꿔 �
 
   await section.getByText("숫자로 보기").click();
   await expect(section.getByRole("table", { name: /최근 30일 하루 열량/ }).getByRole("row")).toHaveCount(31);
+  await expect(section.getByRole("list", { name: "탄단지 하루 평균" })).toContainText("나트륨 약 3,120mg");
+
+  // 탄단지 그래프: 기록 있는 날마다 탄수화물 조각이 하나, 표도 g으로 바뀐다.
+  await section.getByRole("button", { name: "탄단지" }).click();
+  await expect(section.getByRole("button", { name: "탄단지" })).toHaveAttribute("aria-pressed", "true");
+  await expect(section.locator(".nutrition-chart svg .nutrition-seg-carbs")).toHaveCount(20);
+  await expect(section.locator(".nutrition-chart svg .nutrition-seg-lunch")).toHaveCount(0);
+  await expect(section.getByRole("table", { name: /최근 30일 하루 탄단지/ }).getByRole("row")).toHaveCount(31);
   // 그래프가 카드 밖으로 넘치지 않는다.
   const card = await section.boundingBox();
   const svg = await section.locator(".nutrition-chart svg").boundingBox();

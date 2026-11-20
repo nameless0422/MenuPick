@@ -82,6 +82,11 @@ public class Menu extends BaseTimeEntity {
     private BigDecimal fatG;
     @Column(name = "fiber_g")
     private BigDecimal fiberG;
+    /** 1인분 당류(g)·나트륨(mg). 위와 같은 방식이다(D-085). */
+    @Column(name = "sugars_g")
+    private BigDecimal sugarsG;
+    @Column(name = "sodium_mg")
+    private Integer sodiumMg;
 
     private LocalDateTime deletedAt;
 
@@ -169,7 +174,7 @@ public class Menu extends BaseTimeEntity {
     }
 
     public Macros getMacros() {
-        return new Macros(carbsG, proteinG, fatG, fiberG);
+        return new Macros(carbsG, proteinG, fatG, fiberG, sugarsG, sodiumMg);
     }
 
     private void applyMacros(Macros macros) {
@@ -178,6 +183,8 @@ public class Menu extends BaseTimeEntity {
         this.proteinG = values.proteinG();
         this.fatG = values.fatG();
         this.fiberG = values.fiberG();
+        this.sugarsG = values.sugarsG();
+        this.sodiumMg = values.sodiumMg();
     }
 
     public void pause(LocalDateTime until) {

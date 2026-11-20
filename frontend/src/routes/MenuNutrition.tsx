@@ -84,18 +84,21 @@ function describe(nutrition: Nutrition): string {
   return `1인분 약 ${nutrition.kcalPerServing}kcal · 직접 적은 값`;
 }
 
+/** 영양소 칸. 탄단지 셋(`trio`)은 함께 적거나 함께 비운다. 나트륨만 mg 정수다(D-085). */
 const MACRO_FIELDS = [
-  { key: "carbsG", label: "탄수화물" },
-  { key: "proteinG", label: "단백질" },
-  { key: "fatG", label: "지방" },
-  { key: "fiberG", label: "식이섬유" },
+  { key: "carbsG", label: "탄수화물", unit: "g", trio: true },
+  { key: "proteinG", label: "단백질", unit: "g", trio: true },
+  { key: "fatG", label: "지방", unit: "g", trio: true },
+  { key: "fiberG", label: "식이섬유", unit: "g", trio: false },
+  { key: "sugarsG", label: "당류", unit: "g", trio: false },
+  { key: "sodiumMg", label: "나트륨", unit: "mg", trio: false },
 ] as const;
 
-/** 1인분 영양소 한 줄. 탄단지를 모르면 null — 식이섬유만 따로 아는 경우는 없다(열량·탄단지와 같이 온다). */
+/** 1인분 영양소 한 줄. 아는 값만 보인다. 하나도 모르면 null. */
 function macroLine(values: Partial<Macros>): string | null {
-  if (values.carbsG == null || values.proteinG == null || values.fatG == null) return null;
-  return MACRO_FIELDS.filter((field) => values[field.key] != null)
-    .map((field) => `${field.label} ${values[field.key]}g`).join(" · ");
+  const known = MACRO_FIELDS.filter((field) => values[field.key] != null);
+  if (known.length === 0) return null;
+  return known.map((field) => `${field.label} ${values[field.key]!.toLocaleString("ko-KR")}${field.unit}`).join(" · ");
 }
 
 function ReferenceSearch({ initial, busy, onPick, onCancel }: {
@@ -150,21 +153,31 @@ function ReferenceSearch({ initial, busy, onPick, onCancel }: {
 
 /** 영양소 칸 한 개: 비우거나, 0~999.9를 소수점 한 자리까지. 서버 검증과 같다. */
 const MACRO_PATTERN = /^\d{1,3}(\.\d)?$/;
+/** 나트륨: 0~20,000mg 정수. */
+const SODIUM_PATTERN = /^\d{1,5}$/;
+const SODIUM_MAX = 20000;
+
+function fieldValid(key: keyof Macros, value: string): boolean {
+  if (value === "") return true;
+  if (key === "sodiumMg") return SODIUM_PATTERN.test(value) && Number(value) <= SODIUM_MAX;
+  return MACRO_PATTERN.test(value);
+}
 
 function CustomKcal({ initial, busy, onSave, onCancel }: {
   initial: Nutrition | null; busy: boolean; onSave: (body: MenuNutritionUpdate) => void; onCancel: () => void;
 }) {
   const id = useId();
   const [value, setValue] = useState(initial?.kcalPerServing != null ? String(initial.kcalPerServing) : "");
-  const [macros, setMacros] = useState<Record<keyof Macros, string>>(() => ({
-    carbsG: initial?.carbsG != null ? String(initial.carbsG) : "",
-    proteinG: initial?.proteinG != null ? String(initial.proteinG) : "",
-    fatG: initial?.fatG != null ? String(initial.fatG) : "",
-    fiberG: initial?.fiberG != null ? String(initial.fiberG) : "",
-  }));
+  const [macros, setMacros] = useState<Record<keyof Macros, string>>(() => {
+    const text = (v: number | null | undefined) => (v != null ? String(v) : "");
+    return {
+      carbsG: text(initial?.carbsG), proteinG: text(initial?.proteinG), fatG: text(initial?.fatG),
+      fiberG: text(initial?.fiberG), sugarsG: text(initial?.sugarsG), sodiumMg: text(initial?.sodiumMg),
+    };
+  });
   const kcal = Number(value);
   const kcalValid = /^\d+$/.test(value) && kcal >= 1 && kcal <= 5000;
-  const badField = (key: keyof Macros) => macros[key] !== "" && !MACRO_PATTERN.test(macros[key]);
+  const badField = (key: keyof Macros) => !fieldValid(key, macros[key]);
   const trio = [macros.carbsG, macros.proteinG, macros.fatG];
   // 탄단지는 셋을 함께 적거나 모두 비운다 — 하나만 있으면 비율을 그릴 수 없다.
   const partial = trio.some((v) => v !== "") && trio.some((v) => v === "");
@@ -191,19 +204,23 @@ function CustomKcal({ initial, busy, onSave, onCancel }: {
         onChange={(event) => setValue(event.target.value)} onKeyDown={onEnter} />
       <p id={`${id}-help`}>1~5,000 사이의 정수로 적어 주세요.</p>
       <fieldset className="menu-nutrition-macro-fields" aria-describedby={`${id}-macro-help`}>
-        <legend>1인분 영양소 (선택, g)</legend>
-        {MACRO_FIELDS.map((field) => (
-          <label key={field.key}>
-            {field.label}
-            <input type="number" inputMode="decimal" min={0} max={999.9} step={0.1} value={macros[field.key]}
-              aria-invalid={badField(field.key) || (partial && field.key !== "fiberG" && macros[field.key] === "")}
-              onChange={(event) => setMacros((prev) => ({ ...prev, [field.key]: event.target.value }))}
-              onKeyDown={onEnter} />
-          </label>
-        ))}
+        <legend>1인분 영양소 (선택)</legend>
+        {MACRO_FIELDS.map((field) => {
+          const mg = field.unit === "mg";
+          return (
+            <label key={field.key}>
+              {field.label} ({field.unit})
+              <input type="number" inputMode={mg ? "numeric" : "decimal"} min={0} max={mg ? SODIUM_MAX : 999.9}
+                step={mg ? 1 : 0.1} value={macros[field.key]}
+                aria-invalid={badField(field.key) || (partial && field.trio && macros[field.key] === "")}
+                onChange={(event) => setMacros((prev) => ({ ...prev, [field.key]: event.target.value }))}
+                onKeyDown={onEnter} />
+            </label>
+          );
+        })}
         <p id={`${id}-macro-help`} className={partial ? "error" : undefined}>
           {partial ? "탄수화물·단백질·지방은 함께 적거나 모두 비워 주세요."
-            : "포장지·식당 안내문에 있으면 적어 두세요. 식이섬유는 비워도 돼요."}
+            : "포장지·식당 안내문에 있으면 적어 두세요. 식이섬유·당류·나트륨은 비워도 돼요."}
         </p>
       </fieldset>
       <div className="card-actions">

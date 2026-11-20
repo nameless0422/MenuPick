@@ -269,6 +269,12 @@ export default function HistoryPage() {
               {history.servings != null && history.servings !== 1 && <span className="chip">{history.servings}인분</span>}
               {/* 추정치라 "약"을 붙인다. 모르면 아무것도 띄우지 않는다 — 0kcal로 보이면 틀린 말이다. */}
               {history.kcal != null && <span className="chip">약 {history.kcal}kcal</span>}
+              {/* 카드가 좁아 줄여 쓰고, 읽어 주는 이름은 풀어 둔다. */}
+              {history.macros && (
+                <span className="chip" aria-label={`탄수화물 ${history.macros.carbsG}g, 단백질 ${history.macros.proteinG}g, 지방 ${history.macros.fatG}g`}>
+                  탄 {history.macros.carbsG} · 단 {history.macros.proteinG} · 지 {history.macros.fatG}g
+                </span>
+              )}
             </div>
 
             <p className="history-restaurant">

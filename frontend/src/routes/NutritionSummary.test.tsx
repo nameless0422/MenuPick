@@ -85,6 +85,67 @@ describe("열량 기록", () => {
     expect(screen.getByRole("link", { name: "메뉴의 열량 칸" })).toHaveAttribute("href", "/menus");
   });
 
+  it("당류·나트륨 하루 평균도 보여 주고, 탄단지를 몰라도 아는 값은 보인다", async () => {
+    fetchMock.mockResolvedValue(summary({
+      macros: { meals: 2, carbsG: 200, proteinG: 60, fatG: 50, fiberMeals: 1, fiberG: 12,
+        sugarsMeals: 2, sugarsG: 28, sodiumMeals: 3, sodiumMg: 2960 },
+    }));
+    const { unmount } = renderWithProviders(<NutritionSummary />);
+    const list = await screen.findByRole("list", { name: "탄단지 하루 평균" });
+    expect(within(list).getAllByRole("listitem").slice(3).map((li) => li.textContent))
+      .toEqual(["식이섬유 약 12g (1끼 기준)", "당류 약 28g", "나트륨 약 2,960mg (3끼 기준)"]);
+    unmount();
+
+    fetchMock.mockResolvedValue(summary({
+      macros: { meals: 0, carbsG: null, proteinG: null, fatG: null, fiberMeals: 0, fiberG: null,
+        sugarsMeals: 1, sugarsG: 25, sodiumMeals: 0, sodiumMg: null },
+    }));
+    renderWithProviders(<NutritionSummary />);
+    expect(await screen.findByText(/탄단지를 아는 메뉴로 먹은 끼니가 없어요/)).toBeVisible();
+    expect(within(screen.getByRole("list", { name: "탄단지 하루 평균" })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["식이섬유 아는 메뉴가 없어요", "당류 약 25g (1끼 기준)", "나트륨 아는 메뉴가 없어요"]);
+  });
+
+  it("탄단지 그래프로 바꾸면 날짜별로 영양소를 쌓고 표도 g으로 바뀐다", async () => {
+    fetchMock.mockResolvedValue(summary({
+      days: [
+        { date: "2026-10-07", kcal: 0, meals: 0, unknownMeals: 0 },
+        { date: "2026-10-08", kcal: 600, meals: 2, unknownMeals: 0, slots: slotsOf(0, 300, 300, 0),
+          macros: { meals: 2, carbsG: 90, proteinG: 30, fatG: 20 } },
+        { date: "2026-10-09", kcal: 750, meals: 2, unknownMeals: 1, slots: slotsOf(0, 750, 0, 0),
+          macros: { meals: 1, carbsG: 45, proteinG: 18, fatG: 0 } },
+      ],
+      macros: { meals: 3, carbsG: 68, proteinG: 24, fatG: 10, fiberMeals: 0, fiberG: null },
+    }));
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(<NutritionSummary />);
+    expect(await screen.findByRole("button", { name: "열량" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "탄단지" }));
+
+    const svg = container.querySelector(".nutrition-chart svg")!;
+    expect(svg.querySelectorAll(".nutrition-seg-carbs")).toHaveLength(2);
+    // 0g 조각은 그리지 않는다.
+    expect(svg.querySelectorAll(".nutrition-seg-fat")).toHaveLength(1);
+    expect(svg.querySelectorAll(".nutrition-seg-lunch")).toHaveLength(0);
+    expect(within(screen.getByRole("list", { name: "그래프 색: 영양소" })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["탄수화물", "단백질", "지방", "? 모르는 끼니 있음"]);
+    fireEvent.mouseEnter(svg.querySelectorAll(".nutrition-chart-hit")[2]);
+    expect(container.querySelector(".nutrition-chart-tooltip"))
+      .toHaveTextContent("10/9 (금)약 63g탄수화물 45g단백질 18g모름 1끼");
+
+    const rows = within(screen.getByRole("table", { name: /하루 탄단지/ })).getAllByRole("row");
+    expect(within(rows[0]).getAllByRole("columnheader").map((th) => th.textContent))
+      .toEqual(["날짜", "탄수화물", "단백질", "지방", "모름"]);
+    expect(rows[1]).toHaveTextContent("기록 없음");
+    expect(within(rows[3]).getAllByRole("cell").map((td) => td.textContent)).toEqual(["45", "18", "0", "1끼"]);
+  });
+
+  it("탄단지를 아는 날이 없으면 그래프 종류를 고르지 않는다", async () => {
+    renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    expect(screen.queryByRole("group", { name: "그래프 종류" })).not.toBeInTheDocument();
+  });
+
   it("7일과 30일을 바꿔 본다", async () => {
     const user = userEvent.setup();
     renderWithProviders(<NutritionSummary />);

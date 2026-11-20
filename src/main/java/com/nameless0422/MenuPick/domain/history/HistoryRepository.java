@@ -316,7 +316,8 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
      */
     @Query("select coalesce(h.visitedAt, h.recommendedAt) as eatenAt, h.mealSlot as mealSlot, " +
             "h.recommendedAt as recommendedAt, h.servings as servings, m.kcalPerServing as kcalPerServing, " +
-            "m.carbsG as carbsG, m.proteinG as proteinG, m.fatG as fatG, m.fiberG as fiberG " +
+            "m.carbsG as carbsG, m.proteinG as proteinG, m.fatG as fatG, m.fiberG as fiberG, " +
+            "m.sugarsG as sugarsG, m.sodiumMg as sodiumMg " +
             "from History h left join h.menu m " +
             "where h.user.id = :userId and h.recommendedAt >= :since " +
             "and (h.isVisited = true or h.recommendationFeedback = :accepted) " +
@@ -336,6 +337,8 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
         java.math.BigDecimal getProteinG();
         java.math.BigDecimal getFatG();
         java.math.BigDecimal getFiberG();
+        java.math.BigDecimal getSugarsG();
+        Integer getSodiumMg();
     }
 
     /** 사용자별 첫 픽 시각. 7일 리텐션 코호트를 만드는 근거. */

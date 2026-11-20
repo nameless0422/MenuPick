@@ -51,11 +51,14 @@ class NutritionControllerTest extends AbstractControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isOk());
         mockMvc.perform(put("/api/v1/menus/5/nutrition").with(authentication(AUTH)).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"kcalPerServing\":500,\"carbsG\":60.5,\"proteinG\":20,\"fatG\":0,\"fiberG\":3.1}"))
+                        .content("{\"kcalPerServing\":500,\"carbsG\":60.5,\"proteinG\":20,\"fatG\":0,\"fiberG\":3.1,"
+                                + "\"sugarsG\":12.5,\"sodiumMg\":20000}"))
                 .andExpect(status().isOk());
         for (String body : List.of("{\"kcalPerServing\":0}", "{\"kcalPerServing\":5001}", "{\"kcalPerServing\":\"많이\"}",
                 "{\"kcalPerServing\":500,\"carbsG\":12.34}", "{\"kcalPerServing\":500,\"proteinG\":-1}",
-                "{\"kcalPerServing\":500,\"fatG\":1000}", "{\"kcalPerServing\":500,\"fiberG\":1000.0}")) {
+                "{\"kcalPerServing\":500,\"fatG\":1000}", "{\"kcalPerServing\":500,\"fiberG\":1000.0}",
+                "{\"kcalPerServing\":500,\"sugarsG\":1.25}", "{\"kcalPerServing\":500,\"sodiumMg\":20001}",
+                "{\"kcalPerServing\":500,\"sodiumMg\":-1}")) {
             mockMvc.perform(put("/api/v1/menus/5/nutrition").with(authentication(AUTH))
                     .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isBadRequest());
         }

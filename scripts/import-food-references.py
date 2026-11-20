@@ -37,6 +37,8 @@ COLUMNS = {
     "protein": ["단백질(g)"],
     "fat": ["지방(g)"],
     "fiber": ["식이섬유(g)", "총 식이섬유(g)", "총식이섬유(g)"],
+    "sugars": ["당류(g)", "총당류(g)", "총 당류(g)"],
+    "sodium": ["나트륨(mg)", "나트륨(㎎)"],
     "weight": ["식품중량"],
     "date": ["데이터생성일자", "데이터기준일자"],
 }
@@ -164,12 +166,17 @@ def main(argv):
             # DECIMAL(6,1)에 들어가지 않는 값은 원본 오류로 보고 모름으로 둔다.
             return None if v is None or v < 0 or v * factor >= 10000 else v * factor
 
+        def scaled_mg(key):
+            v = number(cell(row, key))
+            # 나트륨은 mg 정수(INT). 1인분 100,000mg 이상은 원본 오류(단위 혼동)로 보고 모름으로 둔다.
+            return None if v is None or v < 0 or v * factor >= 100000 else v * factor
+
         seen.add(code)
-        values.append("(%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,'%s')" % (
+        values.append("(%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,'%s')" % (
             sql_string(code, 30), sql_string(name, 100), sql_string(cell(row, "category"), 50),
             sql_number(weight[0]), per_serving,
             sql_number(scaled("carbs")), sql_number(scaled("protein")), sql_number(scaled("fat")),
-            sql_number(scaled("fiber")),
+            sql_number(scaled("fiber")), sql_number(scaled("sugars")), sql_number(scaled_mg("sodium"), 0),
             sql_date(cell(row, "date")), now))
 
     out = sys.stdout
@@ -178,19 +185,21 @@ def main(argv):
     for i in range(0, len(values), BATCH):
         out.write("INSERT INTO food_references "
                   "(code,name,category,serving_grams,kcal_per_serving,carbs_g,protein_g,fat_g,fiber_g,"
-                  "source_date,imported_at) VALUES\n")
+                  "sugars_g,sodium_mg,source_date,imported_at) VALUES\n")
         out.write(",\n".join(values[i:i + BATCH]))
         out.write("\nON DUPLICATE KEY UPDATE name=VALUES(name), category=VALUES(category), "
                   "serving_grams=VALUES(serving_grams), kcal_per_serving=VALUES(kcal_per_serving), "
                   "carbs_g=VALUES(carbs_g), protein_g=VALUES(protein_g), fat_g=VALUES(fat_g), fiber_g=VALUES(fiber_g), "
+                  "sugars_g=VALUES(sugars_g), sodium_mg=VALUES(sodium_mg), "
                   "source_date=VALUES(source_date), imported_at=VALUES(imported_at);\n")
-    # 메뉴는 값을 복사해 둔다(D-082, D-084). 기준 값이 바뀌었으면 연결된 메뉴도 따라가게 한다.
+    # 메뉴는 값을 복사해 둔다(D-082, D-084, D-085). 기준 값이 바뀌었으면 연결된 메뉴도 따라가게 한다.
     # <=>는 NULL끼리도 같다고 보는 비교다 — 바뀐 메뉴만 고쳐 버전·수정 시각을 괜히 흔들지 않는다.
     out.write("UPDATE menus m JOIN food_references f ON f.id = m.food_reference_id "
               "SET m.kcal_per_serving = f.kcal_per_serving, m.carbs_g = f.carbs_g, m.protein_g = f.protein_g, "
-              "m.fat_g = f.fat_g, m.fiber_g = f.fiber_g "
+              "m.fat_g = f.fat_g, m.fiber_g = f.fiber_g, m.sugars_g = f.sugars_g, m.sodium_mg = f.sodium_mg "
               "WHERE NOT (m.kcal_per_serving <=> f.kcal_per_serving AND m.carbs_g <=> f.carbs_g "
-              "AND m.protein_g <=> f.protein_g AND m.fat_g <=> f.fat_g AND m.fiber_g <=> f.fiber_g);\n")
+              "AND m.protein_g <=> f.protein_g AND m.fat_g <=> f.fat_g AND m.fiber_g <=> f.fiber_g "
+              "AND m.sugars_g <=> f.sugars_g AND m.sodium_mg <=> f.sodium_mg);\n")
     out.write("COMMIT;\n")
 
     sys.stderr.write("가져올 행 %d개\n" % len(values))
