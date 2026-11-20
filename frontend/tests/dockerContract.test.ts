@@ -8,7 +8,7 @@ const nginxConf = readFileSync(join(process.cwd(), "nginx.conf"), "utf8");
 
 describe("프론트 운영 이미지 계약", () => {
   it("nginx 런타임을 패치 버전까지 고정한다", () => {
-    expect(dockerfile).toContain("FROM nginx:1.30.6-alpine");
+    expect(dockerfile).toContain("FROM nginx:1.30.7-alpine");
   });
 
   it("접근 로그에 인증 링크의 쿼리와 Referer를 남기지 않는다", () => {
