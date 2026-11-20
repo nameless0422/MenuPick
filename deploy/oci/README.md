@@ -415,6 +415,20 @@ sudo install -m 0755 scripts/backup-db.sh /usr/local/bin/menupick-backup
 `Persistent=true`라, 예정 시각에 인스턴스가 꺼져 있었으면 켜진 뒤 한 번 따라잡는다 —
 이 서버는 상시 가동이 아니라 이게 없으면 꺼져 있던 날의 백업이 그냥 없어진다.
 
+**컨테이너를 내려 둔 기간에는 건너뛴다.** `menupick-mysql`이 `exited`·`created`(= `compose stop`으로
+멈춤)이면 `ExecCondition`이 1로 끝나 덤프·오프사이트 업로드·실패 알림이 모두 돌지 않는다.
+journal에는 `SKIP: … 백업을 건너뛴다` 한 줄이 남는다. 데이터가 바뀌지 않는 기간이라 잃는 것이 없고,
+매일 빨간불이 켜져 진짜 실패를 가리는 것을 막는다. 컨테이너가 **없거나**, 돌고 있는데 **healthy가
+아니면** 고장이므로 예전처럼 실패하고 알림이 간다. 컨테이너를 다시 올리면 배포 절차대로
+`sudo systemctl start menupick-backup.service`로 그날 백업을 한 번 받는다.
+
+```bash
+# 이 변경을 서버에 반영 (스크립트와 유닛 둘 다)
+sudo install -m 0755 scripts/backup-db.sh /usr/local/bin/menupick-backup
+sudo cp deploy/oci/menupick-backup.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
 ### 복원
 
 ```bash
