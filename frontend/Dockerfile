@@ -33,7 +33,7 @@ RUN echo "VITE_PICK_ALTERNATIVES_ENABLED=${VITE_PICK_ALTERNATIVES_ENABLED}" >> .
 
 RUN npm run build
 
-FROM nginx:1.30.6-alpine
+FROM nginx:1.30.7-alpine
 
 # 베이스 이미지에 든 libxslt 1.1.43-r3의 HIGH 3건(CVE-2026-9947, CVE-2026-87636,
 # CVE-2026-125350 — XML 처리의 use-after-free·type confusion)을 수정판(r4)으로 올린다.

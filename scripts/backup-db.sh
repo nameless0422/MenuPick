@@ -28,6 +28,26 @@ DB="${MYSQL_DB:-menupick}"
 log() { printf '%s  %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
 
+# --check: 유닛의 ExecCondition이 부른다. "일부러 내려 둔 상태"면 1로 끝내 이번 실행을
+# 건너뛰게 한다(systemd는 1~254를 실패가 아니라 조건 불충족으로 본다 — ExecStart도 오프사이트
+# 업로드도 돌지 않고, OnFailure 알림도 가지 않는다).
+#
+# 운영 방식이 "검증이 끝나면 컨테이너를 stop 해 둔다"라서, 그 기간 매일 백업이 실패로
+# 찍히면 진짜 실패와 구분할 수 없다. 데이터가 바뀌지 않는 기간이라 건너뛰어도 잃는 것이 없다.
+#
+# 건너뛰는 것은 docker가 "정상적으로 멈춘 컨테이너"라고 말할 때(exited·created)뿐이다.
+# 컨테이너가 없거나, 돌고 있는데 healthy가 아니거나, 재시작을 반복하는 것은 고장이라
+# 0으로 통과시켜 본 실행이 실패하고 알림이 가게 둔다.
+if [ "${1:-}" = --check ]; then
+  state="$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo missing)"
+  case "$state" in
+    exited|created)
+      log "SKIP: $CONTAINER 가 멈춰 있다(상태: $state) — 컨테이너를 내려 둔 기간이라 백업을 건너뛴다"
+      exit 1 ;;
+    *) exit 0 ;;
+  esac
+fi
+
 [ -f "$APP_DIR/.env" ] || die "$APP_DIR/.env 가 없다"
 
 # 자격증명은 .env에서만 읽는다. 스크립트에도 타이머 유닛에도 두지 않는다.
