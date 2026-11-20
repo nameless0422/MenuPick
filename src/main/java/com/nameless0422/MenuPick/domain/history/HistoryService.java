@@ -305,7 +305,30 @@ public class HistoryService {
                 history.getSource(),
                 history.effectiveMealSlot(),
                 history.getServings(),
-                history.estimatedKcal()
+                history.estimatedKcal(),
+                mealMacrosOf(history)
         );
+    }
+
+    /**
+     * 이 끼니의 탄단지 추정치(g, 먹은 양을 곱해 반올림). 열량처럼 메뉴의 현재 값으로 계산한다.
+     * 열량을 모르거나 탄단지 셋 중 하나라도 모르면 null — 요약이 "아는 끼니"로 세는 기준과 같다(D-084).
+     */
+    private static HistoryResponse.MealMacros mealMacrosOf(History history) {
+        com.nameless0422.MenuPick.domain.menu.Menu menu = history.getMenu();
+        if (menu == null || menu.getKcalPerServing() == null) {
+            return null;
+        }
+        com.nameless0422.MenuPick.domain.menu.Macros macros = menu.getMacros();
+        if (!macros.hasMacros()) {
+            return null;
+        }
+        java.math.BigDecimal servings = history.getServings();
+        return new HistoryResponse.MealMacros(grams(macros.carbsG(), servings), grams(macros.proteinG(), servings),
+                grams(macros.fatG(), servings));
+    }
+
+    private static int grams(java.math.BigDecimal perServing, java.math.BigDecimal servings) {
+        return perServing.multiply(servings).setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
     }
 }

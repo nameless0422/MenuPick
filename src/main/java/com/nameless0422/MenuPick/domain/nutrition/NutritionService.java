@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,13 +105,14 @@ public class NutritionService {
         int total = 0;
         int known = 0;
         int unknown = 0;
-        // 탄단지(g): 탄수화물, 단백질, 지방 / 식이섬유(g). 아는 끼니가 있던 날만 평균의 분모가 된다.
-        BigDecimal[] macroTotals = {BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
-        BigDecimal fiberTotal = BigDecimal.ZERO;
-        int macroMeals = 0;
-        int fiberMeals = 0;
-        Set<LocalDate> macroDays = new HashSet<>();
-        Set<LocalDate> fiberDays = new HashSet<>();
+        // 영양소마다 기간 합계와 그 값을 아는 끼니·날. 아는 끼니가 있던 날만 평균의 분모가 된다.
+        Tally carbs = new Tally();
+        Tally protein = new Tally();
+        Tally fat = new Tally();
+        Tally fiber = new Tally();
+        Tally sugars = new Tally();
+        Tally sodium = new Tally();
+        Map<LocalDate, DayTally> macrosByDay = new HashMap<>();
         for (HistoryRepository.NutritionRow row : rows) {
             // 먹은 날로 센다. 뽑은 날은 기간 안인데 먹은 날이 밖이면(미래 시각 같은 이상값) 뽑은 날로 센다.
             LocalDate day = row.getEatenAt().toLocalDate();
@@ -140,17 +142,14 @@ public class NutritionService {
             // 영양소는 열량을 아는 끼니에서만 센다. 열량 없이 영양소만 있는 메뉴는 만들 수 없다.
             BigDecimal servings = servingsOf(row);
             if (row.getCarbsG() != null && row.getProteinG() != null && row.getFatG() != null) {
-                macroTotals[0] = macroTotals[0].add(row.getCarbsG().multiply(servings));
-                macroTotals[1] = macroTotals[1].add(row.getProteinG().multiply(servings));
-                macroTotals[2] = macroTotals[2].add(row.getFatG().multiply(servings));
-                macroMeals++;
-                macroDays.add(day);
+                carbs.add(row.getCarbsG(), servings, day);
+                protein.add(row.getProteinG(), servings, day);
+                fat.add(row.getFatG(), servings, day);
+                macrosByDay.computeIfAbsent(day, d -> new DayTally()).add(row, servings);
             }
-            if (row.getFiberG() != null) {
-                fiberTotal = fiberTotal.add(row.getFiberG().multiply(servings));
-                fiberMeals++;
-                fiberDays.add(day);
-            }
+            fiber.add(row.getFiberG(), servings, day);
+            sugars.add(row.getSugarsG(), servings, day);
+            sodium.add(row.getSodiumMg() == null ? null : BigDecimal.valueOf(row.getSodiumMg()), servings, day);
             total += kcal;
             known++;
         }
@@ -159,18 +158,57 @@ public class NutritionService {
         int daysWithKnown = 0;
         for (Map.Entry<LocalDate, int[]> entry : byDay.entrySet()) {
             int[] v = entry.getValue();
+            DayTally dayMacros = macrosByDay.get(entry.getKey());
             dayList.add(new NutritionDto.DayNutrition(entry.getKey(), v[0], v[1], v[2],
-                    toSlotList(byDaySlot.get(entry.getKey()))));
+                    toSlotList(byDaySlot.get(entry.getKey())),
+                    dayMacros == null ? NutritionDto.DayMacros.EMPTY : dayMacros.toDto()));
             if (v[1] > v[2]) daysWithKnown++;
         }
         List<NutritionDto.SlotNutrition> slotList = toSlotList(bySlot);
         // 기록이 없는 날을 0kcal로 넣으면 "적게 먹었다"는 틀린 이야기가 된다. 아는 끼니가 있던 날로만 나눈다.
         Integer average = daysWithKnown == 0 ? null : Math.round((float) total / daysWithKnown);
         NutritionDto.MacroSummary macros = new NutritionDto.MacroSummary(
-                macroMeals, perDay(macroTotals[0], macroDays.size()), perDay(macroTotals[1], macroDays.size()),
-                perDay(macroTotals[2], macroDays.size()), fiberMeals, perDay(fiberTotal, fiberDays.size()));
+                carbs.meals, carbs.perDay(), protein.perDay(), fat.perDay(),
+                fiber.meals, fiber.perDay(), sugars.meals, sugars.perDay(), sodium.meals, sodium.perDay());
         return new NutritionDto.NutritionSummary(days, dayList, slotList, total, known, unknown, average, truncated,
                 macros);
+    }
+
+    /** 영양소 하나의 기간 합계. 값을 모르는 끼니는 세지 않는다. */
+    private static final class Tally {
+        private BigDecimal total = BigDecimal.ZERO;
+        private int meals;
+        private final Set<LocalDate> days = new HashSet<>();
+
+        void add(BigDecimal perServing, BigDecimal servings, LocalDate day) {
+            if (perServing == null) return;
+            total = total.add(perServing.multiply(servings));
+            meals++;
+            days.add(day);
+        }
+
+        Integer perDay() {
+            return NutritionService.perDay(total, days.size());
+        }
+    }
+
+    /** 하루 탄단지 합계. 셋을 다 아는 끼니만 더한다. */
+    private static final class DayTally {
+        private BigDecimal carbs = BigDecimal.ZERO;
+        private BigDecimal protein = BigDecimal.ZERO;
+        private BigDecimal fat = BigDecimal.ZERO;
+        private int meals;
+
+        void add(HistoryRepository.NutritionRow row, BigDecimal servings) {
+            carbs = carbs.add(row.getCarbsG().multiply(servings));
+            protein = protein.add(row.getProteinG().multiply(servings));
+            fat = fat.add(row.getFatG().multiply(servings));
+            meals++;
+        }
+
+        NutritionDto.DayMacros toDto() {
+            return new NutritionDto.DayMacros(meals, perDay(carbs, 1), perDay(protein, 1), perDay(fat, 1));
+        }
     }
 
     /** 끼니마다 [열량, 열량을 아는 끼니 수]. */
@@ -205,7 +243,7 @@ public class NutritionService {
         Macros macros = request.macros();
         boolean anyMacro = macros.carbsG() != null || macros.proteinG() != null || macros.fatG() != null;
         if (request.kcalPerServing() == null) {
-            if (anyMacro || macros.fiberG() != null) {
+            if (macros.hasAny()) {
                 throw new BusinessException(ErrorCode.INVALID_INPUT, "영양소를 적으려면 열량도 함께 적어주세요.");
             }
             return Macros.UNKNOWN;
@@ -234,6 +272,7 @@ public class NutritionService {
                         .map(NutritionDto.FoodReferenceSummary::of).orElse(null);
         Macros macros = menu.getMacros();
         return new NutritionDto.MenuNutrition(menu.getId(), menu.getKcalPerServing(), reference, menu.getVersion(),
-                macros.carbsG(), macros.proteinG(), macros.fatG(), macros.fiberG());
+                macros.carbsG(), macros.proteinG(), macros.fatG(), macros.fiberG(),
+                macros.sugarsG(), macros.sodiumMg());
     }
 }

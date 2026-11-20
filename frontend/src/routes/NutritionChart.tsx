@@ -1,13 +1,23 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { MEAL_SLOT_LABELS, MEAL_SLOTS, type MealSlot } from "../api/history";
+import { MEAL_SLOT_LABELS, MEAL_SLOTS } from "../api/history";
 import type { DayNutrition } from "../api/nutrition";
-import { dayLabel, niceTicks, splitDate } from "./nutritionChartScale";
+import { dayLabel, niceTicks, splitDate, unknownMealsOf, type ChartMetric } from "./nutritionChartScale";
 
 const HEIGHT = 180;
 // 오른쪽 여백은 평균선 라벨 자리다. 막대 위에 얹으면 마지막 날 막대와 겹친다.
 const PAD = { top: 18, right: 30, bottom: 26, left: 44 };
 const GAP = 2;
 const RADIUS = 4;
+
+const MACRO_SERIES = [
+  { key: "carbsG", label: "탄수화물", cls: "carbs" },
+  { key: "proteinG", label: "단백질", cls: "protein" },
+  { key: "fatG", label: "지방", cls: "fat" },
+] as const;
+
+const UNIT: Record<ChartMetric, string> = { kcal: "kcal", macros: "g" };
+
+type Segment = { key: string; label: string | null; cls: string; value: number };
 
 /** 위쪽 두 모서리만 둥근 사각형. 쌓은 막대의 맨 위 조각에 쓴다 — 바닥은 기준선에 붙어 있어야 한다. */
 function topRoundedRect(x: number, y: number, w: number, h: number): string {
@@ -31,39 +41,60 @@ function useWidth<T extends HTMLElement>(fallback: number) {
   return [ref, width] as const;
 }
 
-/** 날짜 하나의 끼니별 열량. 예전 서버는 `slots`를 주지 않으니 그때는 합계 한 조각으로 그린다. */
-function segmentsOf(day: DayNutrition): { slot: MealSlot | null; kcal: number }[] {
-  if (day.slots && day.slots.length > 0) {
-    return MEAL_SLOTS.map((slot) => ({ slot, kcal: day.slots!.find((s) => s.slot === slot)?.kcal ?? 0 }))
-      .filter((segment) => segment.kcal > 0);
+/**
+ * 날짜 하나의 조각들. 열량: 끼니별(예전 서버는 `slots`가 없으니 합계 한 조각). 탄단지: 영양소별 g.
+ * 값이 0인 조각은 그리지 않는다.
+ */
+function segmentsOf(day: DayNutrition, metric: ChartMetric): Segment[] {
+  if (metric === "macros") {
+    const macros = day.macros;
+    if (!macros || macros.meals === 0) return [];
+    return MACRO_SERIES.map((s) => ({ key: s.key, label: s.label, cls: s.cls, value: macros[s.key] ?? 0 }))
+      .filter((segment) => segment.value > 0);
   }
-  return day.kcal > 0 ? [{ slot: null, kcal: day.kcal }] : [];
+  if (day.slots && day.slots.length > 0) {
+    return MEAL_SLOTS.map((slot) => ({
+      key: slot, label: MEAL_SLOT_LABELS[slot], cls: slot.toLowerCase(),
+      value: day.slots!.find((s) => s.slot === slot)?.kcal ?? 0,
+    })).filter((segment) => segment.value > 0);
+  }
+  return day.kcal > 0 ? [{ key: "total", label: null, cls: "total", value: day.kcal }] : [];
+}
+
+function totalOf(day: DayNutrition, metric: ChartMetric): number {
+  return metric === "kcal" ? day.kcal : segmentsOf(day, metric).reduce((sum, s) => sum + s.value, 0);
 }
 
 /**
- * 하루 열량 막대그래프(D-083). 막대 하나를 끼니별로 쌓는다.
+ * 하루 막대그래프(D-083). 열량은 끼니별로, 탄단지는 영양소별로 쌓는다(D-085).
  *
  * 그래프는 눈으로 훑기 위한 것이고, 값은 아래 표가 말한다 — SVG는 스크린리더에서 숨기고 표를 남긴다.
- * 기록이 없는 날은 막대를 그리지 않는다(0kcal로 보이면 "적게 먹었다"가 된다). 열량을 모르는 끼니가
+ * 기록이 없는 날은 막대를 그리지 않는다(0으로 보이면 "적게 먹었다"가 된다). 값을 모르는 끼니가
  * 있던 날은 막대 위에 "?"를 둔다 — 그 막대는 실제보다 짧다.
  */
-export default function NutritionChart({ days, averageKcal }: { days: DayNutrition[]; averageKcal: number | null }) {
+export default function NutritionChart({ days, average, metric = "kcal" }: {
+  days: DayNutrition[]; average: number | null; metric?: ChartMetric;
+}) {
   const id = useId();
   const [wrapRef, width] = useWidth<HTMLDivElement>(320);
   const [hover, setHover] = useState<number | null>(null);
+  const unit = UNIT[metric];
 
-  const max = Math.max(...days.map((day) => day.kcal), averageKcal ?? 0);
+  const max = Math.max(...days.map((day) => totalOf(day, metric)), average ?? 0);
   const ticks = niceTicks(max);
   const top = ticks[ticks.length - 1];
   const plotW = Math.max(1, width - PAD.left - PAD.right);
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / Math.max(1, days.length);
   const barW = Math.max(3, Math.min(28, band * 0.62));
-  const y = (kcal: number) => PAD.top + plotH - (kcal / top) * plotH;
+  const y = (value: number) => PAD.top + plotH - (value / top) * plotH;
   // 30일이면 라벨이 겹친다. 대략 일주일 간격으로 고르고 마지막 날(오늘)은 늘 보인다.
   const labelEvery = days.length <= 10 ? 1 : 7;
   const showLabel = (i: number) => (days.length - 1 - i) % labelEvery === 0;
   const hovered = hover != null ? days[hover] : null;
+  const legend = metric === "kcal"
+    ? MEAL_SLOTS.map((slot) => ({ key: slot, cls: slot.toLowerCase(), label: MEAL_SLOT_LABELS[slot] }))
+    : MACRO_SERIES.map((s) => ({ key: s.key, cls: s.cls, label: s.label }));
 
   return (
     <div className="nutrition-chart" ref={wrapRef}>
@@ -79,24 +110,24 @@ export default function NutritionChart({ days, averageKcal }: { days: DayNutriti
         {days.map((day, i) => {
           const cx = PAD.left + band * i + band / 2;
           const x = cx - barW / 2;
-          const segments = segmentsOf(day);
+          const segments = segmentsOf(day, metric);
           let base = 0;
           return (
             <g key={day.date} className={hover != null && hover !== i ? "is-dimmed" : undefined}>
               {segments.map((segment, s) => {
                 const y0 = y(base);
-                base += segment.kcal;
+                base += segment.value;
                 const y1 = y(base);
                 const isTop = s === segments.length - 1;
                 // 조각 사이 2px 틈. 맨 아래 조각은 기준선에 붙인다.
                 const h = Math.max(0, y0 - y1 - (s > 0 ? GAP : 0));
-                const cls = `nutrition-seg nutrition-seg-${segment.slot?.toLowerCase() ?? "total"}`;
+                const cls = `nutrition-seg nutrition-seg-${segment.cls}`;
                 return isTop
-                  ? <path key={s} className={cls} d={topRoundedRect(x, y1, barW, h)} />
-                  : <rect key={s} className={cls} x={x} y={y1} width={barW} height={h} />;
+                  ? <path key={segment.key} className={cls} d={topRoundedRect(x, y1, barW, h)} />
+                  : <rect key={segment.key} className={cls} x={x} y={y1} width={barW} height={h} />;
               })}
-              {day.unknownMeals > 0 && (
-                <text className="nutrition-chart-unknown" x={cx} y={y(day.kcal) - 5} textAnchor="middle">?</text>
+              {unknownMealsOf(day, metric) > 0 && (
+                <text className="nutrition-chart-unknown" x={cx} y={y(base) - 5} textAnchor="middle">?</text>
               )}
               {showLabel(i) && (
                 <text className="nutrition-chart-tick" x={cx} y={HEIGHT - PAD.bottom + 15} textAnchor="middle">
@@ -110,11 +141,11 @@ export default function NutritionChart({ days, averageKcal }: { days: DayNutriti
           );
         })}
         <line className="nutrition-chart-axis" x1={PAD.left} x2={width - PAD.right} y1={y(0)} y2={y(0)} />
-        {averageKcal != null && (
+        {average != null && (
           <g>
             <line className="nutrition-chart-average" x1={PAD.left} x2={width - PAD.right}
-              y1={y(averageKcal)} y2={y(averageKcal)} />
-            <text className="nutrition-chart-average-label" x={width - PAD.right + 4} y={y(averageKcal)} dy="0.32em">
+              y1={y(average)} y2={y(average)} />
+            <text className="nutrition-chart-average-label" x={width - PAD.right + 4} y={y(average)} dy="0.32em">
               평균
             </text>
           </g>
@@ -129,24 +160,26 @@ export default function NutritionChart({ days, averageKcal }: { days: DayNutriti
           <strong>{dayLabel(hovered.date)}</strong>
           {hovered.meals === 0 ? <span>기록 없음</span> : (
             <>
-              <span>약 {hovered.kcal.toLocaleString("ko-KR")}kcal</span>
-              {segmentsOf(hovered).filter((s) => s.slot).map((s) => (
-                <span key={s.slot}>
-                  <i className={`nutrition-swatch nutrition-seg-${s.slot!.toLowerCase()}`} />
-                  {MEAL_SLOT_LABELS[s.slot!]} {s.kcal.toLocaleString("ko-KR")}
+              {segmentsOf(hovered, metric).length > 0 &&
+                <span>약 {totalOf(hovered, metric).toLocaleString("ko-KR")}{unit}</span>}
+              {segmentsOf(hovered, metric).filter((s) => s.label).map((s) => (
+                <span key={s.key}>
+                  <i className={`nutrition-swatch nutrition-seg-${s.cls}`} />
+                  {s.label} {s.value.toLocaleString("ko-KR")}{metric === "macros" ? "g" : ""}
                 </span>
               ))}
-              {hovered.unknownMeals > 0 && <span>모름 {hovered.unknownMeals}끼</span>}
+              {unknownMealsOf(hovered, metric) > 0 && <span>모름 {unknownMealsOf(hovered, metric)}끼</span>}
             </>
           )}
         </div>
       )}
-      <ul className="nutrition-legend" role="list" aria-label="그래프 색: 끼니" id={`${id}-legend`}>
-        {MEAL_SLOTS.map((slot) => (
-          <li key={slot}><i className={`nutrition-swatch nutrition-seg-${slot.toLowerCase()}`} aria-hidden="true" />
-            {MEAL_SLOT_LABELS[slot]}</li>
+      <ul className="nutrition-legend" role="list" aria-label={metric === "kcal" ? "그래프 색: 끼니" : "그래프 색: 영양소"}
+        id={`${id}-legend`}>
+        {legend.map((item) => (
+          <li key={item.key}><i className={`nutrition-swatch nutrition-seg-${item.cls}`} aria-hidden="true" />
+            {item.label}</li>
         ))}
-        {days.some((day) => day.unknownMeals > 0) && <li><b aria-hidden="true">?</b> 모르는 끼니 있음</li>}
+        {days.some((day) => unknownMealsOf(day, metric) > 0) && <li><b aria-hidden="true">?</b> 모르는 끼니 있음</li>}
       </ul>
     </div>
   );

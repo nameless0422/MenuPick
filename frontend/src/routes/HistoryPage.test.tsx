@@ -506,6 +506,7 @@ describe("직접 남긴 식사 기록", () => {
         ...KIMCHI_PICK, id: 11, isVisited: true, restaurantName: null,
         recommendedAt: "2026-08-21T12:10:00", visitedAt: "2026-08-21T12:10:00",
         source: "MANUAL", mealSlot: "LUNCH", servings: 1.5, kcal: 735,
+        macros: { carbsG: 120, proteinG: 31, fatG: 23 },
       }],
       nextCursor: null, hasNext: false,
     });
@@ -515,6 +516,8 @@ describe("직접 남긴 식사 기록", () => {
     expect(within(card).getByText("점심")).toBeVisible();
     expect(within(card).getByText("1.5인분")).toBeVisible();
     expect(within(card).getByText("약 735kcal")).toBeVisible();
+    expect(within(card).getByLabelText("탄수화물 120g, 단백질 31g, 지방 23g"))
+      .toHaveTextContent("탄 120 · 단 31 · 지 23g");
     expect(within(card).queryByText("방문완료")).not.toBeInTheDocument();
     expect(within(card).queryByText(/방문 시각/)).not.toBeInTheDocument();
 

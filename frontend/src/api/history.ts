@@ -44,6 +44,8 @@ export interface HistorySummary {
   servings?: number;
   /** 열량 추정치(kcal). 메뉴 열량을 모르면 null — 0과 다르다. */
   kcal?: number | null;
+  /** 이 끼니의 탄단지(g, 먹은 양을 곱해 반올림). 셋 중 하나라도 모르면 null. 예전 서버는 주지 않는다. */
+  macros?: { carbsG: number; proteinG: number; fatG: number } | null;
 }
 
 export type HistorySource = "PICK" | "MANUAL";

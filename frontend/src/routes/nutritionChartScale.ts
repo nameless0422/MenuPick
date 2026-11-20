@@ -1,3 +1,13 @@
+import type { DayNutrition } from "../api/nutrition";
+
+/** 그래프가 무엇을 쌓는가. 열량은 끼니별로, 탄단지는 영양소별로(D-085). */
+export type ChartMetric = "kcal" | "macros";
+
+/** 그 값을 모르는 끼니 수. 그날 막대는 실제보다 짧다. */
+export function unknownMealsOf(day: DayNutrition, metric: ChartMetric): number {
+  return metric === "kcal" ? day.unknownMeals : Math.max(0, day.meals - (day.macros?.meals ?? 0));
+}
+
 /** "2026-10-09" → { md: "10/9", weekday: "금" }. Date로 읽으면 브라우저 시간대에 따라 하루가 밀린다. */
 export function splitDate(date: string): { md: string; weekday: string } {
   const [y, m, d] = date.split("-").map(Number);

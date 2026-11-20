@@ -226,6 +226,54 @@ class NutritionIntegrationTest extends AbstractIntegrationTest {
         assertThat(service.summarize(empty.getId(), 7).macros()).isEqualTo(NutritionDto.MacroSummary.EMPTY);
     }
 
+    @Test void sugarsAndSodiumAreCopiedAveragedAndDayAndMealMacrosAreReported() {
+        User owner = user("sodium");
+        FoodReference jjamppong = references.save(FoodReference.of(tag + "-sodium", "짬뽕", "면류", g("900.0"), 720, NOW)
+                .withMacros(g("90.0"), g("36.0"), g("22.5"), null).withSugarsAndSodium(g("13.5"), 3780));
+        fixtureReferences.add(jjamppong.getId());
+        Menu noodle = menu(owner, "짬뽕", null);
+        var linked = service.updateMenuNutrition(owner.getId(), noodle.getId(),
+                new NutritionDto.MenuNutritionRequest(jjamppong.getId(), null));
+        assertThat(linked.sugarsG()).isEqualByComparingTo("13.5");
+        assertThat(linked.sodiumMg()).isEqualTo(3780);
+        assertThat(linked.foodReference().sodiumMg()).isEqualTo(3780);
+
+        // 직접 적을 때는 당류·나트륨만 따로 적을 수 있고, 열량 없이는 안 된다.
+        Menu cider = menu(owner, "사이다", null);
+        var custom = service.updateMenuNutrition(owner.getId(), cider.getId(),
+                new NutritionDto.MenuNutritionRequest(null, 100, null, null, null, null, g("24.5"), 15));
+        assertThat(custom.sugarsG()).isEqualByComparingTo("24.5");
+        assertThat(custom.carbsG()).isNull();
+        assertThatThrownBy(() -> service.updateMenuNutrition(owner.getId(), cider.getId(),
+                new NutritionDto.MenuNutritionRequest(null, null, null, null, null, null, null, 15)))
+                .isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+
+        // 오늘: 짬뽕 0.5인분 + 사이다, 어제: 사이다
+        var meal = historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                noodle.getId(), TODAY.atTime(12, 0), null, null, null, g("0.5")));
+        assertThat(meal.macros()).as("기록 한 줄의 탄단지는 먹은 양을 곱해 반올림한다")
+                .isEqualTo(new com.nameless0422.MenuPick.domain.history.dto.HistoryResponse.MealMacros(45, 18, 11));
+        var ciderMeal = historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                cider.getId(), TODAY.atTime(15, 0), null, null, null, null));
+        assertThat(ciderMeal.macros()).as("탄단지를 모르면 null").isNull();
+        historyService.createManualMeal(owner.getId(), new HistoryRequest.ManualMealRequest(
+                cider.getId(), TODAY.minusDays(1).atTime(15, 0), null, null, null, null));
+
+        var summary = service.summarize(owner.getId(), 7);
+        var macros = summary.macros();
+        // 당류: 오늘 6.75 + 24.5 = 31.25, 어제 24.5 → 55.75 / 2일 = 27.875 → 28
+        assertThat(macros.sugarsMeals()).isEqualTo(3);
+        assertThat(macros.sugarsG()).isEqualTo(28);
+        // 나트륨: 오늘 1890 + 15, 어제 15 → 1920 / 2 = 960
+        assertThat(macros.sodiumMeals()).isEqualTo(3);
+        assertThat(macros.sodiumMg()).isEqualTo(960);
+
+        assertThat(summary.days().get(6).macros()).as("오늘 탄단지 합계, 아는 끼니만")
+                .isEqualTo(new NutritionDto.DayMacros(1, 45, 18, 11));
+        assertThat(summary.days().get(5).macros()).as("탄단지를 아는 끼니가 없던 날")
+                .isEqualTo(NutritionDto.DayMacros.EMPTY);
+    }
+
     @Test void othersMenusAndUnknownReferencesAreRejected() {
         User owner = user("owner");
         User other = user("other");

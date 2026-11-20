@@ -74,30 +74,54 @@ describe("메뉴 열량", () => {
     render();
     await user.click(await screen.findByRole("button", { name: "직접 적기" }));
     await user.type(screen.getByRole("spinbutton", { name: "1인분 열량 (kcal)" }), "650");
-    await user.type(screen.getByRole("spinbutton", { name: "탄수화물" }), "80");
+    await user.type(screen.getByRole("spinbutton", { name: "탄수화물 (g)" }), "80");
     await user.click(screen.getByRole("button", { name: "열량 저장" }));
     expect(updateMock).not.toHaveBeenCalled();
     expect(screen.getByText("탄수화물·단백질·지방은 함께 적거나 모두 비워 주세요.")).toBeVisible();
-    expect(screen.getByRole("spinbutton", { name: "단백질" })).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("spinbutton", { name: "단백질 (g)" })).toHaveAttribute("aria-invalid", "true");
 
-    await user.type(screen.getByRole("spinbutton", { name: "단백질" }), "20.55");
-    await user.type(screen.getByRole("spinbutton", { name: "지방" }), "15");
+    await user.type(screen.getByRole("spinbutton", { name: "단백질 (g)" }), "20.55");
+    await user.type(screen.getByRole("spinbutton", { name: "지방 (g)" }), "15");
     await user.click(screen.getByRole("button", { name: "열량 저장" }));
     expect(updateMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("spinbutton", { name: "단백질" })).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("spinbutton", { name: "단백질 (g)" })).toHaveAttribute("aria-invalid", "true");
 
-    await user.clear(screen.getByRole("spinbutton", { name: "단백질" }));
-    await user.type(screen.getByRole("spinbutton", { name: "단백질" }), "20.5{Enter}");
+    await user.clear(screen.getByRole("spinbutton", { name: "단백질 (g)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "단백질 (g)" }), "20.5{Enter}");
     expect(updateMock).toHaveBeenCalledWith(3, { kcalPerServing: 650, carbsG: 80, proteinG: 20.5, fatG: 15 });
     expect(await screen.findByText("탄수화물 80g · 단백질 20.5g · 지방 15g")).toBeVisible();
   });
 
   it("기준 음식 후보에 탄단지를 같이 보여 준다", async () => {
-    searchMock.mockResolvedValue([{ ...KIMCHI, fiberG: 4.4 }]);
+    searchMock.mockResolvedValue([{ ...KIMCHI, fiberG: 4.4, sugarsG: 3.1, sodiumMg: 1890 }]);
     const user = userEvent.setup();
     render();
     await user.click(await screen.findByRole("button", { name: "기준 음식에서 찾기" }));
-    expect(await screen.findByRole("button", { name: /탄수화물 12.4g · 단백질 14g · 지방 9.6g · 식이섬유 4.4g/ })).toBeVisible();
+    expect(await screen.findByRole("button",
+      { name: /탄수화물 12.4g · 단백질 14g · 지방 9.6g · 식이섬유 4.4g · 당류 3.1g · 나트륨 1,890mg/ })).toBeVisible();
+  });
+
+  it("당류·나트륨은 탄단지 없이도 적을 수 있고, 나트륨은 mg 정수다", async () => {
+    updateMock.mockResolvedValue({ menuId: 3, kcalPerServing: 100, foodReference: null, version: 5,
+      carbsG: null, proteinG: null, fatG: null, fiberG: null, sugarsG: 24.5, sodiumMg: 15 });
+    const user = userEvent.setup();
+    render();
+    await user.click(await screen.findByRole("button", { name: "직접 적기" }));
+    await user.type(screen.getByRole("spinbutton", { name: "1인분 열량 (kcal)" }), "100");
+    await user.type(screen.getByRole("spinbutton", { name: "당류 (g)" }), "24.5");
+    await user.type(screen.getByRole("spinbutton", { name: "나트륨 (mg)" }), "1.5");
+    await user.click(screen.getByRole("button", { name: "열량 저장" }));
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("spinbutton", { name: "나트륨 (mg)" })).toHaveAttribute("aria-invalid", "true");
+
+    await user.clear(screen.getByRole("spinbutton", { name: "나트륨 (mg)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "나트륨 (mg)" }), "20001");
+    expect(screen.getByRole("spinbutton", { name: "나트륨 (mg)" })).toHaveAttribute("aria-invalid", "true");
+
+    await user.clear(screen.getByRole("spinbutton", { name: "나트륨 (mg)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "나트륨 (mg)" }), "15{Enter}");
+    expect(updateMock).toHaveBeenCalledWith(3, { kcalPerServing: 100, sugarsG: 24.5, sodiumMg: 15 });
+    expect(await screen.findByText("당류 24.5g · 나트륨 15mg")).toBeVisible();
   });
 
   it("정해 둔 열량은 지울 수 있다", async () => {

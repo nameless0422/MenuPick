@@ -39,8 +39,20 @@ public class HistoryResponse {
             /** 먹은 양(인분). 픽 기록은 1. */
             java.math.BigDecimal servings,
             /** 열량 추정치(kcal). 메뉴 열량을 모르면 null이다 — 0과 다르다(D-082). */
-            Integer kcal
+            Integer kcal,
+            /** 탄단지 추정치. 셋 중 하나라도 모르면 null이다(D-085). */
+            MealMacros macros
     ) {
+        /** 탄단지 전 호출부 호환. */
+        public HistorySummary(Long id, Long menuId, String menuName, String restaurantName, boolean isVisited,
+                              LocalDateTime recommendedAt, LocalDateTime visitedAt,
+                              RecommendationFeedback recommendationFeedback,
+                              List<FilterCondition> filterConditions, String memo,
+                              HistorySource source, MealSlot mealSlot, java.math.BigDecimal servings, Integer kcal) {
+            this(id, menuId, menuName, restaurantName, isVisited, recommendedAt, visitedAt,
+                    recommendationFeedback, filterConditions, memo, source, mealSlot, servings, kcal, null);
+        }
+
         /** 열량 전 호출부 호환. */
         public HistorySummary(Long id, Long menuId, String menuName, String restaurantName, boolean isVisited,
                               LocalDateTime recommendedAt, LocalDateTime visitedAt,
@@ -60,6 +72,9 @@ public class HistoryResponse {
                     recommendationFeedback, filterConditions, memo, HistorySource.PICK, null);
         }
     }
+
+    /** 한 끼의 탄수화물·단백질·지방(g, 먹은 양을 곱해 반올림한 정수). */
+    public record MealMacros(int carbsG, int proteinG, int fatG) {}
 
     public record MemoResponse(Long historyId, String memo, Long version) {}
 

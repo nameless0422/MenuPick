@@ -54,6 +54,10 @@ public class FoodReference {
     private BigDecimal fatG;
     @Column(name = "fiber_g")
     private BigDecimal fiberG;
+    @Column(name = "sugars_g")
+    private BigDecimal sugarsG;
+    @Column(name = "sodium_mg")
+    private Integer sodiumMg;
 
     /** 원본 데이터의 생성일. */
     private LocalDate sourceDate;
@@ -83,7 +87,14 @@ public class FoodReference {
         return this;
     }
 
+    /** 테스트 픽스처용. */
+    public FoodReference withSugarsAndSodium(BigDecimal sugarsG, Integer sodiumMg) {
+        this.sugarsG = sugarsG;
+        this.sodiumMg = sodiumMg;
+        return this;
+    }
+
     public com.nameless0422.MenuPick.domain.menu.Macros macros() {
-        return new com.nameless0422.MenuPick.domain.menu.Macros(carbsG, proteinG, fatG, fiberG);
+        return new com.nameless0422.MenuPick.domain.menu.Macros(carbsG, proteinG, fatG, fiberG, sugarsG, sodiumMg);
     }
 }

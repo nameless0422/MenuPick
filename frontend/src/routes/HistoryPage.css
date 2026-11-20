@@ -265,6 +265,13 @@
   gap: 0.25rem;
 }
 
+/* 기간과 그래프 종류 두 묶음. 좁은 화면에서는 줄을 바꾼다. */
+.nutrition-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+}
+
 .nutrition-period button[aria-pressed="true"] {
   background: var(--accent-bg);
   border-color: var(--accent-border);
@@ -329,6 +336,10 @@
 .nutrition-seg-dinner { fill: var(--slot-dinner); background: var(--slot-dinner); }
 .nutrition-seg-snack { fill: var(--slot-snack); background: var(--slot-snack); }
 .nutrition-seg-total { fill: var(--slot-total); background: var(--slot-total); }
+/* 날짜별 탄단지 그래프(D-085). 비율 띠와 같은 색이다. */
+.nutrition-seg-carbs { fill: var(--macro-carbs); background: var(--macro-carbs); }
+.nutrition-seg-protein { fill: var(--macro-protein); background: var(--macro-protein); }
+.nutrition-seg-fat { fill: var(--macro-fat); background: var(--macro-fat); }
 
 .nutrition-chart-tooltip {
   position: absolute;

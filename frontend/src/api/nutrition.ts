@@ -13,14 +13,21 @@ export interface FoodReference {
   fatG: number | null;
   /** 원본에 없는 음식이 많다. 예전 서버는 주지 않는다. */
   fiberG?: number | null;
+  sugarsG?: number | null;
+  sodiumMg?: number | null;
 }
 
-/** 1인분 탄수화물·단백질·지방·식이섬유(g). 모르면 null(D-084). 탄단지는 셋이 함께 있거나 함께 없다. */
+/**
+ * 1인분 탄수화물·단백질·지방·식이섬유(g, D-084)와 당류(g)·나트륨(mg, D-085). 모르면 null.
+ * 탄단지는 셋이 함께 있거나 함께 없다.
+ */
 export interface Macros {
   carbsG: number | null;
   proteinG: number | null;
   fatG: number | null;
   fiberG: number | null;
+  sugarsG: number | null;
+  sodiumMg: number | null;
 }
 
 /**
@@ -36,8 +43,16 @@ export interface MenuNutrition extends Partial<Macros> {
 }
 
 export interface SlotNutrition { slot: MealSlot; kcal: number; meals: number; }
-/** 하루치. `slots`는 그날 열량의 끼니별 몫이다(네 끼니, 순서 고정). 예전 서버는 주지 않는다. */
-export interface DayNutrition { date: string; kcal: number; meals: number; unknownMeals: number; slots?: SlotNutrition[]; }
+/** 하루 탄단지 합계(g, 정수). `meals`는 그날 탄단지를 아는 끼니 수이고, 0이면 셋 다 null. */
+export interface DayMacros { meals: number; carbsG: number | null; proteinG: number | null; fatG: number | null; }
+
+/**
+ * 하루치. `slots`는 그날 열량의 끼니별 몫이다(네 끼니, 순서 고정). `macros`는 그날 탄단지 합계다.
+ * 둘 다 예전 서버는 주지 않는다.
+ */
+export interface DayNutrition {
+  date: string; kcal: number; meals: number; unknownMeals: number; slots?: SlotNutrition[]; macros?: DayMacros;
+}
 
 /** 기간 열량 요약. 전부 추정치다. `averageKcal`은 열량을 아는 끼니가 있던 날로만 나눈 값이고, 없으면 null. */
 export interface NutritionSummary {
@@ -64,6 +79,11 @@ export interface MacroSummary {
   fatG: number | null;
   fiberMeals: number;
   fiberG: number | null;
+  /** 당류(g)·나트륨(mg). 식이섬유처럼 하나씩 따로 센다. 예전 서버는 주지 않는다. */
+  sugarsMeals?: number;
+  sugarsG?: number | null;
+  sodiumMeals?: number;
+  sodiumMg?: number | null;
 }
 
 export async function searchFoodReferences(q: string, size = 10) {
