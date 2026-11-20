@@ -45,7 +45,9 @@ FROM nginx:1.30.7-alpine
 #
 # 이 패키지만 올린다. `apk upgrade` 전체는 태그를 고정해 둔 의미(같은 입력 → 같은 이미지)를
 # 지운다. 베이스 태그가 수정판을 담게 되면 이 줄은 지운다 — 그때는 아무 일도 하지 않는 줄이 된다.
-RUN apk upgrade --no-cache libxslt
+#
+# libxml2는 2026-11-21 같은 스캔이 잡은 CVE-2026-86144(HIGH, 2.13.9-r3에서 수정)다. 이유와 기준은 위와 같다.
+RUN apk upgrade --no-cache libxslt libxml2
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
