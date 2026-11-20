@@ -75,6 +75,59 @@ class DefaultMenuProvisionerTest {
     }
 
     @Test
+    @DisplayName("기본 메뉴에는 1인분 열량과 영양소 추정치가 직접 입력값으로 들어간다")
+    void seededMenusCarryNutritionEstimates() {
+        User user = user(1L);
+        given(menuRepository.existsByUserId(1L)).willReturn(false);
+
+        provisioner.provision(user);
+
+        List<Menu> menus = savedMenus();
+        assertThat(menus).allSatisfy(menu -> {
+            assertThat(menu.getKcalPerServing()).isPositive();
+            assertThat(menu.getFoodReferenceId()).isNull();
+            Macros macros = menu.getMacros();
+            assertThat(macros.hasMacros()).isTrue();
+            assertThat(macros.fiberG()).isNotNull();
+            assertThat(macros.sugarsG()).isNotNull();
+            assertThat(macros.sodiumMg()).isNotNull();
+        });
+        Menu kimchi = menus.stream()
+                .filter(menu -> menu.getName().equals("김치찌개")).findFirst().orElseThrow();
+        assertThat(kimchi.getKcalPerServing()).isEqualTo(230);
+        assertThat(kimchi.getMacros().sodiumMg()).isEqualTo(1900);
+    }
+
+    @Test
+    @DisplayName("기본 메뉴 영양소는 저장 검증 범위 안이고 열량이 탄단지와 맞는다")
+    void presetNutritionIsWithinValidationAndConsistent() {
+        assertThat(DefaultMenus.PRESETS).allSatisfy(preset -> {
+            Macros m = preset.macros();
+            // NutritionDto.MenuNutritionRequest의 범위: 열량 1~5000, 나트륨 0~20000
+            assertThat(preset.kcalPerServing()).isBetween(1, 5000);
+            assertThat(m.sodiumMg()).isBetween(0, 20000);
+            double estimate = m.carbsG().doubleValue() * 4 + m.proteinG().doubleValue() * 4
+                    + m.fatG().doubleValue() * 9;
+            assertThat(estimate).isCloseTo(preset.kcalPerServing(),
+                    org.assertj.core.data.Percentage.withPercentage(3));
+        });
+    }
+
+    @Test
+    @DisplayName("V27 백필 SQL의 값이 기본 메뉴 목록과 같다")
+    void backfillMigrationMatchesPresets() throws java.io.IOException {
+        String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/resources/db/migration/V27__default_menu_nutrition.sql"));
+        assertThat(DefaultMenus.PRESETS).allSatisfy(preset -> {
+            Macros m = preset.macros();
+            String row = String.format(java.util.Locale.ROOT, "('%s', %d, %.1f, %.1f, %.1f, %.1f, %.1f, %d)",
+                    preset.name(), preset.kcalPerServing(), m.carbsG(), m.proteinG(), m.fatG(),
+                    m.fiberG(), m.sugarsG(), m.sodiumMg());
+            assertThat(sql).contains(row);
+        });
+    }
+
+    @Test
     @DisplayName("카테고리는 화면 프리셋에 있는 값만 쓴다")
     void categoriesStayWithinFrontendPresets() {
         // frontend/src/constants.ts의 CATEGORY_PRESETS. 여기에 없는 값을 넣으면 사용자는

@@ -111,8 +111,9 @@ class DefaultMenuSeedMigrationTest extends AbstractIntegrationTest {
         // 행 수가 시드 개수와 같다는 것이 그 사고가 없었다는 뜻이다.
         assertThat(rows).hasSize(DefaultMenus.PRESETS.size());
         assertThat(rows)
-                .extracting(row -> new DefaultMenus.Preset((String) row[0], (String) row[1]))
-                .containsExactlyInAnyOrderElementsOf(DefaultMenus.PRESETS);
+                .extracting(row -> row[0] + "/" + row[1])
+                .containsExactlyInAnyOrderElementsOf(DefaultMenus.PRESETS.stream()
+                        .map(preset -> preset.name() + "/" + preset.category()).toList());
     }
 
     @Test

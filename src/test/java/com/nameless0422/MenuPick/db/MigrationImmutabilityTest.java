@@ -114,7 +114,9 @@ class MigrationImmutabilityTest {
             Map.entry("V25__menu_macros.sql",
                     "4056b3dddecd540ee4718fbe7ed6261dac7801f644d3307dd852b9faadf5d5ce"),
             Map.entry("V26__menu_sugars_sodium.sql",
-                    "29c1bd6f39f374b580191d8cf5b437c49bb9c49f834163e10015be93cb4a4704"));
+                    "29c1bd6f39f374b580191d8cf5b437c49bb9c49f834163e10015be93cb4a4704"),
+            Map.entry("V27__default_menu_nutrition.sql",
+                    "663b4fc5fbb070a3addb25f5082e6adf89620085d06b29b7453865d6c3aa9df1"));
 
     @Test
     @DisplayName("이미 머지된 마이그레이션 파일은 내용이 바뀌지 않았다")
