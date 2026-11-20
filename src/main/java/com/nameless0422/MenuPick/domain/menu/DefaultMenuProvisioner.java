@@ -64,6 +64,7 @@ public class DefaultMenuProvisioner {
                             .name(preset.name())
                             .build();
                     menu.addCategory(preset.category());
+                    menu.setCustomNutrition(preset.kcalPerServing(), preset.macros());
                     // 목록에 없는 메뉴(삼겹살·치킨 등)에는 아무 태그도 붙지 않는다 — 근거는 DefaultTags.
                     DefaultTags.MENU_TAGS.getOrDefault(preset.name(), Set.of())
                             .forEach(tagName -> menu.addTag(tags.get(tagName)));

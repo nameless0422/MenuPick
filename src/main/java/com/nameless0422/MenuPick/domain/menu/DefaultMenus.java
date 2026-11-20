@@ -1,5 +1,6 @@
 package com.nameless0422.MenuPick.domain.menu;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -34,8 +35,14 @@ public final class DefaultMenus {
      * 기본 메뉴 한 건. 카테고리를 하나만 갖는 이유는 시드가 분류의 정답을 정하는 자리가 아니기
      * 때문이다 — 예를 들어 치킨은 한식으로도 패스트푸드로도 볼 수 있고, 그건 사용자가 나중에
      * 자기 기준으로 고치면 되는 값이다.
+     *
+     * <p><b>영양소(D-086).</b> 흔히 파는 1인분 기준의 어림값이다 — 찌개·볶음·고기류는 밥을 빼고,
+     * 밥이 한 그릇에 든 메뉴(비빔밥·초밥·김밥 등)는 넣은 값이다. 열량은 탄단지(4·4·9kcal/g)와
+     * 3% 안으로 맞춰 두었다. 가게마다 크게 다르니 "모르는 것보다 나은 시작값"일 뿐이고,
+     * 사용자 메뉴의 직접 입력값으로 들어가므로 언제든 고치거나 기준 음식으로 바꿀 수 있다.
+     * 여기를 고치면 이미 채워진 계정은 따라오지 않는다({@code V27__default_menu_nutrition.sql}).
      */
-    public record Preset(String name, String category) {}
+    public record Preset(String name, String category, int kcalPerServing, Macros macros) {}
 
     /**
      * 프리셋 8종 중 7종을 덮는다. "카페·디저트"는 넣지 않았다 — 이 앱이 뽑아 주는 것은 끼니이고,
@@ -45,35 +52,41 @@ public final class DefaultMenus {
      * 적으면 같은 메뉴가 반복해서 나오고, 너무 많으면 처음 열었을 때 목록 정리부터 해야 한다.
      */
     public static final List<Preset> PRESETS = List.of(
-            new Preset("김치찌개", "한식"),
-            new Preset("된장찌개", "한식"),
-            new Preset("제육볶음", "한식"),
-            new Preset("비빔밥", "한식"),
-            new Preset("삼겹살", "한식"),
-            new Preset("냉면", "한식"),
+            new Preset("김치찌개", "한식", 230, macros("10", "16", "14", "3.0", "4.0", 1900)),
+            new Preset("된장찌개", "한식", 150, macros("12", "12", "6", "3.5", "3.0", 1800)),
+            new Preset("제육볶음", "한식", 370, macros("18", "25", "22", "2.0", "10.0", 1200)),
+            new Preset("비빔밥", "한식", 570, macros("90", "18", "15", "5.0", "8.0", 1100)),
+            new Preset("삼겹살", "한식", 770, macros("1", "34", "70", "0", "0", 120)),
+            new Preset("냉면", "한식", 510, macros("100", "16", "5", "3.0", "15.0", 2600)),
 
-            new Preset("짜장면", "중식"),
-            new Preset("짬뽕", "중식"),
-            new Preset("탕수육", "중식"),
-            new Preset("마라탕", "중식"),
+            new Preset("짜장면", "중식", 720, macros("110", "20", "22", "6.0", "12.0", 2400)),
+            new Preset("짬뽕", "중식", 640, macros("90", "30", "18", "6.0", "8.0", 4000)),
+            new Preset("탕수육", "중식", 580, macros("60", "22", "28", "1.5", "25.0", 700)),
+            new Preset("마라탕", "중식", 600, macros("45", "25", "35", "5.0", "5.0", 3500)),
 
-            new Preset("초밥", "일식"),
-            new Preset("돈까스", "일식"),
-            new Preset("라멘", "일식"),
+            new Preset("초밥", "일식", 510, macros("85", "28", "6", "1.0", "12.0", 1300)),
+            new Preset("돈까스", "일식", 680, macros("50", "30", "40", "2.0", "10.0", 1300)),
+            new Preset("라멘", "일식", 660, macros("80", "28", "25", "4.0", "4.0", 3200)),
 
-            new Preset("파스타", "양식"),
-            new Preset("피자", "양식"),
-            new Preset("스테이크", "양식"),
+            new Preset("파스타", "양식", 630, macros("85", "22", "22", "5.0", "9.0", 1300)),
+            new Preset("피자", "양식", 820, macros("90", "35", "35", "5.0", "9.0", 1900)),
+            new Preset("스테이크", "양식", 530, macros("2", "45", "38", "0", "0.5", 400)),
 
-            new Preset("떡볶이", "분식"),
-            new Preset("김밥", "분식"),
+            new Preset("떡볶이", "분식", 500, macros("100", "10", "7", "3.0", "25.0", 1700)),
+            new Preset("김밥", "분식", 380, macros("60", "12", "10", "3.0", "4.0", 800)),
 
-            new Preset("쌀국수", "아시안"),
-            new Preset("팟타이", "아시안"),
+            new Preset("쌀국수", "아시안", 470, macros("75", "25", "8", "2.0", "5.0", 2200)),
+            new Preset("팟타이", "아시안", 600, macros("80", "20", "22", "3.0", "15.0", 1500)),
 
-            new Preset("햄버거", "패스트푸드"),
-            new Preset("치킨", "패스트푸드")
+            new Preset("햄버거", "패스트푸드", 500, macros("45", "25", "25", "3.0", "9.0", 1000)),
+            new Preset("치킨", "패스트푸드", 790, macros("30", "55", "50", "1.0", "1.0", 1500))
     );
+
+    private static Macros macros(String carbs, String protein, String fat, String fiber, String sugars,
+                                 int sodiumMg) {
+        return new Macros(new BigDecimal(carbs), new BigDecimal(protein), new BigDecimal(fat),
+                new BigDecimal(fiber), new BigDecimal(sugars), sodiumMg);
+    }
 
     private DefaultMenus() {
     }
