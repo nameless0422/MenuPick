@@ -316,15 +316,18 @@ cat /var/lib/menupick/disk-watch.*      # 마운트별 "단계 마지막알림�
 
 기준 음식 검색(D-082)은 `food_references` 테이블을 읽는다. 데이터는 저장소에 없고 서버에서 직접 넣는다.
 
-1. **사용자 작업**: 공공데이터포털에서 "전국통합식품영양성분정보(음식)표준데이터"
-   (data.go.kr/data/15100070)를 **CSV**로 내려받는다. 받기 전에 이용허락범위를 확인한다.
-2. 서버로 올려 SQL로 바꾸고, 건너뛴 행 수를 확인한 뒤 넣는다.
+1. 공공데이터포털의 "전국통합식품영양성분정보(음식)표준데이터"(data.go.kr/data/15100070)를
+   서버에서 `scripts/fetch-food-references.py`로 받는다. 로그인·인증키가 필요 없다.
+   스크립트가 깨지면(포털 화면 변경) 브라우저에서 CSV 버튼으로 받아 `/tmp/food.csv`로 올려도 같다.
+   - **이용 조건**: 데이터셋에 공공누리 유형 표시가 없다. 식약처가 업무상 작성·공표한 데이터라 자유 이용으로
+     보고, 기준 음식 검색 화면에 출처(식품의약품안전처 식품영양성분 데이터베이스)를 적어 둔다.
+2. 넣기 전에 백업을 뜬다(`sudo systemctl start menupick-backup.service`). SQL로 바꾸고, 건너뛴 행 수를 확인한 뒤 넣는다.
 
 ```bash
-scp -i ssh-key-*.key 음식DB.csv opc@146.56.116.44:/tmp/food.csv
 # 서버에서
 cd ~/menupick
-python3 scripts/import-food-references.py /tmp/food.csv > /tmp/food.sql   # 표준 오류에 건너뛴 행 수
+python3 scripts/fetch-food-references.py /tmp/food.csv                    # 2026-11-22 판: 19,738행
+python3 scripts/import-food-references.py /tmp/food.csv > /tmp/food.sql   # 표준 오류에 건너뛴 행 수(같은 판: 52)
 head -c 600 /tmp/food.sql                                                  # 눈으로 한 번 본다
 set -a; . ./.env; set +a
 docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" menupick-mysql mysql -uroot menupick < /tmp/food.sql
