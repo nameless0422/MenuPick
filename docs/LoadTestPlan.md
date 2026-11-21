@@ -83,6 +83,7 @@ Argon2id `m=9216KiB, t=4, p=1` (`SecurityConfig.java:60-77`). 검증 1회에 **9
 | --- | --- | --- | --- | --- | --- |
 | `typical` | 50 | 30 | 15 | 메뉴당 1~2 | 평범한 사용자. 기준선 |
 | `heavy` | 10 | 300 | 60 | 메뉴당 2~3 | 인메모리 필터링의 기울기를 드러내는 쪽 |
+| `nearby` | 500 | 30 | 20 | 메뉴당 1~2 | 식당 10,000개에 동시 500명이 주변 조회(`nearby.js`, 2026-11-21 추가) |
 
 사용자를 여럿 두는 이유: 한 계정만 쓰면 그 사용자의 메뉴 행이 MySQL 버퍼풀과 하이버네이트 배치 캐시에 완전히 얹혀, 실제보다 좋은 숫자가 나온다. VU가 사용자 풀에서 골라 쓰게 한다.
 
@@ -235,6 +236,8 @@ docker exec menupick-app curl -s localhost:9090/actuator/metrics/<name>
 | `scripts/k6/jwt.js` | HS256 토큰 조립 (k6 모듈). 만료 전 재발급 포함 | ✅ |
 | `scripts/k6/load-test.js` | 5절 시나리오. `SCENARIO` 환경변수로 선택 | ✅ |
 | `scripts/k6/metrics-poll.sh` | 회차 동안 관리 포트 지표를 주기 수집해 CSV로 | ✅ |
+| `scripts/k6/nearby.js` | 주변 조회: 동시 VU마다 사용자 하나, 서울시청 ±1km 반경 1km 픽, 1~3초 쉼 | ✅ |
+| `scripts/k6/server/*.sh` | 운영 서버에서 돌릴 때 쓰는 보조(아래 "운영 서버 대상 회차") | ✅ |
 | `docs/LoadTestResults.md` | 회차별 결과 기록 (템플릿) | ✅ |
 
 ### 실행 순서
@@ -254,6 +257,27 @@ SCENARIO=stress ... k6 run scripts/k6/load-test.js
 
 # 5. 정리 — 회차가 남긴 히스토리까지 함께 지운다
 mysql -u<user> -p <db> < scripts/k6/teardown.sql
+```
+
+### 운영 서버 대상 회차 (2026-11 3·4차가 쓴 방법)
+
+전용 환경이 없어 운영 서버에 돌릴 때는 4절 안전 조건을 이렇게 지킨다. 보조 스크립트는 서버의 `~/menupick`
+에서 `bash scripts/k6/server/<이름>.sh`로 부른다.
+
+1. 백업을 뜬다(`sudo systemctl start menupick-backup.service`).
+2. `set-jwt-secret.sh <파일>` — 회차 전용 `JWT_SECRET`으로 바꾼다. 값은 출력하지 않고 파일은 지운다.
+   기존 토큰은 전부 무효가 된다.
+3. `seed.sql`로 시드한다(`nearby`는 `SET @profile='nearby';`를 먼저).
+4. `pick-limit.sh 1000000` — 픽 레이트 리밋(D-077)만 임시 override로 푼다. compose가 명시한 환경 변수만
+   넘기므로 `.env`에 적어서는 앱에 닿지 않는다.
+5. 3분 워밍업(결과 버림) → 단계마다 시드 히스토리를 지우고 잰다. 포화 구간에서는
+   `mysql-diag.sh 75`로 MySQL이 무엇을 기다리는지 본다.
+6. `teardown.sql` → `pick-limit.sh unset` → `set-jwt-secret.sh <새 파일>`로 새 값으로 돌린다.
+7. 실계정 데이터(사용자·메뉴·식당·기록 수)가 회차 전과 같은지 본다.
+
+```bash
+# 주변 조회 (사용자 = VU 하나, 기본 500명 × 3분)
+BASE_URL=... JWT_SECRET=... USER_IDS=752-1251 k6 run scripts/k6/nearby.js
 ```
 
 **`USER_IDS` 인계**: 사용자 id는 AUTO_INCREMENT라 미리 알 수 없다. `seed.sql`이 마지막에

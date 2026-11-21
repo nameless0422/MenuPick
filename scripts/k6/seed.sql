@@ -17,6 +17,8 @@
 --   SET @profile = 'heavy';
 --   SOURCE scripts/k6/seed.sql;
 --
+-- nearby: 주변 조회 시나리오(nearby.js)용. 사용자 500 x 식당 20 = 식당 10,000개. heavy와 같은 방법으로 고른다.
+--
 -- 재실행 안전성: "이미 있으면 지우고 다시 넣기"가 아니라 "이미 있으면 즉시 에러로 중단"을
 -- 택했다. load-test 실행 중 히스토리가 계속 쌓이는데, delete-then-insert는 그 누적치를
 -- 조용히 날려 회차 비교를 망가뜨릴 수 있다. 재시드가 필요하면 운영자가 teardown.sql을
@@ -51,16 +53,16 @@ SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 -- ---------------------------------------------------------------
 SET @profile = IFNULL(@profile, 'typical');
 
-SET @user_count          = IF(@profile = 'heavy', 10, 50);
+SET @user_count          = IF(@profile = 'heavy', 10, IF(@profile = 'nearby', 500, 50));
 SET @menus_per_user      = IF(@profile = 'heavy', 300, 30);
-SET @restaurants_per_user = IF(@profile = 'heavy', 60, 15);
+SET @restaurants_per_user = IF(@profile = 'heavy', 60, IF(@profile = 'nearby', 20, 15));
 -- 메뉴당 식당 링크 수 범위 [min, max]. 메뉴마다 min~max 사이에서 값이 갈리도록
 -- 아래 menu_restaurants 삽입에서 사용한다 (전부 같은 개수면 분포가 아니라 상수다).
 SET @link_min = IF(@profile = 'heavy', 2, 1);
 SET @link_max = IF(@profile = 'heavy', 3, 2);
 SET @nickname_prefix = CONCAT('loadtest-', @profile, '-');
 
--- 재귀 CTE 깊이 참고: 이 스크립트의 재귀는 최대 @menus_per_user(=300, heavy)회 반복한다.
+-- 재귀 CTE 깊이 참고: 이 스크립트의 재귀는 최대 @user_count(=500, nearby)회 반복한다.
 -- cte_max_recursion_depth 기본값 1000보다 작으므로 별도로 올리지 않는다.
 
 -- ---------------------------------------------------------------
