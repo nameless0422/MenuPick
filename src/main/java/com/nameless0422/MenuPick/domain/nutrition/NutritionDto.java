@@ -15,10 +15,21 @@ import java.util.List;
 public final class NutritionDto {
     private NutritionDto() {}
 
+    /**
+     * 기준 음식 한 건. {@code servingGrams}는 이름과 달리 {@code servingUnit}(g 또는 ml) 단위의 1인분 양이다.
+     * {@code origin}은 값의 출처 구분(외식·가정식·프랜차이즈·급식)으로, 같은 이름이 여럿일 때 고르는 근거다(D-090).
+     */
     public record FoodReferenceSummary(
             Long id, String name, String category, BigDecimal servingGrams, int kcalPerServing,
             BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG, BigDecimal fiberG,
-            BigDecimal sugarsG, Integer sodiumMg) {
+            BigDecimal sugarsG, Integer sodiumMg, String servingUnit, String origin) {
+        public FoodReferenceSummary(Long id, String name, String category, BigDecimal servingGrams, int kcalPerServing,
+                                    BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG, BigDecimal fiberG,
+                                    BigDecimal sugarsG, Integer sodiumMg) {
+            this(id, name, category, servingGrams, kcalPerServing, carbsG, proteinG, fatG, fiberG, sugarsG, sodiumMg,
+                    "g", null);
+        }
+
         public FoodReferenceSummary(Long id, String name, String category, BigDecimal servingGrams, int kcalPerServing,
                                     BigDecimal carbsG, BigDecimal proteinG, BigDecimal fatG) {
             this(id, name, category, servingGrams, kcalPerServing, carbsG, proteinG, fatG, null);
@@ -33,7 +44,7 @@ public final class NutritionDto {
             return new FoodReferenceSummary(reference.getId(), reference.getName(), reference.getCategory(),
                     reference.getServingGrams(), reference.getKcalPerServing(),
                     reference.getCarbsG(), reference.getProteinG(), reference.getFatG(), reference.getFiberG(),
-                    reference.getSugarsG(), reference.getSodiumMg());
+                    reference.getSugarsG(), reference.getSodiumMg(), reference.getServingUnit(), reference.origin());
         }
     }
 

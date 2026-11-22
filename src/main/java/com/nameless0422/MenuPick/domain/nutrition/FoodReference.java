@@ -17,8 +17,8 @@ import java.time.LocalDateTime;
 /**
  * 기준 음식 한 줄 — 식약처 식품영양성분 DB "음식" 데이터의 사본(D-082).
  *
- * <p>앱은 읽기만 한다. 행은 {@code scripts/import-food-references.py}가 코드 기준으로 넣고 고치며
- * 지우지 않는다. 모든 값은 1인분 기준으로 환산돼 있다.
+ * <p>앱은 읽기만 한다. 행은 {@code scripts/import-food-references.py}가 코드 기준으로 넣고 고친다.
+ * 원본에서 빠진 행은 메뉴가 가리키지 않을 때만 지운다(D-090). 모든 값은 1인분 기준으로 환산돼 있다.
  */
 @Entity
 @Table(name = "food_references")
@@ -39,8 +39,12 @@ public class FoodReference {
     @Column(length = 50)
     private String category;
 
-    /** 1인분 무게(g 또는 ml). 원본에 없으면 null. */
+    /** 1인분 양({@link #servingUnit} 단위). 원본에 없으면 null. */
     private BigDecimal servingGrams;
+
+    /** 1인분 양의 단위 — "g" 또는 "ml"(D-090). */
+    @Column(nullable = false, length = 2)
+    private String servingUnit = "g";
 
     @Column(nullable = false)
     private int kcalPerServing;
@@ -92,6 +96,32 @@ public class FoodReference {
         this.sugarsG = sugarsG;
         this.sodiumMg = sodiumMg;
         return this;
+    }
+
+    /** 테스트 픽스처용. */
+    public FoodReference withServingUnit(String servingUnit) {
+        this.servingUnit = servingUnit;
+        return this;
+    }
+
+    /**
+     * 값의 출처 구분. 식품코드 둘째 자리가 원본의 식품기원코드다 — 1 가정식, 2 프랜차이즈 등 업체 제공,
+     * 3·4 외식(분석·재료량 산출), 5·6 초·중고등학교 급식, 7 산업체 급식. 모르는 코드면 null.
+     *
+     * <p>급식은 아이 몫이거나 국물 위주라 같은 "김치찌개"라도 외식의 1/6 열량이 나온다. 화면에 함께 보여
+     * 사용자가 고를 수 있게 하고, 검색은 외식 → 가정식 → 프랜차이즈 → 급식 순으로 둔다.
+     */
+    public String origin() {
+        if (code == null || code.length() < 2 || code.charAt(0) != 'D') return null;
+        return switch (code.charAt(1)) {
+            case '1' -> "가정식";
+            case '2' -> "프랜차이즈";
+            case '3', '4' -> "외식";
+            case '5' -> "초등 급식";
+            case '6' -> "중고등 급식";
+            case '7' -> "단체 급식";
+            default -> null;
+        };
     }
 
     public com.nameless0422.MenuPick.domain.menu.Macros macros() {

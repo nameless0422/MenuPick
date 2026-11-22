@@ -122,6 +122,31 @@ class NutritionIntegrationTest extends AbstractIntegrationTest {
         assertThat(service.search(base, 1)).hasSize(1);
     }
 
+    @Test void sameNameRanksRestaurantBeforeSchoolMealsAndCollapsesIdenticalRows() {
+        String name = tag + "된장찌개";
+        saveFixture(FoodReference.of("D5" + tag + "-a", name, "찌개", new BigDecimal("200.0"), 38, NOW).withServingUnit("ml"));
+        FoodReference canteen = saveFixture(FoodReference.of("D7" + tag + "-a", name, "찌개", new BigDecimal("200.0"), 38, NOW)
+                .withServingUnit("ml"));
+        FoodReference home = saveFixture(FoodReference.of("D1" + tag + "-a", name, "찌개", new BigDecimal("200.0"), 92, NOW));
+        FoodReference restaurant = saveFixture(FoodReference.of("D3" + tag + "-a", name, "찌개", new BigDecimal("400.0"), 244, NOW));
+
+        List<NutritionDto.FoodReferenceSummary> found = service.search(name, 10);
+
+        assertThat(found).extracting(NutritionDto.FoodReferenceSummary::id)
+                .as("외식 → 가정식 → 급식, 값이 같은 급식 두 줄은 하나로")
+                .containsExactly(restaurant.getId(), home.getId(), canteen.getId());
+        assertThat(found.get(0).origin()).isEqualTo("외식");
+        assertThat(found.get(2).origin()).isEqualTo("단체 급식");
+        assertThat(found.get(2).servingUnit()).isEqualTo("ml");
+        assertThat(service.search(name, 2)).hasSize(2);
+    }
+
+    private FoodReference saveFixture(FoodReference reference) {
+        FoodReference saved = references.save(reference);
+        fixtureReferences.add(saved.getId());
+        return saved;
+    }
+
     @Test void choosingReferenceCopiesItsKcalAndCustomOrClearDropsTheLink() {
         User owner = user("menu");
         Menu menu = menu(owner, "김치찌개", null);

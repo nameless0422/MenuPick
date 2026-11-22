@@ -49,6 +49,19 @@ describe("메뉴 열량", () => {
     expect(onVersionChange).toHaveBeenCalledWith(5);
   });
 
+  it("검색 결과에 1인분 양의 단위(ml)와 출처를 함께 보인다", async () => {
+    searchMock.mockResolvedValue([
+      { ...KIMCHI, servingUnit: "g", origin: "외식" },
+      { ...KIMCHI, id: 8, servingGrams: 200, kcalPerServing: 38, servingUnit: "ml", origin: "단체 급식" },
+    ]);
+    const user = userEvent.setup();
+    render();
+    await user.click(await screen.findByRole("button", { name: "기준 음식에서 찾기" }));
+
+    expect(await screen.findByRole("button", { name: /김치찌개 · 1인분 약 196kcal \(400g · 외식\)/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /김치찌개 · 1인분 약 38kcal \(200ml · 단체 급식\)/ })).toBeVisible();
+  });
+
   it("직접 적은 값은 1~5,000 정수만 저장한다", async () => {
     updateMock.mockResolvedValue({ menuId: 3, kcalPerServing: 650, foodReference: null, version: 5 });
     const user = userEvent.setup();

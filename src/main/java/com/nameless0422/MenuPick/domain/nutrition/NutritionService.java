@@ -54,10 +54,19 @@ public class NutritionService {
             return List.of();
         }
         String pattern = exact.replace("!", "!!").replace("%", "!%").replace("_", "!_");
-        return foodReferences.search(exact, pattern, size).stream()
+        // 급식 세 갈래(초등·중고등·단체)는 같은 레시피라 이름·양·열량이 똑같은 행이 여럿 나온다. 같은 줄이
+        // 반복되면 고를 근거가 없으니 앞의 것(출처 순서상 먼저인 것) 하나만 남긴다. 줄어드는 만큼 넉넉히 읽는다.
+        Set<String> seen = new HashSet<>();
+        return foodReferences.search(exact, pattern, size * SEARCH_OVERFETCH).stream()
+                .filter(reference -> seen.add(reference.getName() + "|" + reference.getKcalPerServing() + "|"
+                        + reference.getServingGrams() + reference.getServingUnit()))
+                .limit(size)
                 .map(NutritionDto.FoodReferenceSummary::of)
                 .toList();
     }
+
+    /** 중복을 거르고도 {@code size}건을 채우려고 더 읽는 배수. 한 이름의 중복은 급식 세 갈래가 최대다. */
+    static final int SEARCH_OVERFETCH = 3;
 
     public NutritionDto.MenuNutrition getMenuNutrition(Long userId, Long menuId) {
         return toNutrition(findMenu(userId, menuId));
