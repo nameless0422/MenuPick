@@ -10,9 +10,12 @@
     docker exec -i -e MYSQL_PWD="$MYSQL_ROOT_PASSWORD" menupick-mysql mysql -uroot menupick < /tmp/food.sql
 
 규칙:
-  - 코드(식품코드) 기준 upsert. 행은 지우지 않는다 — 메뉴가 food_reference_id로 가리키고 있다.
+  - 코드(식품코드) 기준 upsert. 이번 CSV에 없는 행은 메뉴가 가리키지 않을 때만 지운다(D-090) —
+    메뉴가 food_reference_id로 가리키는 행은 원본에서 빠져도 남긴다.
   - 원본은 "영양성분함량 기준량"(보통 100g) 기준이다. "식품중량"(1인분 무게)으로 1인분 값을 계산해 둔다.
     둘 중 하나라도 읽을 수 없으면 그 행은 건너뛴다 — 1인분 열량을 지어내지 않는다.
+  - 식품중량이 기준량과 같으면(100g/100ml) 1인분이 아니라 기준량을 그대로 적은 행으로 보고 건너뛴다(D-090).
+    비빔밥 외식 행이 "100g, 142kcal"인 식으로, 그대로 두면 1인분 열량이 몇 분의 일로 나온다.
   - 끝에 연결된 메뉴의 열량·탄단지·식이섬유를 새 값으로 맞춘다(메뉴는 값을 복사해 두기 때문이다).
   - 건너뛴 행 수와 이유는 표준 오류로 알린다.
 """
@@ -24,6 +27,9 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 BATCH = 500
+# 지우기(원본에서 빠진 행 정리)를 하려면 이만큼은 읽혀야 한다. 잘린 CSV나 다른 파일을 넣었을 때
+# 멀쩡한 행이 무더기로 지워지는 것을 막는다(2026-11 판 기준 약 18,500행).
+PRUNE_MIN_ROWS = 10000
 AMOUNT = re.compile(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*(g|ml|mL|ML|G)?\s*$")
 
 # 헤더 이름이 판마다 조금씩 다르다("1인(회)분량 참고량" / "1회 섭취참고량"). 후보를 차례로 찾는다.
@@ -130,6 +136,7 @@ def main(argv):
     now = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M:%S")
     skipped = Counter()
     values = []
+    codes = []
     seen = set()
     for row in reader:
         if not row or not any(c.strip() for c in row):
@@ -155,6 +162,9 @@ def main(argv):
             # g와 ml를 섞으면 밀도를 모른다. 지어내지 않는다.
             skipped["기준량과 식품중량 단위 다름"] += 1
             continue
+        if weight[0] == base[0]:
+            skipped["식품중량이 기준량과 같음(1인분 아님)"] += 1
+            continue
         factor = weight[0] / base[0]
         per_serving = round(kcal * factor)
         if per_serving > 65535:
@@ -172,9 +182,10 @@ def main(argv):
             return None if v is None or v < 0 or v * factor >= 100000 else v * factor
 
         seen.add(code)
-        values.append("(%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,'%s')" % (
+        codes.append(code)
+        values.append("(%s,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%s,'%s')" % (
             sql_string(code, 30), sql_string(name, 100), sql_string(cell(row, "category"), 50),
-            sql_number(weight[0]), per_serving,
+            sql_number(weight[0]), sql_string(weight[1], 2), per_serving,
             sql_number(scaled("carbs")), sql_number(scaled("protein")), sql_number(scaled("fat")),
             sql_number(scaled("fiber")), sql_number(scaled("sugars")), sql_number(scaled_mg("sodium"), 0),
             sql_date(cell(row, "date")), now))
@@ -184,11 +195,11 @@ def main(argv):
     out.write("SET NAMES utf8mb4;\nSTART TRANSACTION;\n")
     for i in range(0, len(values), BATCH):
         out.write("INSERT INTO food_references "
-                  "(code,name,category,serving_grams,kcal_per_serving,carbs_g,protein_g,fat_g,fiber_g,"
+                  "(code,name,category,serving_grams,serving_unit,kcal_per_serving,carbs_g,protein_g,fat_g,fiber_g,"
                   "sugars_g,sodium_mg,source_date,imported_at) VALUES\n")
         out.write(",\n".join(values[i:i + BATCH]))
         out.write("\nON DUPLICATE KEY UPDATE name=VALUES(name), category=VALUES(category), "
-                  "serving_grams=VALUES(serving_grams), kcal_per_serving=VALUES(kcal_per_serving), "
+                  "serving_grams=VALUES(serving_grams), serving_unit=VALUES(serving_unit), kcal_per_serving=VALUES(kcal_per_serving), "
                   "carbs_g=VALUES(carbs_g), protein_g=VALUES(protein_g), fat_g=VALUES(fat_g), fiber_g=VALUES(fiber_g), "
                   "sugars_g=VALUES(sugars_g), sodium_mg=VALUES(sodium_mg), "
                   "source_date=VALUES(source_date), imported_at=VALUES(imported_at);\n")
@@ -200,6 +211,20 @@ def main(argv):
               "WHERE NOT (m.kcal_per_serving <=> f.kcal_per_serving AND m.carbs_g <=> f.carbs_g "
               "AND m.protein_g <=> f.protein_g AND m.fat_g <=> f.fat_g AND m.fiber_g <=> f.fiber_g "
               "AND m.sugars_g <=> f.sugars_g AND m.sodium_mg <=> f.sodium_mg);\n")
+    if len(values) >= PRUNE_MIN_ROWS:
+        # 이번 CSV에 없는(건너뛴 것 포함) 행을 지운다. 메뉴가 가리키는 행은 남긴다 — 값이 메뉴에 복사돼 있고
+        # 출처 표시가 끊기면 안 된다. 코드 목록은 임시 테이블로 넘긴다(NOT IN 리스트 하나로는 너무 길다).
+        out.write("CREATE TEMPORARY TABLE tmp_import_codes (code VARCHAR(30) NOT NULL PRIMARY KEY);\n")
+        for i in range(0, len(codes), BATCH):
+            out.write("INSERT INTO tmp_import_codes (code) VALUES ")
+            out.write(",".join("(%s)" % sql_string(c, 30) for c in codes[i:i + BATCH]))
+            out.write(";\n")
+        out.write("DELETE f FROM food_references f LEFT JOIN tmp_import_codes i ON i.code = f.code "
+                  "WHERE i.code IS NULL AND NOT EXISTS (SELECT 1 FROM menus m WHERE m.food_reference_id = f.id);\n")
+        out.write("SELECT ROW_COUNT() AS pruned_rows;\n")
+        out.write("DROP TEMPORARY TABLE tmp_import_codes;\n")
+    else:
+        sys.stderr.write("  %d행뿐이라 원본에서 빠진 행 정리는 건너뜀 (기준 %d행)\n" % (len(values), PRUNE_MIN_ROWS))
     out.write("COMMIT;\n")
 
     sys.stderr.write("가져올 행 %d개\n" % len(values))

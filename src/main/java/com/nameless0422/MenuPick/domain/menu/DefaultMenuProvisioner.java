@@ -6,13 +6,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.nameless0422.MenuPick.domain.nutrition.FoodReference;
+import com.nameless0422.MenuPick.domain.nutrition.FoodReferenceRepository;
 import com.nameless0422.MenuPick.domain.tag.Tag;
 import com.nameless0422.MenuPick.domain.tag.TagRepository;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 갓 만들어진 계정에 {@link DefaultMenus}의 기본 메뉴를 한 번 넣어 준다.
@@ -36,6 +41,7 @@ public class DefaultMenuProvisioner {
 
     private final MenuRepository menuRepository;
     private final TagRepository tagRepository;
+    private final FoodReferenceRepository foodReferenceRepository;
 
     /**
      * @return 새로 넣은 메뉴 수. 이미 메뉴를 가진 계정이면 0
@@ -55,6 +61,7 @@ public class DefaultMenuProvisioner {
         // 태그를 먼저 만든다. 메뉴를 저장하기 전에 붙여 두면 저장이 한 번으로 끝나고,
         // "메뉴는 들어갔는데 태그만 빠진" 중간 상태가 애초에 생기지 않는다.
         Map<String, Tag> tags = provisionTags(user);
+        Map<String, FoodReference> references = foodReferences();
 
         List<Menu> menus = DefaultMenus.PRESETS.stream()
                 .map(preset -> {
@@ -64,7 +71,14 @@ public class DefaultMenuProvisioner {
                             .name(preset.name())
                             .build();
                     menu.addCategory(preset.category());
-                    menu.setCustomNutrition(preset.kcalPerServing(), preset.macros());
+                    // 기준 음식 데이터가 있으면 그 값과 연결하고(D-090), 없으면(개발 DB, 데이터를 아직 안 넣은
+                    // 서버, 원본에서 빠진 행) 추정치를 직접 입력값으로 둔다(D-086).
+                    FoodReference reference = preset.foodCode() == null ? null : references.get(preset.foodCode());
+                    if (reference != null) {
+                        menu.useFoodReference(reference.getId(), reference.getKcalPerServing(), reference.macros());
+                    } else {
+                        menu.setCustomNutrition(preset.kcalPerServing(), preset.macros());
+                    }
                     // 목록에 없는 메뉴(삼겹살·치킨 등)에는 아무 태그도 붙지 않는다 — 근거는 DefaultTags.
                     DefaultTags.MENU_TAGS.getOrDefault(preset.name(), Set.of())
                             .forEach(tagName -> menu.addTag(tags.get(tagName)));
@@ -75,6 +89,14 @@ public class DefaultMenuProvisioner {
         menuRepository.saveAll(menus);
         log.info("기본 메뉴를 생성했습니다: userId={}, count={}", user.getId(), menus.size());
         return menus.size();
+    }
+
+    /** 기본 메뉴가 가리키는 기준 음식을 코드로 한 번에 읽는다. */
+    private Map<String, FoodReference> foodReferences() {
+        List<String> codes = DefaultMenus.PRESETS.stream().map(DefaultMenus.Preset::foodCode)
+                .filter(Objects::nonNull).toList();
+        return foodReferenceRepository.findByCodeIn(codes).stream()
+                .collect(Collectors.toMap(FoodReference::getCode, Function.identity()));
     }
 
     /**

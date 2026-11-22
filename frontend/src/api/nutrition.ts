@@ -15,6 +15,10 @@ export interface FoodReference {
   fiberG?: number | null;
   sugarsG?: number | null;
   sodiumMg?: number | null;
+  /** `servingGrams`의 단위 — "g" 또는 "ml"(D-090). 예전 서버는 주지 않는다(g로 본다). */
+  servingUnit?: string | null;
+  /** 값의 출처 구분: 외식·가정식·프랜차이즈·급식. 같은 이름이 여럿일 때 고르는 근거다. */
+  origin?: string | null;
 }
 
 /**

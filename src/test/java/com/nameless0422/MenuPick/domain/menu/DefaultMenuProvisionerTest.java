@@ -24,6 +24,7 @@ class DefaultMenuProvisionerTest {
 
     @Mock private MenuRepository menuRepository;
     @Mock private com.nameless0422.MenuPick.domain.tag.TagRepository tagRepository;
+    @Mock private com.nameless0422.MenuPick.domain.nutrition.FoodReferenceRepository foodReferenceRepository;
 
     @InjectMocks private DefaultMenuProvisioner provisioner;
 
@@ -96,6 +97,48 @@ class DefaultMenuProvisionerTest {
                 .filter(menu -> menu.getName().equals("김치찌개")).findFirst().orElseThrow();
         assertThat(kimchi.getKcalPerServing()).isEqualTo(230);
         assertThat(kimchi.getMacros().sodiumMg()).isEqualTo(1900);
+    }
+
+    @Test
+    @DisplayName("기준 음식 데이터가 있으면 그 행과 연결하고, 없는 메뉴는 추정치를 그대로 쓴다(D-090)")
+    void linksPresetsToFoodReferencesWhenPresent() {
+        User user = user(1L);
+        given(menuRepository.existsByUserId(1L)).willReturn(false);
+        com.nameless0422.MenuPick.domain.nutrition.FoodReference kimchi =
+                com.nameless0422.MenuPick.domain.nutrition.FoodReference.of("D306-266000000-0001", "김치찌개", "찌개",
+                        new java.math.BigDecimal("400.0"), 244, java.time.LocalDateTime.of(2026, 11, 22, 0, 0))
+                        .withMacros(new java.math.BigDecimal("11.9"), new java.math.BigDecimal("15.1"),
+                                new java.math.BigDecimal("15.0"), null)
+                        .withSugarsAndSodium(null, 1964);
+        ReflectionTestUtils.setField(kimchi, "id", 42L);
+        given(foodReferenceRepository.findByCodeIn(anyList())).willReturn(List.of(kimchi));
+
+        provisioner.provision(user);
+
+        List<Menu> menus = savedMenus();
+        Menu linked = menus.stream().filter(menu -> menu.getName().equals("김치찌개")).findFirst().orElseThrow();
+        assertThat(linked.getFoodReferenceId()).isEqualTo(42L);
+        assertThat(linked.getKcalPerServing()).isEqualTo(244);
+        assertThat(linked.getMacros().sodiumMg()).isEqualTo(1964);
+        Menu estimated = menus.stream().filter(menu -> menu.getName().equals("된장찌개")).findFirst().orElseThrow();
+        assertThat(estimated.getFoodReferenceId()).as("DB에 행이 없는 코드").isNull();
+        assertThat(estimated.getKcalPerServing()).isEqualTo(150);
+    }
+
+    @Test
+    @DisplayName("V28 연결 SQL의 이름·코드·추정치가 기본 메뉴 목록과 같다")
+    void linkMigrationMatchesPresets() throws java.io.IOException {
+        String sql = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/resources/db/migration/V28__food_reference_unit_and_default_links.sql"));
+        List<DefaultMenus.Preset> linked = DefaultMenus.PRESETS.stream().filter(p -> p.foodCode() != null).toList();
+        assertThat(linked).hasSize(17);
+        assertThat(linked).allSatisfy(preset -> {
+            Macros m = preset.macros();
+            String row = String.format(java.util.Locale.ROOT, "('%s', '%s', %d, %.1f, %.1f, %.1f, %.1f, %.1f, %d)",
+                    preset.name(), preset.foodCode(), preset.kcalPerServing(), m.carbsG(), m.proteinG(), m.fatG(),
+                    m.fiberG(), m.sugarsG(), m.sodiumMg());
+            assertThat(sql).contains(row);
+        });
     }
 
     @Test

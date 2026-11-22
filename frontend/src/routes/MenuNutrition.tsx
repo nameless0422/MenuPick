@@ -75,11 +75,17 @@ export default function MenuNutrition({ menuId, menuName, onVersionChange }: {
   );
 }
 
+/** "400g · 외식"처럼 1인분 양과 출처를 붙인 꼬리표. 둘 다 모르면 빈 문자열. */
+function servingLabel(reference: FoodReference): string {
+  const amount = reference.servingGrams ? `${reference.servingGrams}${reference.servingUnit ?? "g"}` : null;
+  return [amount, reference.origin].filter(Boolean).join(" · ");
+}
+
 function describe(nutrition: Nutrition): string {
   if (nutrition.kcalPerServing == null) return "아직 열량을 모르는 메뉴예요. 정해 두면 식사 기록에 열량이 합산돼요.";
   if (nutrition.foodReference) {
-    const grams = nutrition.foodReference.servingGrams;
-    return `1인분 약 ${nutrition.kcalPerServing}kcal · 기준: ${nutrition.foodReference.name}${grams ? ` (${grams}g)` : ""}`;
+    const label = servingLabel(nutrition.foodReference);
+    return `1인분 약 ${nutrition.kcalPerServing}kcal · 기준: ${nutrition.foodReference.name}${label ? ` (${label})` : ""}`;
   }
   return `1인분 약 ${nutrition.kcalPerServing}kcal · 직접 적은 값`;
 }
@@ -139,7 +145,7 @@ function ReferenceSearch({ initial, busy, onPick, onCancel }: {
               <button type="button" aria-disabled={busy || undefined}
                 onClick={() => { if (!busy) onPick(reference); }}>
                 {reference.name} · 1인분 약 {reference.kcalPerServing}kcal
-                {reference.servingGrams ? ` (${reference.servingGrams}g)` : ""}
+                {servingLabel(reference) ? ` (${servingLabel(reference)})` : ""}
                 {macroLine(reference) && <span className="menu-nutrition-macros">{macroLine(reference)}</span>}
               </button>
             </li>
