@@ -17,6 +17,7 @@ test("태그 이름을 바꿔도 기본 제외를 유지하고 다른 탭 수정
     });
     if (url.pathname === "/api/v1/tags" && request.method() === "GET") return respond([tag]);
     if (url.pathname === "/api/v1/pick/preferences" && request.method() === "GET") return respond([7]);
+    if (url.pathname === "/api/v1/nutrition/reference" && request.method() === "GET") return respond({ dailyKcal: null });
     if (url.pathname === "/api/v1/tags/7" && request.method() === "PATCH") {
       const body = request.postDataJSON();
       submitted.push(body);

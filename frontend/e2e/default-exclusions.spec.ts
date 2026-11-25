@@ -22,6 +22,7 @@ async function installApi(page: Page) {
       "/api/v1/auth/me": { nickname: "테스터", email: "test@example.com", hasPassword: false, linkedProviders: [] },
       "/api/v1/tags": tags,
       "/api/v1/pick/preferences": preferences,
+      "/api/v1/nutrition/reference": { dailyKcal: null },
       "/api/v1/pick/presets": { presets: [], limit: 10 },
       "/api/v1/onboarding": { needed: false, menus: [] },
       "/api/v1/history": { histories: [], hasNext: false, nextCursor: null },
