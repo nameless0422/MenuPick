@@ -25,6 +25,9 @@ plugins {
 	id 'org.springframework.boot' version '4.1.2'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'jacoco'
+	id 'checkstyle'
+	// SBOM(CycloneDX). Boot 플러그인이 이걸 보면 bootJar의 META-INF/sbom에 넣는다(D-091).
+	id 'org.cyclonedx.bom' version '3.5.1'
 }
 
 group = 'com.nameless0422'
@@ -168,6 +171,14 @@ jacocoTestCoverageVerification {
 	afterEvaluate {
 		classDirectories.setFrom(jacocoTestReport.classDirectories)
 	}
+}
+
+// 정적 분석 최소선(D-091). 규칙은 config/checkstyle/checkstyle.xml — 버그성 패턴만 본다.
+// 경고 한 건도 실패로 다룬다. 경고로 두면 쌓이기만 하고 아무도 읽지 않는다.
+checkstyle {
+	toolVersion = '12.3.1'
+	maxWarnings = 0
+	maxErrors = 0
 }
 
 tasks.named('check') {

@@ -14,7 +14,7 @@
 | API·도메인·에러 코드 같은 계약 | [Specification.md](Specification.md) |
 | 무엇을 만들기로 했나 (요구사항·KPI) | [Requirements.md](Requirements.md) |
 | 백엔드가 어떻게 설계됐나 | [Planning.md](Planning.md) |
-| 아직 안 한 일·알려진 위험 | [ImprovementBacklog.md](ImprovementBacklog.md) |
+| 아직 안 한 일·알려진 위험 | [ImprovementBacklog.md](ImprovementBacklog.md), [ProjectAudit.md](ProjectAudit.md) |
 | 배포·운영 절차(서버) | [../deploy/oci/README.md](../deploy/oci/README.md) |
 
 ## 문서 분류
@@ -42,6 +42,7 @@
 
 ### 운영·법무·프로세스
 - [PrivacyReview.md](PrivacyReview.md) — 위치정보법·개인정보 고지 1차 검토(법률 자문 아님).
+- [ProjectAudit.md](ProjectAudit.md) — 외부 평가 기준 대조 점검표와 보류 항목.
 - [CommitConvention.md](CommitConvention.md) — 커밋 메시지 규칙(실제 이력 기준).
 
 > 이미지는 [images/](images/)에 둔다. 문서를 옮기거나 이름을 바꾸면 소스 주석·마이그레이션이
