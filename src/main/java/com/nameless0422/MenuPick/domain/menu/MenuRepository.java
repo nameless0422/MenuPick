@@ -65,10 +65,13 @@ public interface MenuRepository extends JpaRepository<Menu, Long>, JpaSpecificat
         java.math.BigDecimal getLongitude();
     }
 
-    /** 메뉴/카테고리/태그를 곱집합 없이 선형 행으로 읽는 대안 진단 projection. */
+    /**
+     * 메뉴/카테고리/태그를 곱집합 없이 선형 행으로 읽는 대안 진단 projection.
+     * MENU 행의 {@code longValue}는 1인분 열량이다(열량 상한 조건, D-092). TAG 행은 태그 id다.
+     */
     @Query(value = """
-            SELECT m.id AS menuId, 'MENU' AS kind, NULL AS textValue, NULL AS longValue,
-                   FALSE AS categoryMatched
+            SELECT m.id AS menuId, 'MENU' AS kind, NULL AS textValue,
+                   CAST(m.kcal_per_serving AS SIGNED) AS longValue, FALSE AS categoryMatched
               FROM menus m
              WHERE m.user_id = :userId AND m.is_excluded = FALSE AND m.deleted_at IS NULL
                AND (m.paused_until IS NULL OR m.paused_until <= :now)

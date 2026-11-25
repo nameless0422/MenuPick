@@ -1049,6 +1049,57 @@ describe("PickPage 후보가 없을 때의 안내", () => {
 });
 
 
+describe("1인분 열량", () => {
+  const baseResult = {
+    historyId: 1,
+    menu: {
+      id: 1, name: "김치찌개", memo: null, categories: [], tags: [], weight: 1, isExcluded: false,
+      createdAt: "2026-01-01T00:00:00", updatedAt: "2026-01-01T00:00:00", version: 0,
+    },
+    restaurants: [],
+    reasons: [],
+  };
+
+  it("기본값에서는 요청에 열량 상한이 실리지 않는다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
+    expect(requestPickMock.mock.calls[0][0]).not.toHaveProperty("maxKcal");
+  });
+
+  it("상한을 고르면 그 값이 요청에 실리고, 열량을 모르는 메뉴가 빠진다고 알린다", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PickPage />);
+
+    await user.click(screen.getByRole("radio", { name: "700kcal 이하" }));
+    expect(screen.getByText(/열량을 모르는 메뉴는 빠져요/)).toBeInTheDocument();
+    await user.click(spinButton());
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalled());
+    expect(requestPickMock.mock.calls[0][0]).toMatchObject({ maxKcal: 700 });
+  });
+
+  it("결과에 1인분 열량이 있으면 보이고, 없으면 자리를 만들지 않는다", async () => {
+    const user = userEvent.setup();
+    requestPickMock.mockResolvedValueOnce({ ...baseResult, kcalPerServing: 1244 });
+    renderWithProviders(<PickPage />);
+
+    await user.click(spinButton());
+    // 슬롯 연출(SPIN_MS)이 끝나야 결과가 공개된다
+    expect(await screen.findByText("1인분 약 1,244kcal", {}, { timeout: 3000 })).toBeInTheDocument();
+
+    requestPickMock.mockResolvedValueOnce({ ...baseResult, kcalPerServing: null });
+    await user.click(await screen.findByRole("button", { name: /다시 돌리기/ }));
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText("김치찌개", { selector: ".pick-result-name" })).toBeInTheDocument(),
+      { timeout: 3000 });
+    expect(screen.queryByText(/1인분 약/)).not.toBeInTheDocument();
+  });
+});
+
 describe("최근에 뽑은 메뉴 빼기", () => {
   /** 백엔드 에러 코드를 실은 axios 형태의 거절. apiErrorCode가 읽는 자리와 같아야 한다. */
   const apiError = (errorCode: string) =>

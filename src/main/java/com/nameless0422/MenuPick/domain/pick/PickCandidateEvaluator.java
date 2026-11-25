@@ -39,7 +39,8 @@ class PickCandidateEvaluator {
                 request == null ? null : request.excludeTagIds(),
                 request == null ? null : request.latitude(),
                 request == null ? null : request.longitude(),
-                request == null ? null : request.maxDistance(), now));
+                request == null ? null : request.maxDistance(),
+                request == null ? null : request.maxKcal(), now));
         List<HistoryRepository.MenuRecommendationSignals> signals =
                 historyRepository.findMenuRecommendationSignalsSince(userId,
                         now.minusDays(FEEDBACK_WINDOW_DAYS), RecommendationFeedback.ACCEPTED,
@@ -80,7 +81,9 @@ class PickCandidateEvaluator {
         for (MenuRepository.PickAlternativeFact row
                 : menuRepository.findPickAlternativeFacts(userId, filterCategories, queryCategories, now)) {
             CandidateFactBuilder builder = builders.computeIfAbsent(row.getMenuId(), CandidateFactBuilder::new);
-            if ("CATEGORY".equals(row.getKind()) && Long.valueOf(1L).equals(row.getCategoryMatched())) {
+            if ("MENU".equals(row.getKind())) {
+                builder.kcalPerServing = row.getLongValue() == null ? null : row.getLongValue().intValue();
+            } else if ("CATEGORY".equals(row.getKind()) && Long.valueOf(1L).equals(row.getCategoryMatched())) {
                 builder.categoryMatched = true;
             } else if ("TAG".equals(row.getKind()) && row.getLongValue() != null) {
                 builder.tagIds.add(row.getLongValue());
@@ -107,6 +110,7 @@ class PickCandidateEvaluator {
                         && menu.tagIds().containsAll(includes)))
                 .filter(menu -> menu.tagIds().stream().noneMatch(excludes::contains))
                 .filter(menu -> withinDistance(menu, request))
+                .filter(menu -> withinKcal(menu, request))
                 .toList();
         return finishFacts(filtered, universe.signals(), universe.now(),
                 requestedRecentExclusion(request));
@@ -178,6 +182,12 @@ class PickCandidateEvaluator {
                 point.latitude().doubleValue(), point.longitude().doubleValue()) <= request.maxDistance());
     }
 
+    /** SQL 쪽({@code PickCandidates})과 같은 판정 — 열량을 모르면 뺀다. 갈라지면 대안의 후보 수가 틀린다. */
+    private static boolean withinKcal(CandidateFact menu, PickRequest request) {
+        if (request == null || request.maxKcal() == null) return true;
+        return menu.kcalPerServing() != null && menu.kcalPerServing() <= request.maxKcal();
+    }
+
     private static Set<Long> withoutNulls(Set<Long> ids) {
         Set<Long> result = new LinkedHashSet<>(ids);
         result.remove(null);
@@ -193,15 +203,17 @@ class PickCandidateEvaluator {
 
     private record Coordinates(BigDecimal latitude, BigDecimal longitude) {}
     private record CandidateFact(Long menuId, boolean categoryMatched, Set<Long> tagIds,
-                                 List<Coordinates> restaurants) {}
+                                 List<Coordinates> restaurants, Integer kcalPerServing) {}
     private static final class CandidateFactBuilder {
         private final Long menuId;
         private boolean categoryMatched;
+        private Integer kcalPerServing;
         private final Set<Long> tagIds = new LinkedHashSet<>();
         private final List<Coordinates> restaurants = new ArrayList<>();
         private CandidateFactBuilder(Long menuId) { this.menuId = menuId; }
         private CandidateFact build() {
-            return new CandidateFact(menuId, categoryMatched, Set.copyOf(tagIds), List.copyOf(restaurants));
+            return new CandidateFact(menuId, categoryMatched, Set.copyOf(tagIds), List.copyOf(restaurants),
+                    kcalPerServing);
         }
     }
 

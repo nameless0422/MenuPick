@@ -109,7 +109,8 @@ public class PickService {
         return new PickResponse.PickResult(
                 history.getId(), toDetail(picked), restaurants,
                 buildRecommendationReasons(picked, request, categories, avoidedRecentRecommendation,
-                        feedbackAdjustments.getOrDefault(picked.getId(), 0)));
+                        feedbackAdjustments.getOrDefault(picked.getId(), 0)),
+                picked.getKcalPerServing());
     }
 
     private List<String> buildRecommendationReasons(
@@ -125,6 +126,9 @@ public class PickService {
         }
         if (request != null && request.maxDistance() != null) {
             reasons.add("설정한 거리 안에서 찾았어요");
+        }
+        if (request != null && request.maxKcal() != null) {
+            reasons.add("1인분 " + request.maxKcal() + "kcal 이하로 골랐어요");
         }
         if (request != null && request.excludeRecentDays() != null) {
             reasons.add("최근 " + request.excludeRecentDays() + "일 안에 뽑은 메뉴는 빼고 골랐어요");
@@ -341,6 +345,9 @@ public class PickService {
             if (request.excludeRecentDays() != null) {
                 history.addFilterCondition("EXCLUDE_RECENT_DAYS",
                         String.valueOf(request.excludeRecentDays()));
+            }
+            if (request.maxKcal() != null) {
+                history.addFilterCondition("MAX_KCAL", String.valueOf(request.maxKcal()));
             }
         }
 

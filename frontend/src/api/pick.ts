@@ -17,6 +17,11 @@ export interface PickRequest {
    * 안 눌린 기록이 대부분이고, 그걸 기준으로 삼으면 이 조건이 거의 아무것도 걸러내지 않는다.
    */
   excludeRecentDays?: number;
+  /**
+   * 1인분 열량 상한(kcal). 100..5000이며, 생략하면 열량으로 거르지 않는다.
+   * 열량을 모르는 메뉴는 빠진다 — "가볍게"를 골랐는데 열량 모르는 메뉴가 나오면 조건이 무의미하다.
+   */
+  maxKcal?: number;
 }
 
 // PickResponse.RestaurantWithDistance — distance는 요청에 위치가 없으면 null이지만
@@ -36,6 +41,8 @@ export interface PickResult {
   menu: MenuDetail;
   restaurants: PickRestaurant[];
   reasons?: string[];
+  /** 뽑힌 메뉴의 1인분 열량. 모르면 null, 구버전 서버면 필드가 없다. */
+  kcalPerServing?: number | null;
 }
 
 export async function requestPick(request: PickRequest) {

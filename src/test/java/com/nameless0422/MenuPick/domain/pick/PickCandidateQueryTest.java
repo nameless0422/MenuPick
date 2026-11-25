@@ -316,11 +316,29 @@ class PickCandidateQueryTest extends AbstractIntegrationTest {
                 .contains(resting.getName(), awake.getName());
     }
 
+    @Test
+    @DisplayName("열량 상한은 그 값 이하인 메뉴만 남기고, 열량을 모르는 메뉴는 뺀다")
+    void maxKcalKeepsKnownLightMenus() {
+        Menu light = menu(me, "샐러드");
+        light.setCustomKcal(400);
+        Menu exact = menu(me, "비빔밥");
+        exact.setCustomKcal(600);
+        Menu heavy = menu(me, "삼겹살");
+        heavy.setCustomKcal(770);
+        Menu unknown = menu(me, "모르는메뉴");
+        menuRepository.flush();
+
+        assertThat(names(menuRepository.findAll(PickCandidates.of(
+                me.getId(), Set.of(), Set.of(), Set.of(), null, null, null, 600, NOW))))
+                .containsExactlyInAnyOrder(light.getName(), exact.getName())
+                .doesNotContain(heavy.getName(), unknown.getName());
+    }
+
     // ------------------------------------------------------------------ 헬퍼
 
     private List<Menu> findAt(java.time.LocalDateTime now) {
         return menuRepository.findAll(PickCandidates.of(
-                me.getId(), Set.of(), Set.of(), Set.of(), null, null, null, now));
+                me.getId(), Set.of(), Set.of(), Set.of(), null, null, null, null, now));
     }
 
 
@@ -330,7 +348,7 @@ class PickCandidateQueryTest extends AbstractIntegrationTest {
     private List<Menu> find(Set<String> categories, Set<Long> includeTagIds, Set<Long> excludeTagIds,
                             BigDecimal lat, BigDecimal lng, Integer maxDistance) {
         return menuRepository.findAll(PickCandidates.of(
-                me.getId(), categories, includeTagIds, excludeTagIds, lat, lng, maxDistance, NOW));
+                me.getId(), categories, includeTagIds, excludeTagIds, lat, lng, maxDistance, null, NOW));
     }
 
     private static List<String> names(List<Menu> menus) {

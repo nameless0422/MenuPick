@@ -12,12 +12,20 @@ public class PickResponse {
             Long historyId,
             MenuResponse.MenuDetail menu,
             List<RestaurantWithDistance> restaurants,
-            List<String> reasons
+            List<String> reasons,
+            /** 뽑힌 메뉴의 1인분 열량(kcal). 모르면 null — 결과 카드가 "약 N kcal"로 보인다(D-092). */
+            Integer kcalPerServing
     ) {
         /** 기존 호출부와 API 테스트가 이유 필드 추가와 독립적으로 동작하도록 둔 호환 생성자. */
         public PickResult(Long historyId, MenuResponse.MenuDetail menu,
                           List<RestaurantWithDistance> restaurants) {
             this(historyId, menu, restaurants, List.of());
+        }
+
+        /** 열량 필드 이전의 4개 인자 호출부용. */
+        public PickResult(Long historyId, MenuResponse.MenuDetail menu,
+                          List<RestaurantWithDistance> restaurants, List<String> reasons) {
+            this(historyId, menu, restaurants, reasons, null);
         }
     }
 

@@ -6,13 +6,14 @@ import { isAxiosError } from "axios";
 // 백엔드 PickService가 실제로 기록하는 filterType 값 (History.java / PickService.java 참고).
 // CATEGORY: 카테고리명 그대로, TAG_INCLUDE/TAG_EXCLUDE: 태그 "이름"(조회 실패 시에만 ID 문자열
 // 폴백 — PickService.resolveTagNames), MAX_DISTANCE: 미터(m) 값,
-// EXCLUDE_RECENT_DAYS: "최근 N일 안에 뽑은 메뉴 빼기"의 N(일).
+// EXCLUDE_RECENT_DAYS: "최근 N일 안에 뽑은 메뉴 빼기"의 N(일). MAX_KCAL: 1인분 열량 상한(kcal).
 export type HistoryFilterType =
   | "CATEGORY"
   | "TAG_INCLUDE"
   | "TAG_EXCLUDE"
   | "MAX_DISTANCE"
-  | "EXCLUDE_RECENT_DAYS";
+  | "EXCLUDE_RECENT_DAYS"
+  | "MAX_KCAL";
 
 export interface HistoryFilterCondition {
   filterType: HistoryFilterType | string;
