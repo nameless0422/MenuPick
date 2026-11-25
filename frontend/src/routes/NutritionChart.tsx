@@ -3,6 +3,7 @@ import { MEAL_SLOT_LABELS, MEAL_SLOTS } from "../api/history";
 import type { DayNutrition } from "../api/nutrition";
 import { dayLabel, niceTicks, splitDate, unknownMealsOf, type ChartMetric } from "./nutritionChartScale";
 import { MACRO_SERIES, segmentsOf, totalOf, UNIT, useWidth } from "./nutritionChartParts";
+import NutritionGuideLines from "./NutritionGuideLines";
 
 const HEIGHT = 180;
 // 오른쪽 여백은 평균선 라벨 자리다. 막대 위에 얹으면 마지막 날 막대와 겹친다.
@@ -23,15 +24,15 @@ function topRoundedRect(x: number, y: number, w: number, h: number): string {
  * 기록이 없는 날은 막대를 그리지 않는다(0으로 보이면 "적게 먹었다"가 된다). 값을 모르는 끼니가
  * 있던 날은 막대 위에 "?"를 둔다 — 그 막대는 실제보다 짧다.
  */
-export default function NutritionChart({ days, average, metric = "kcal" }: {
-  days: DayNutrition[]; average: number | null; metric?: ChartMetric;
+export default function NutritionChart({ days, average, reference = null, metric = "kcal" }: {
+  days: DayNutrition[]; average: number | null; reference?: number | null; metric?: ChartMetric;
 }) {
   const id = useId();
   const [wrapRef, width] = useWidth<HTMLDivElement>(320);
   const [hover, setHover] = useState<number | null>(null);
   const unit = UNIT[metric];
 
-  const max = Math.max(...days.map((day) => totalOf(day, metric)), average ?? 0);
+  const max = Math.max(...days.map((day) => totalOf(day, metric)), average ?? 0, reference ?? 0);
   const ticks = niceTicks(max);
   const top = ticks[ticks.length - 1];
   const plotW = Math.max(1, width - PAD.left - PAD.right);
@@ -92,15 +93,7 @@ export default function NutritionChart({ days, average, metric = "kcal" }: {
           );
         })}
         <line className="nutrition-chart-axis" x1={PAD.left} x2={width - PAD.right} y1={y(0)} y2={y(0)} />
-        {average != null && (
-          <g>
-            <line className="nutrition-chart-average" x1={PAD.left} x2={width - PAD.right}
-              y1={y(average)} y2={y(average)} />
-            <text className="nutrition-chart-average-label" x={width - PAD.right + 4} y={y(average)} dy="0.32em">
-              평균
-            </text>
-          </g>
-        )}
+        <NutritionGuideLines average={average} reference={reference} y={y} x1={PAD.left} x2={width - PAD.right} />
       </svg>
       {hovered && hover != null && (
         // 막대를 가리지 않게 옆에 둔다. 오른쪽 절반이면 왼쪽으로, 왼쪽 절반이면 오른쪽으로.
@@ -131,6 +124,8 @@ export default function NutritionChart({ days, average, metric = "kcal" }: {
             {item.label}</li>
         ))}
         {days.some((day) => unknownMealsOf(day, metric) > 0) && <li><b aria-hidden="true">?</b> 모르는 끼니 있음</li>}
+        {reference != null && <li><i className="nutrition-swatch-reference" aria-hidden="true" />
+          기준 {reference.toLocaleString("ko-KR")}kcal</li>}
       </ul>
     </div>
   );

@@ -106,6 +106,19 @@ class NutritionIntegrationTest extends AbstractIntegrationTest {
         return menus.save(menu);
     }
 
+    @Test void kcalReferenceStartsEmptyIsSavedAndClearedAndRidesOnTheSummary() {
+        User owner = user("ref");
+        assertThat(service.getKcalReference(owner.getId()).dailyKcal()).isNull();
+        assertThat(service.summarize(owner.getId(), 7).dailyKcalReference()).isNull();
+
+        service.updateKcalReference(owner.getId(), new NutritionDto.KcalReference(2000));
+        assertThat(service.getKcalReference(owner.getId()).dailyKcal()).isEqualTo(2000);
+        assertThat(service.summarize(owner.getId(), 7).dailyKcalReference()).isEqualTo(2000);
+
+        service.updateKcalReference(owner.getId(), new NutritionDto.KcalReference(null));
+        assertThat(service.summarize(owner.getId(), 7).dailyKcalReference()).isNull();
+    }
+
     @Test void searchPutsExactThenPrefixThenShortestFirstAndEscapesWildcards() {
         String base = tag + "김치찌개";
         reference("돼지고기" + base, 300);

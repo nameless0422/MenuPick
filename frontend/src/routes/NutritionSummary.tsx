@@ -60,8 +60,9 @@ const kcal = (value: number) => `약 ${value.toLocaleString("ko-KR")}kcal`;
 /**
  * 열량 기록(D-082, D-083). 기록 화면의 개요 칸에 둔다.
  *
- * 목표 칼로리나 "초과" 같은 판정은 하지 않는다. 이 앱은 무엇을 먹을지 고르는 도구이고, 메뉴 이름은
+ * "초과"·"부족" 같은 판정은 하지 않는다. 이 앱은 무엇을 먹을지 고르는 도구이고, 메뉴 이름은
  * 사용자가 지으며 식당마다 양이 다르다 — 정확해 보이는 장치를 붙이면 추정치가 판정이 된다.
+ * 사용자가 설정에서 하루 기준 열량을 정하면 열량 그래프에 점선 하나만 더 긋는다(D-093).
  */
 export default function NutritionSummary() {
   const headingId = useId();
@@ -84,6 +85,7 @@ export default function NutritionSummary() {
     );
   }
   const { periodDays, days, slots, knownMeals, unknownMeals, averageKcal, truncated, macros } = query.data;
+  const reference = query.data.dailyKcalReference ?? null;
   // 탄단지를 아는 날이 하루도 없으면(또는 예전 서버면) 탄단지 그래프는 빈 판이다. 고를 수 없게 숨긴다.
   const canShowMacros = days.some((day) => (day.macros?.meals ?? 0) > 0);
   const shown: ChartMetric = canShowMacros ? metric : "kcal";
@@ -143,9 +145,11 @@ export default function NutritionSummary() {
             <NutritionDonut {...donutOf(shown, slots, macros)} />
           ) : kind === "line" ? (
             // 탄단지 선은 영양소마다 따로라 세 값을 더한 평균선은 어느 선과도 견줄 수 없다 — 긋지 않는다.
-            <NutritionLineChart days={days} metric={shown} average={shown === "kcal" ? averageKcal : null} />
+            <NutritionLineChart days={days} metric={shown} average={shown === "kcal" ? averageKcal : null}
+              reference={shown === "kcal" ? reference : null} />
           ) : (
-            <NutritionChart days={days} metric={shown} average={shown === "kcal" ? averageKcal : macroAverage} />
+            <NutritionChart days={days} metric={shown} average={shown === "kcal" ? averageKcal : macroAverage}
+              reference={shown === "kcal" ? reference : null} />
           )}
           {/* 원그래프(열량)는 옆 목록이 같은 끼니별 값을 이미 말한다. */}
           {!(kind === "donut" && shown === "kcal") && <ul className="chip-row" role="list" aria-label="끼니별 열량">

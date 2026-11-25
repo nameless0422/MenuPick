@@ -54,6 +54,12 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false)
     private long authVersion;
 
+    /**
+     * 하루 열량 기준선(kcal). 열량 기록 그래프에 점선으로만 그린다 — 판정은 하지 않는다(D-093).
+     * 비어 있으면 선을 긋지 않는다.
+     */
+    private Integer dailyKcalReference;
+
     @Builder
     public User(String email, String nickname, boolean emailVerified) {
         this.email = email;
@@ -69,6 +75,11 @@ public class User extends BaseTimeEntity {
 
     public void updateNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    /** 하루 열량 기준선을 정하거나(값) 지운다(null). 범위 검증은 요청 DTO가 한다. */
+    public void changeDailyKcalReference(Integer dailyKcalReference) {
+        this.dailyKcalReference = dailyKcalReference;
     }
 
     /**

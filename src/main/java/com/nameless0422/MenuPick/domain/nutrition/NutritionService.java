@@ -8,6 +8,8 @@ import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.menu.Macros;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
+import com.nameless0422.MenuPick.domain.user.User;
+import com.nameless0422.MenuPick.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -46,6 +48,7 @@ public class NutritionService {
     private final FoodReferenceRepository foodReferences;
     private final MenuRepository menus;
     private final HistoryRepository histories;
+    private final UserRepository users;
     private final Clock clock;
 
     public List<NutritionDto.FoodReferenceSummary> search(String query, int size) {
@@ -180,7 +183,23 @@ public class NutritionService {
                 carbs.meals, carbs.perDay(), protein.perDay(), fat.perDay(),
                 fiber.meals, fiber.perDay(), sugars.meals, sugars.perDay(), sodium.meals, sodium.perDay());
         return new NutritionDto.NutritionSummary(days, dayList, slotList, total, known, unknown, average, truncated,
-                macros);
+                macros, user(userId).getDailyKcalReference());
+    }
+
+    public NutritionDto.KcalReference getKcalReference(Long userId) {
+        return new NutritionDto.KcalReference(user(userId).getDailyKcalReference());
+    }
+
+    /** 기준선은 그래프 장식이라 동시 저장은 마지막 쓰기가 이긴다 — 버전을 두지 않는다. */
+    @Transactional
+    public NutritionDto.KcalReference updateKcalReference(Long userId, NutritionDto.KcalReference request) {
+        User user = user(userId);
+        user.changeDailyKcalReference(request.dailyKcal());
+        return new NutritionDto.KcalReference(user.getDailyKcalReference());
+    }
+
+    private User user(Long userId) {
+        return users.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
     }
 
     /** 영양소 하나의 기간 합계. 값을 모르는 끼니는 세지 않는다. */

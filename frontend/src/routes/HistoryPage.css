@@ -378,6 +378,27 @@
   font-size: 0.6875rem;
 }
 
+/* 사용자가 정한 기준선(D-093). 평균선과 모양으로 가른다(점 대 대시) — 색을 바꾸면 경고처럼 읽힌다. */
+.nutrition-chart-reference {
+  stroke: var(--text-h);
+  stroke-width: 1.5;
+  stroke-dasharray: 1 4;
+  stroke-linecap: round;
+}
+
+.nutrition-chart-reference-label {
+  fill: var(--text-h);
+  font-size: 0.6875rem;
+}
+
+.nutrition-swatch-reference {
+  display: inline-block;
+  width: 0.875rem;
+  margin-right: 0.25rem;
+  vertical-align: middle;
+  border-top: 2px dotted var(--text-h);
+}
+
 .nutrition-chart-hit {
   fill: transparent;
 }
