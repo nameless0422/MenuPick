@@ -158,7 +158,7 @@ class RestaurantServiceTest {
         given(userRepository.getReferenceById(1L)).willReturn(user);
         given(restaurantRepository.save(any(Restaurant.class))).willAnswer(inv -> {
             Restaurant saved = inv.getArgument(0);
-            try { setId(saved, 100L); } catch (Exception ignored) {}
+            try { setId(saved, 100L); } catch (Exception e) { throw new IllegalStateException(e); }
             return saved;
         });
 
