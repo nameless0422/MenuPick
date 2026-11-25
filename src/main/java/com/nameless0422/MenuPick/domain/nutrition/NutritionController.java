@@ -47,6 +47,18 @@ public class NutritionController {
         return ResponseEntity.ok(ApiResponse.ok(nutritionService.updateMenuNutrition(userId, menuId, request)));
     }
 
+    @GetMapping("/api/v1/nutrition/reference")
+    public ResponseEntity<ApiResponse<NutritionDto.KcalReference>> getKcalReference(
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(ApiResponse.ok(nutritionService.getKcalReference(userId)));
+    }
+
+    @PutMapping("/api/v1/nutrition/reference")
+    public ResponseEntity<ApiResponse<NutritionDto.KcalReference>> updateKcalReference(
+            @AuthenticationPrincipal Long userId, @Valid @RequestBody NutritionDto.KcalReference request) {
+        return ResponseEntity.ok(ApiResponse.ok(nutritionService.updateKcalReference(userId, request)));
+    }
+
     /** {@code days}가 비었거나 1~31 밖이면 7일로 되돌린다 — 식사 요약과 같은 관례. */
     @GetMapping("/api/v1/history/nutrition")
     public ResponseEntity<ApiResponse<NutritionDto.NutritionSummary>> summarize(

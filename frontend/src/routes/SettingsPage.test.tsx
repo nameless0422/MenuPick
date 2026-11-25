@@ -27,6 +27,10 @@ vi.mock("../api/auth", async (importOriginal) => ({
 // 진짜 AuthProvider는 마운트하자마자 토큰 재발급을 호출한다. 이 화면에서 보려는 것은
 // 연동 상태 표시와 해제 동작뿐이라 세션은 상태만 바꿔 끼운다.
 vi.mock("../auth/AuthContext", () => ({ useAuth: vi.fn() }));
+vi.mock("../api/nutrition", () => ({
+  fetchKcalReference: vi.fn().mockResolvedValue({ dailyKcal: null }),
+  updateKcalReference: vi.fn(),
+}));
 // 태그 절도 마운트되자마자 목록을 부른다. 갈아 끼우지 않으면 이 화면의 모든 테스트가
 // 실패한 요청의 에러 alert를 하나씩 더 그리게 된다.
 vi.mock("../api/tags", () => ({ fetchAllTags: vi.fn(), deleteTag: vi.fn(), renameTag: vi.fn() }));

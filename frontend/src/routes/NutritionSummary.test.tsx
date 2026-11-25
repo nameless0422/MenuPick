@@ -37,6 +37,25 @@ beforeEach(() => {
 });
 
 describe("열량 기록", () => {
+  it("기준선을 정했으면 열량 그래프에 점선과 범례만 더하고, 판정 문구는 없다", async () => {
+    fetchMock.mockResolvedValue(summary({ dailyKcalReference: 2000 }));
+    const { container } = renderWithProviders(<NutritionSummary />);
+
+    expect(await screen.findByText("기준 2,000kcal")).toBeInTheDocument();
+    expect(container.querySelector('[data-guide="reference"]')).not.toBeNull();
+    expect(screen.queryByText(/초과|부족|넘었/)).not.toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "선" }));
+    expect(container.querySelector('[data-guide="reference"]')).not.toBeNull();
+  });
+
+  it("기준선이 없으면 선을 긋지 않는다", async () => {
+    const { container } = renderWithProviders(<NutritionSummary />);
+    await screen.findByText(/하루 평균/);
+    expect(container.querySelector('[data-guide="reference"]')).toBeNull();
+    expect(container.querySelector('[data-guide="average"]')).not.toBeNull();
+  });
+
   it("하루 평균과 날짜·끼니별 값을 표로도 말하고, 기록 없는 날은 0kcal이 아니라 기록 없음이다", async () => {
     renderWithProviders(<NutritionSummary />);
     expect(await screen.findByText(/하루 평균/)).toHaveTextContent("약 675kcal");

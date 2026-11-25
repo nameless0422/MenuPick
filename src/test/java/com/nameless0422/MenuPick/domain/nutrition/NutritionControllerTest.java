@@ -66,6 +66,20 @@ class NutritionControllerTest extends AbstractControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test void kcalReferenceIsValidatedAndClearable() throws Exception {
+        for (String body : List.of("{\"dailyKcal\":499}", "{\"dailyKcal\":6001}")) {
+            mockMvc.perform(put("/api/v1/nutrition/reference").with(authentication(AUTH))
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors[0].field").value("dailyKcal"));
+        }
+        given(nutritionService.updateKcalReference(eq(1L), any())).willReturn(new NutritionDto.KcalReference(null));
+        mockMvc.perform(put("/api/v1/nutrition/reference").with(authentication(AUTH))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"dailyKcal\":null}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.dailyKcal").doesNotExist());
+        mockMvc.perform(get("/api/v1/nutrition/reference")).andExpect(status().isUnauthorized());
+    }
+
     @Test void summaryPassesDaysThrough() throws Exception {
         given(nutritionService.summarize(1L, 14)).willReturn(new NutritionDto.NutritionSummary(
                 14, List.of(), List.of(), 0, 0, 0, null, false));

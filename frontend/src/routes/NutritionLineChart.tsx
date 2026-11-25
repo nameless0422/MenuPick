@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DayNutrition } from "../api/nutrition";
 import { dayLabel, niceTicks, splitDate, unknownMealsOf, type ChartMetric } from "./nutritionChartScale";
 import { fmt, MACRO_SERIES, UNIT, useWidth } from "./nutritionChartParts";
+import NutritionGuideLines from "./NutritionGuideLines";
 
 const HEIGHT = 180;
 const MARKER_R = 4;
@@ -54,8 +55,8 @@ function spreadLabels(ys: number[], gap = 12): number[] {
  * 하루 꺾은선 그래프. 막대와 같은 날짜·같은 눈금이고, 열량은 하루 합계 한 줄, 탄단지는 영양소별 세 줄이다.
  * 열량은 끼니로 나눠 네 줄을 긋지 않는다 — 간식 같은 작은 줄은 0 근처에서 서로 엉킨다. 끼니별은 막대가 보여 준다.
  */
-export default function NutritionLineChart({ days, average, metric = "kcal" }: {
-  days: DayNutrition[]; average: number | null; metric?: ChartMetric;
+export default function NutritionLineChart({ days, average, reference = null, metric = "kcal" }: {
+  days: DayNutrition[]; average: number | null; reference?: number | null; metric?: ChartMetric;
 }) {
   const [wrapRef, width] = useWidth<HTMLDivElement>(320);
   const [hover, setHover] = useState<number | null>(null);
@@ -65,7 +66,7 @@ export default function NutritionLineChart({ days, average, metric = "kcal" }: {
   // 여러 줄이면 오른쪽에 선 이름을 단다. 한 줄이면 평균선 라벨 자리만 둔다.
   const pad = { top: 18, right: multi ? 60 : 30, bottom: 26, left: 44 };
 
-  const max = Math.max(0, ...series.flatMap((s) => s.values.map((v) => v ?? 0)), average ?? 0);
+  const max = Math.max(0, ...series.flatMap((s) => s.values.map((v) => v ?? 0)), average ?? 0, reference ?? 0);
   const ticks = niceTicks(max);
   const top = ticks[ticks.length - 1];
   const plotW = Math.max(1, width - pad.left - pad.right);
@@ -96,15 +97,7 @@ export default function NutritionLineChart({ days, average, metric = "kcal" }: {
           </g>
         ))}
         <line className="nutrition-chart-axis" x1={pad.left} x2={width - pad.right} y1={y(0)} y2={y(0)} />
-        {average != null && (
-          <g>
-            <line className="nutrition-chart-average" x1={pad.left} x2={width - pad.right}
-              y1={y(average)} y2={y(average)} />
-            <text className="nutrition-chart-average-label" x={width - pad.right + 4} y={y(average)} dy="0.32em">
-              평균
-            </text>
-          </g>
-        )}
+        <NutritionGuideLines average={average} reference={reference} y={y} x1={pad.left} x2={width - pad.right} />
         {hover != null && (
           <line className="nutrition-chart-crosshair" x1={cx(hover)} x2={cx(hover)} y1={pad.top} y2={y(0)} />
         )}

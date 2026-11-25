@@ -15,6 +15,7 @@ import {
 } from "../api/auth";
 import { deleteTag, fetchAllTags, renameTag, type TagInfo } from "../api/tags";
 import DefaultExclusionSection from "./DefaultExclusionSection";
+import KcalReferenceSection from "./KcalReferenceSection";
 import { linkAuthorizeUrl } from "../auth/oauthUrls";
 import { apiErrorMessage as errorMessage, apiErrorCode } from "../api/http";
 import "./SettingsPage.css";
@@ -127,6 +128,8 @@ export default function SettingsPage() {
       <TagSection />
 
       <DefaultExclusionSection />
+
+      <KcalReferenceSection />
 
       <section
         className="card settings-section settings-danger"

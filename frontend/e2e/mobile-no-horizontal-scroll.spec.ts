@@ -56,6 +56,7 @@ async function installApi(page: Page) {
       "/api/v1/onboarding": { needed: false, menus: [] },
       "/api/v1/tags": [{ id: 7, name: "혼밥" }, { id: 9, name: "땅콩" }],
       "/api/v1/pick/preferences": [9],
+      "/api/v1/nutrition/reference": { dailyKcal: 2000 },
       "/api/v1/pick/presets": { presets: [], limit: 10 },
       "/api/v1/trends": { status: "DISABLED", categories: [], menus: [], windowDays: 7 },
       "/api/v1/menus": { menus: [menu], hasNext: false, nextCursor: null },

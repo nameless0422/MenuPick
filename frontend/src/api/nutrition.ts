@@ -70,6 +70,13 @@ export interface NutritionSummary {
   truncated: boolean;
   /** 예전 서버는 주지 않는다. */
   macros?: MacroSummary;
+  /** 사용자가 정한 하루 열량 기준선(kcal). 없으면 null, 예전 서버는 주지 않는다(D-093). */
+  dailyKcalReference?: number | null;
+}
+
+/** 하루 열량 기준선 설정. null이면 지운다. 범위(500~6,000)는 오타 막기이지 판정이 아니다. */
+export interface KcalReference {
+  dailyKcal: number | null;
 }
 
 /**
@@ -108,6 +115,16 @@ export type MenuNutritionUpdate = { foodReferenceId?: number; kcalPerServing?: n
 
 export async function updateMenuNutrition(menuId: number, body: MenuNutritionUpdate) {
   const res = await http.put<ApiResponse<MenuNutrition>>(`/api/v1/menus/${menuId}/nutrition`, body);
+  return unwrap(res);
+}
+
+export async function fetchKcalReference() {
+  const res = await http.get<ApiResponse<KcalReference>>("/api/v1/nutrition/reference");
+  return unwrap(res);
+}
+
+export async function updateKcalReference(dailyKcal: number | null) {
+  const res = await http.put<ApiResponse<KcalReference>>("/api/v1/nutrition/reference", { dailyKcal });
   return unwrap(res);
 }
 

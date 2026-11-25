@@ -152,12 +152,30 @@ public final class NutritionDto {
     public record NutritionSummary(
             int periodDays, List<DayNutrition> days, List<SlotNutrition> slots,
             int totalKcal, int knownMeals, int unknownMeals, Integer averageKcal, boolean truncated,
-            MacroSummary macros) {
+            MacroSummary macros,
+            /** 사용자가 정한 하루 열량 기준선. 없으면 null — 그래프에 선을 긋지 않는다(D-093). */
+            Integer dailyKcalReference) {
         public NutritionSummary(int periodDays, List<DayNutrition> days, List<SlotNutrition> slots,
                                 int totalKcal, int knownMeals, int unknownMeals, Integer averageKcal, boolean truncated) {
             this(periodDays, days, slots, totalKcal, knownMeals, unknownMeals, averageKcal, truncated, MacroSummary.EMPTY);
         }
+
+        public NutritionSummary(int periodDays, List<DayNutrition> days, List<SlotNutrition> slots,
+                                int totalKcal, int knownMeals, int unknownMeals, Integer averageKcal, boolean truncated,
+                                MacroSummary macros) {
+            this(periodDays, days, slots, totalKcal, knownMeals, unknownMeals, averageKcal, truncated, macros, null);
+        }
     }
+
+    /**
+     * 하루 열량 기준선 설정. null이면 지운다.
+     *
+     * <p>범위는 판정이 아니라 오타 막기다. 500 아래·6,000 위는 하루 열량으로 적을 값이 아니다.
+     */
+    public record KcalReference(
+            @Min(value = 500, message = "기준 열량은 500kcal 이상으로 적어주세요.")
+            @Max(value = 6000, message = "기준 열량은 6,000kcal 이하로 적어주세요.")
+            Integer dailyKcal) {}
 
     /**
      * 기간 탄단지·식이섬유 <b>하루 평균</b>(g, 반올림한 정수). 열량 평균과 같이, 그 영양소를 아는 끼니가 있던
