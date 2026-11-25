@@ -54,6 +54,7 @@ type FilterDraft = {
   geo: GeoState;
   maxDistance: number;
   excludeRecentDays: number | null;
+  maxKcal: number | null;
 };
 
 /**
@@ -64,6 +65,14 @@ type FilterDraft = {
  * 1일 단위 숫자 입력은 고를 거리를 늘리기만 한다.
  */
 const RECENT_EXCLUSION_OPTIONS: (number | null)[] = [null, 3, 7, 14];
+
+/**
+ * 1인분 열량 상한 후보. null은 끄기다.
+ *
+ * 기본 메뉴의 열량이 대략 250~800kcal에 퍼져 있어 셋으로 나눴다 — 500이면 국·찌개·김밥 쪽,
+ * 700이면 면·덮밥까지, 900이면 고기·튀김을 뺀 대부분이다. 열량을 모르는 메뉴는 어느 쪽에서든 빠진다.
+ */
+const KCAL_LIMIT_OPTIONS: (number | null)[] = [null, 500, 700, 900];
 
 /** 후보가 빈 이유 중 대안("조건을 이렇게 바꿔볼까요?")을 물어볼 값. */
 const ALTERNATIVE_CODES = new Set(["NO_PICK_CANDIDATES", "NO_RECENT_FREE_MENUS"]);
@@ -84,6 +93,7 @@ function pickRequestFingerprint(request: PickRequest) {
     ...(request.excludeRecentDays !== undefined && {
       excludeRecentDays: request.excludeRecentDays,
     }),
+    ...(request.maxKcal !== undefined && { maxKcal: request.maxKcal }),
   });
 }
 
@@ -113,7 +123,7 @@ const EMPTY_REASONS: Record<
   },
   NO_PICK_CANDIDATES: {
     message:
-      "조건에 맞는 메뉴가 없어요. 필터를 풀거나, 거리로 뽑는 중이라면 반경을 넓혀 보세요.",
+      "조건에 맞는 메뉴가 없어요. 필터를 풀거나, 거리로 뽑는 중이라면 반경을 넓혀 보세요. 열량으로 거르는 중이라면 열량을 모르는 메뉴는 빠져요.",
     cta: "내 메뉴 관리하러 가기",
     to: "/menus",
   },
@@ -166,9 +176,11 @@ export default function PickPage() {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [maxDistance, setMaxDistance] = useState(500);
   const [excludeRecentDays, setExcludeRecentDays] = useState<number | null>(null);
+  const [maxKcal, setMaxKcal] = useState<number | null>(null);
   const [filterDraft, setFilterDraft] = useState<FilterDraft | null>(null);
   const geoGeneration = useRef(0);
-  const editing = filterDraft ?? { categories, includeTags, excludeTags, geo, maxDistance, excludeRecentDays };
+  const editing = filterDraft
+    ?? { categories, includeTags, excludeTags, geo, maxDistance, excludeRecentDays, maxKcal };
   const editCategories = (value: string[]) => filterDraft
     ? setFilterDraft({ ...filterDraft, categories: value }) : setCategories(value);
   const editIncludeTags = (value: TagSummary[]) => filterDraft
@@ -179,6 +191,8 @@ export default function PickPage() {
     ? setFilterDraft({ ...filterDraft, maxDistance: value }) : setMaxDistance(value);
   const editRecentDays = (value: number | null) => filterDraft
     ? setFilterDraft({ ...filterDraft, excludeRecentDays: value }) : setExcludeRecentDays(value);
+  const editMaxKcal = (value: number | null) => filterDraft
+    ? setFilterDraft({ ...filterDraft, maxKcal: value }) : setMaxKcal(value);
   useEffect(() => {
     if (!compact && filterDraft) {
       geoGeneration.current += 1;
@@ -195,6 +209,8 @@ export default function PickPage() {
     editing.excludeRecentDays,
     editRecentDays,
   );
+  const kcalLabelId = useId();
+  const kcalGroup = useRadioGroup(KCAL_LIMIT_OPTIONS, editing.maxKcal, editMaxKcal);
 
   // ---- 슬롯머신 연출 상태 ----
   const [spinning, setSpinning] = useState(false);
@@ -257,6 +273,7 @@ export default function PickPage() {
       maxDistance,
     }),
     ...(excludeRecentDays != null && { excludeRecentDays }),
+    ...(maxKcal != null && { maxKcal }),
   });
 
   const requestFingerprint = pickRequestFingerprint(buildRequest());
@@ -416,7 +433,7 @@ export default function PickPage() {
   const openFilters = () => {
     geoGeneration.current += 1;
     if (geo.status === "loading") setGeo({ status: "idle" });
-    setFilterDraft({ categories, includeTags, excludeTags, maxDistance, excludeRecentDays,
+    setFilterDraft({ categories, includeTags, excludeTags, maxDistance, excludeRecentDays, maxKcal,
       geo: geo.status === "loading" ? { status: "idle" } : geo });
   };
   const applyFilters = () => {
@@ -427,10 +444,11 @@ export default function PickPage() {
     setGeo(filterDraft.geo);
     setMaxDistance(filterDraft.maxDistance);
     setExcludeRecentDays(filterDraft.excludeRecentDays);
+    setMaxKcal(filterDraft.maxKcal);
     dismissFilters();
   };
   const conditionCount = categories.length + includeTags.length + excludeTags.length
-    + Number(geo.status === "ready") + Number(excludeRecentDays !== null);
+    + Number(geo.status === "ready") + Number(excludeRecentDays !== null) + Number(maxKcal !== null);
 
   const filtersContent = (
     <section className="pick-filters" aria-labelledby={filtersHeadingId}>
@@ -507,6 +525,25 @@ export default function PickPage() {
           ))}
         </div>
       </fieldset>
+
+      <fieldset>
+        <legend id={kcalLabelId}>1인분 열량</legend>
+        <div className="chip-row" {...kcalGroup.groupProps} aria-labelledby={kcalLabelId}>
+          {KCAL_LIMIT_OPTIONS.map((kcal, index) => (
+            <button
+              key={kcal ?? "off"}
+              type="button"
+              className={chipClass(editing.maxKcal === kcal)}
+              {...kcalGroup.radioProps(kcal, index)}
+            >
+              {kcal == null ? "상관없음" : `${kcal}kcal 이하`}
+            </button>
+          ))}
+        </div>
+        {editing.maxKcal != null && (
+          <p className="pick-kcal-hint">열량을 모르는 메뉴는 빠져요. 메뉴 화면에서 열량을 넣을 수 있어요.</p>
+        )}
+      </fieldset>
     </section>
   );
 
@@ -539,7 +576,8 @@ export default function PickPage() {
           aria-expanded={filterDraft !== null} disabled={defaultsPending} onClick={openFilters}>
           조건 설정 <span>{conditionCount > 0 ? `${conditionCount}개 적용 중` : "전체 메뉴에서"}</span>
         </button>
-        {(includeTags.length > 0 || excludeTags.length > 0 || geo.status === "ready" || excludeRecentDays !== null) &&
+        {(includeTags.length > 0 || excludeTags.length > 0 || geo.status === "ready" || excludeRecentDays !== null
+          || maxKcal !== null) &&
           <div className="applied-conditions" aria-label="적용한 상세 조건">
             {includeTags.map((tag) => <button key={`include-${tag.id}`} className="chip" type="button"
               aria-label={`포함 태그 ${tag.name} 해제`} onClick={() => setIncludeTags(includeTags.filter((value) => value.id !== tag.id))}>#{tag.name} ×</button>)}
@@ -547,6 +585,7 @@ export default function PickPage() {
               aria-label={`제외 태그 ${tag.name} 해제`} onClick={() => setExcludeTags(excludeTags.filter((value) => value.id !== tag.id))}>제외 #{tag.name} ×</button>)}
             {geo.status === "ready" && <button type="button" className="chip" onClick={() => setGeo({ status: "idle" })}>{formatDistance(maxDistance)} 이내 해제 ×</button>}
             {excludeRecentDays !== null && <button type="button" className="chip" onClick={() => setExcludeRecentDays(null)}>최근 {excludeRecentDays}일 제외 해제 ×</button>}
+            {maxKcal !== null && <button type="button" className="chip" onClick={() => setMaxKcal(null)}>{maxKcal}kcal 이하 해제 ×</button>}
           </div>}
       </div>}
 
@@ -556,7 +595,7 @@ export default function PickPage() {
             geoGeneration.current += 1;
             setFilterDraft({ categories: [], includeTags: [],
               excludeTags: (defaultExcludedTags ?? []).map(({ id, name }) => ({ id, name })),
-              geo: { status: "idle" }, maxDistance: 500, excludeRecentDays: null });
+              geo: { status: "idle" }, maxDistance: 500, excludeRecentDays: null, maxKcal: null });
           }}>초기화</button>
           <button type="button" className="primary-action" disabled={filterDraft?.geo.status === "loading"}
             onClick={applyFilters}>{filterDraft?.geo.status === "loading" ? "위치 확인 중…" : "조건 적용"}</button>
@@ -744,6 +783,10 @@ function PickResultCard({
       </div>
       <div className="pick-ticket-body">
       <strong className="pick-result-name">{menu.name}</strong>
+      {/* 식당마다 양이 달라 정확한 값인 척하지 않는다 — "약"을 붙인다(열량 기록 화면과 같은 표기). */}
+      {result.kcalPerServing != null && (
+        <p className="pick-result-kcal">1인분 약 {result.kcalPerServing.toLocaleString("ko-KR")}kcal</p>
+      )}
       {menu.memo && <p className="pick-result-memo">{menu.memo}</p>}
 
       {reasons.length > 0 && (

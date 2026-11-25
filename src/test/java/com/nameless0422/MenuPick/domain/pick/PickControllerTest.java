@@ -102,6 +102,43 @@ class PickControllerTest extends AbstractControllerTest {
     }
 
 
+    // --- 열량 상한 ---
+
+    @Test
+    @DisplayName("POST /api/v1/pick - maxKcal을 넘기고, 결과의 열량을 그대로 내려준다")
+    void pick_passesMaxKcalAndReturnsKcal() throws Exception {
+        var menuDetail = new MenuResponse.MenuDetail(
+                1L, "김치찌개", null, 3, false, Set.of("한식"),
+                List.of(), LocalDateTime.now(), LocalDateTime.now(), 0L);
+        given(pickService.pick(eq(1L), any(PickRequest.class)))
+                .willReturn(new PickResponse.PickResult(1L, menuDetail, List.of(), List.of(), 244));
+
+        mockMvc.perform(post("/api/v1/pick")
+                        .with(authentication(AUTH))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxKcal\": 600}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.kcalPerServing").value(244));
+
+        ArgumentCaptor<PickRequest> captured = ArgumentCaptor.forClass(PickRequest.class);
+        verify(pickService).pick(eq(1L), captured.capture());
+        org.assertj.core.api.Assertions.assertThat(captured.getValue().maxKcal()).isEqualTo(600);
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/pick - maxKcal이 범위를 벗어나면 400")
+    void pick_maxKcalOutOfRange_badRequest() throws Exception {
+        for (String body : List.of("{\"maxKcal\": 99}", "{\"maxKcal\": 5001}")) {
+            mockMvc.perform(post("/api/v1/pick")
+                            .with(authentication(AUTH))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors[0].field").value("maxKcal"));
+        }
+        verifyNoInteractions(pickService);
+    }
+
     // --- 최근에 뽑은 메뉴 빼기 ---
 
     @Test

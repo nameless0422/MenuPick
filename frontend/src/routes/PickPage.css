@@ -287,6 +287,17 @@
   font-size: var(--fs-md);
 }
 
+.pick-result-kcal {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.pick-kcal-hint {
+  margin-top: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
 .pick-reasons {
   padding: 12px 14px;
   border-radius: 10px;

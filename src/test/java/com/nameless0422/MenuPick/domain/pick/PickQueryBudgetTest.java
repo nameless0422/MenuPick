@@ -274,6 +274,28 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
         assertThat(alternatives.alternatives().get(0).changes().clearRecentExclusion()).isTrue();
     }
 
+    /**
+     * 대안은 열량 상한을 그대로 들고 센다. 흘리면 "카테고리를 풀면 2개"라고 한 뒤 눌러도
+     * 열량 조건에 또 걸려 0개가 된다. 열량을 모르는 메뉴도 빠져야 한다(SQL과 같은 판정).
+     */
+    @Test
+    @DisplayName("열량 상한으로 후보가 비면 대안의 후보 수도 열량 조건을 지킨다")
+    void alternativesKeepKcalLimit() {
+        menu("김치찌개", "한식").setCustomKcal(900);
+        menu("초밥", "일식").setCustomKcal(400);
+        menu("모르는메뉴", "양식");
+        menu("삼겹살", "양식").setCustomKcal(770);
+        entityManager.flush();
+
+        var alternatives = pickAlternativesService.find(me.getId(),
+                new PickRequest(Set.of("한식"), null, Set.of(), null, null, null, null, 600));
+
+        assertThat(alternatives.alternatives()).hasSize(1);
+        assertThat(alternatives.alternatives().get(0).type())
+                .isEqualTo(PickAlternativesResponse.Type.CLEAR_CATEGORIES);
+        assertThat(alternatives.alternatives().get(0).candidateCount()).isEqualTo(1);
+    }
+
     @Test
     @DisplayName("픽 대안은 거리 단계 수와 무관하게 고정 2(+기본 제외 1) 조회다")
     void alternativesHaveFixedQueryBudget() {

@@ -157,6 +157,38 @@ class PickServiceIntegrationTest extends AbstractIntegrationTest {
                 .extracting("filterValue").containsExactly("한식");
     }
 
+    @Test
+    @DisplayName("열량 상한 - 이하인 메뉴만 뽑고, 결과에 열량과 이유를 싣고, 조건을 기록한다")
+    void maxKcalPicksLightMenuAndRecordsCondition() {
+        menu("김치찌개").setCustomKcal(230);
+        menu("삼겹살").setCustomKcal(770);
+        menu("모르는메뉴");
+        flushAndClear();
+
+        PickResponse.PickResult result = pickService.pick(me.getId(),
+                new PickRequest(null, null, null, null, null, null, null, 500));
+
+        assertThat(result.menu().name()).isEqualTo("김치찌개");
+        assertThat(result.kcalPerServing()).isEqualTo(230);
+        assertThat(result.reasons()).contains("1인분 500kcal 이하로 골랐어요");
+        var history = historyRepository.findByIdAndUserId(result.historyId(), me.getId()).orElseThrow();
+        assertThat(history.getFilterConditions())
+                .extracting("filterType", "filterValue")
+                .contains(org.assertj.core.groups.Tuple.tuple("MAX_KCAL", "500"));
+    }
+
+    @Test
+    @DisplayName("열량 상한 - 맞는 메뉴가 없으면 조건이 좁다고 답한다")
+    void maxKcalWithNoLightMenu() {
+        menu("삼겹살").setCustomKcal(770);
+        flushAndClear();
+
+        assertThatThrownBy(() -> pickService.pick(me.getId(),
+                new PickRequest(null, null, null, null, null, null, null, 500)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NO_PICK_CANDIDATES);
+    }
+
     // ------------------------------------------------------------------ 헬퍼
 
     /**

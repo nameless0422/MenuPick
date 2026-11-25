@@ -59,8 +59,24 @@ public record PickRequest(
          */
         @Min(value = 1, message = "최근 제외 기간은 1일 이상이어야 합니다.")
         @Max(value = 30, message = "최근 제외 기간은 30일 이하여야 합니다.")
-        Integer excludeRecentDays
+        Integer excludeRecentDays,
+        /**
+         * 1인분 열량 상한(kcal). null이면 열량으로 거르지 않는다(D-092).
+         *
+         * <p><b>열량을 모르는 메뉴는 뺀다.</b> "가볍게"를 고른 사람에게 1,000kcal일지도 모르는 메뉴를
+         * 내밀면 조건을 켠 의미가 없다. 하한 100은 1인분 식사로 의미 있는 가장 작은 값이고,
+         * 상한 5,000은 메뉴 열량 입력의 상한(MenuNutritionRequest)과 같다.
+         */
+        @Min(value = 100, message = "열량 상한은 100kcal 이상이어야 합니다.")
+        @Max(value = 5000, message = "열량 상한은 5,000kcal 이하여야 합니다.")
+        Integer maxKcal
 ) {
+
+    /** 열량 상한이 없는 7개 인자 요청 — 열량 조건 이전의 호출부와 테스트용. */
+    public PickRequest(Set<String> categories, Set<Long> tagIds, Set<Long> excludeTagIds,
+            BigDecimal latitude, BigDecimal longitude, Integer maxDistance, Integer excludeRecentDays) {
+        this(categories, tagIds, excludeTagIds, latitude, longitude, maxDistance, excludeRecentDays, null);
+    }
 
     /**
      * 최근 제외가 없는 6개 인자 요청.
@@ -72,6 +88,6 @@ public record PickRequest(
      */
     public PickRequest(Set<String> categories, Set<Long> tagIds, Set<Long> excludeTagIds,
             BigDecimal latitude, BigDecimal longitude, Integer maxDistance) {
-        this(categories, tagIds, excludeTagIds, latitude, longitude, maxDistance, null);
+        this(categories, tagIds, excludeTagIds, latitude, longitude, maxDistance, null, null);
     }
 }

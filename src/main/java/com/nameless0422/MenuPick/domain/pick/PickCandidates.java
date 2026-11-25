@@ -59,6 +59,7 @@ final class PickCandidates {
      * @param categories    정규화(trim)된 카테고리. 하나라도 가진 메뉴를 남긴다(OR).
      * @param includeTagIds <b>전부</b> 가진 메뉴만 남긴다(AND).
      * @param excludeTagIds 하나라도 가진 메뉴를 뺀다.
+     * @param maxKcal       1인분 열량이 이 값 이하인 메뉴만 남긴다. 열량을 모르는 메뉴는 뺀다.
      */
     static Specification<Menu> of(Long userId,
                                   Set<String> categories,
@@ -67,6 +68,7 @@ final class PickCandidates {
                                   BigDecimal latitude,
                                   BigDecimal longitude,
                                   Integer maxDistance,
+                                  Integer maxKcal,
                                   LocalDateTime now) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -115,6 +117,11 @@ final class PickCandidates {
                 sub.select(cb.literal(1))
                         .where(cb.equal(subMenu, root), joined.get("id").in(excludes));
                 predicates.add(cb.not(cb.exists(sub)));
+            }
+
+            // 열량을 모르는 메뉴(NULL)는 비교에서 떨어진다 — 의도한 동작이다(PickRequest.maxKcal).
+            if (maxKcal != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.<Integer>get("kcalPerServing"), maxKcal));
             }
 
             BoundingBox box = BoundingBox.around(latitude, longitude, maxDistance);
