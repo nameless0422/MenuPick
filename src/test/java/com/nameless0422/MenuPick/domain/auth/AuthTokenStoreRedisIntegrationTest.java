@@ -79,9 +79,15 @@ class AuthTokenStoreRedisIntegrationTest extends AbstractIntegrationTest {
             }
             start.countDown();
 
-            int valid = 0;
+            // 발급이 전부 끝난 뒤에 소비한다. 끝나는 대로 소비하면 아직 뒤 발급이 오지 않은 순간의
+            // 토큰이 그때는 "마지막"이라 유효하게 세져, 저장소가 옳아도 2 이상이 나온다(CI에서 실제로 났다).
+            List<String> tokens = new ArrayList<>();
             for (Future<String> future : futures) {
-                if (store.consume(Purpose.PASSWORD_RESET, future.get()).isPresent()) {
+                tokens.add(future.get());
+            }
+            int valid = 0;
+            for (String token : tokens) {
+                if (store.consume(Purpose.PASSWORD_RESET, token).isPresent()) {
                     valid++;
                 }
             }
