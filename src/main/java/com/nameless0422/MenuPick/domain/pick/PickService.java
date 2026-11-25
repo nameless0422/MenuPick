@@ -4,7 +4,6 @@ import com.nameless0422.MenuPick.common.exception.BusinessException;
 import com.nameless0422.MenuPick.common.exception.ErrorCode;
 import com.nameless0422.MenuPick.domain.history.History;
 import com.nameless0422.MenuPick.domain.history.HistoryRepository;
-import com.nameless0422.MenuPick.domain.history.RecommendationFeedback;
 import com.nameless0422.MenuPick.domain.menu.Menu;
 import com.nameless0422.MenuPick.domain.menu.MenuRepository;
 import com.nameless0422.MenuPick.domain.menu.MenuRepositoryCustom.PickCandidate;

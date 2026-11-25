@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  백엔드 정적 분석 최소선(D-091).
+
+  모양(들여쓰기·괄호 위치·임포트 순서)은 보지 않는다. 지금 코드에 맞춰 수백 줄을 다시 쓰게 되고
+  리뷰가 걸러 내야 할 것도 아니다. 여기 있는 규칙은 "버그이거나 버그를 숨기는 것"만 고른다 —
+  위반이 0건인 상태에서 시작해, 새로 생기면 CI(check)가 막는다.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+
+    <module name="TreeWalker">
+        <!-- 쓰지 않는 임포트: 지운 코드의 흔적이고, 리뷰에서 "아직 쓰이나?"를 헷갈리게 한다. -->
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+        <module name="IllegalImport"/>
+
+        <!-- equals만 고치고 hashCode를 빠뜨리면 HashSet·HashMap 키가 조용히 틀린다. -->
+        <module name="EqualsHashCode"/>
+        <!-- 문자열을 == 로 비교하면 대부분 우연히 맞다가 어느 날 틀린다. -->
+        <module name="StringLiteralEquality"/>
+        <!-- 빈 catch는 예외를 삼킨다. 일부러라면 주석이라도 남긴다. -->
+        <module name="EmptyCatchBlock">
+            <property name="commentFormat" value=".+"/>
+        </module>
+        <module name="EmptyStatement"/>
+        <module name="FallThrough"/>
+        <module name="ModifiedControlVariable"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="CovariantEquals"/>
+        <module name="SuperClone"/>
+        <module name="NoFinalizer"/>
+        <module name="DefaultComesLast"/>
+        <module name="UpperEll"/>
+        <module name="ArrayTypeStyle"/>
+    </module>
+</module>

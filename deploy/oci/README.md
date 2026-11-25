@@ -19,6 +19,7 @@
 
 | 파일 | 배포 위치 | 설명 |
 | --- | --- | --- |
+| `deploy.sh` | `/tmp/deploy.sh` (배포 때마다 복사) | 백업 → 코드 → 이미지 교체 → 확인을 한 번에 |
 | `docker-compose.oci.yml` | `~/menupick/docker-compose.oci.yml` | prod compose에 겹치는 서버 전용 오버레이(TLS, Mailpit) |
 | `nginx-tls.conf` | `~/menupick/nginx-tls.conf` (컨테이너의 `/etc/nginx/conf.d/default.conf`로 마운트) | 자체 서명 TLS + `:80 → https` 리다이렉트 |
 | `menupick-backup.service` | `/etc/systemd/system/` | `scripts/backup-db.sh` 실행 |
@@ -40,6 +41,21 @@
 - `/etc/menupick/offsite.env` — 오프사이트 백업용 쓰기 전용 PAR URL. 역시 자격증명이다(0600 root).
 
 ## 배포
+
+보통의 배포는 [`deploy.sh`](deploy.sh) 하나로 한다. DB 기동 → 백업(실패하면 멈춤) → 코드 풀기 →
+`APP_VERSION` 교체 → 백업 스크립트·유닛 재설치 → app/web 교체 → 헬스·데모 API 확인 순이다(D-091).
+그 SHA의 main CI가 이미지를 올린 뒤에 돌리고, SHA는 **40자 전체**를 넘긴다.
+
+```bash
+# 로컬, 저장소 루트에서
+git fetch && git archive --format=tar origin/main -o main.tar
+scp main.tar deploy/oci/deploy.sh opc@146.56.116.44:/tmp/
+ssh opc@146.56.116.44 "bash /tmp/deploy.sh $(git rev-parse origin/main)"
+# 확인이 끝난 뒤 옛 이미지 정리(아래 "정리에 대해 알아 둘 것")
+ssh opc@146.56.116.44 'docker image prune -a -f'
+```
+
+아래는 스크립트가 하는 일을 손으로 나눠 할 때, 그리고 스크립트가 다루지 않는 서버 전용 파일의 절차다.
 
 소스 동기화(`git archive` + `scp` + `tar -xf`)는 추적 파일만 덮어쓰므로, 아래 두 파일은
 전개해도 자동으로 갱신되지 **않는다**(서버의 것은 `~/menupick/` 바로 아래에 있고

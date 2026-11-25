@@ -6,7 +6,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
 
 /**
  * 집계 결과 한 줄 — "최근 N일 동안 이 항목을 먹은 사람이 몇 명".
