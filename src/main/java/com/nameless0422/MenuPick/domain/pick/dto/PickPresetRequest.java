@@ -51,8 +51,16 @@ public final class PickPresetRequest {
             Set<@NotNull @Positive(message = "태그 ID는 양수여야 합니다.") Long> additionalExcludeTagIds,
 
             /** {@code null}이면 거리 조건 없음. 값이 있으면 300/500/1000/2000만 허용한다. */
-            Integer maxDistance
-    ) {}
+            Integer maxDistance,
+
+            /** {@code null}이면 열량 조건 없음. 값이 있으면 500/700/900만 허용한다. */
+            Integer maxKcal
+    ) {
+        public Create(String name, Set<String> categories, Set<Long> includeTagIds,
+                      Set<Long> additionalExcludeTagIds, Integer maxDistance) {
+            this(name, categories, includeTagIds, additionalExcludeTagIds, maxDistance, null);
+        }
+    }
 
     /**
      * 수정 — <b>부분 수정이 아니라 전체 교체</b>다.
@@ -89,8 +97,18 @@ public final class PickPresetRequest {
              * 없으면 409다 — 사용자가 "지금 조건이 이게 맞다"고 확인하지 않은 채로 다시
              * 돌기 시작하는 것을 막는다.
              */
-            Boolean acknowledgeRemovedTags
-    ) {}
+            Boolean acknowledgeRemovedTags,
+
+            /** 전체 교체라 비워 보내면 열량 조건이 꺼진다. */
+            Integer maxKcal
+    ) {
+        public Update(String name, Set<String> categories, Set<Long> includeTagIds,
+                      Set<Long> additionalExcludeTagIds, Integer maxDistance, Long version,
+                      Boolean acknowledgeRemovedTags) {
+            this(name, categories, includeTagIds, additionalExcludeTagIds, maxDistance, version,
+                    acknowledgeRemovedTags, null);
+        }
+    }
 
     /**
      * 실행. <b>필터 override를 받지 않는다</b> — 저장된 조건 그대로 돈다.

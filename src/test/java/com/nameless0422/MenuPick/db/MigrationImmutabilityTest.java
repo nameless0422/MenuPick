@@ -120,7 +120,9 @@ class MigrationImmutabilityTest {
             Map.entry("V28__food_reference_unit_and_default_links.sql",
                     "452614622809926b8709873243bdb5c30461453f051070ea136e1054378ff94e"),
             Map.entry("V29__user_daily_kcal_reference.sql",
-                    "dfae77f83b298708fc973e9675d646b6046c0b70f1aad13ad08d26f24e2544c9"));
+                    "dfae77f83b298708fc973e9675d646b6046c0b70f1aad13ad08d26f24e2544c9"),
+            Map.entry("V30__pick_preset_max_kcal.sql",
+                    "40eba810bce26851dcf8e5e74f22628b3e7d9216583f0c26dc9a5e653f6fecf5"));
 
     @Test
     @DisplayName("이미 머지된 마이그레이션 파일은 내용이 바뀌지 않았다")

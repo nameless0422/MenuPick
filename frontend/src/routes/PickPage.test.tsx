@@ -1082,6 +1082,35 @@ describe("1인분 열량", () => {
     expect(requestPickMock.mock.calls[0][0]).toMatchObject({ maxKcal: 700 });
   });
 
+  it("열량 끄기 대안을 누르면 상한이 꺼지고 열량 없이 다시 뽑는다", async () => {
+    const user = userEvent.setup();
+    const apiError = (errorCode: string) =>
+      Object.assign(new Error("Request failed"), {
+        isAxiosError: true,
+        response: { status: 404, data: { success: false, errorCode, message: "없음" } },
+      });
+    requestPickMock.mockRejectedValueOnce(apiError("NO_PICK_CANDIDATES"));
+    requestPickAlternativesMock.mockResolvedValue({
+      alternatives: [{ type: "DROP_KCAL_LIMIT", candidateCount: 3, changes: { clearKcalLimit: true } }],
+    });
+    renderWithProviders(<PickPage />);
+
+    await user.click(screen.getByRole("radio", { name: "500kcal 이하" }));
+    await user.click(spinButton());
+
+    const apply = await screen.findByRole(
+      "button",
+      { name: /1인분 열량 조건을 끄고 다시 뽑기 · 후보 3개/ },
+      { timeout: 3000 },
+    );
+    await user.click(apply);
+
+    await waitFor(() => expect(requestPickMock).toHaveBeenCalledTimes(2));
+    expect(requestPickMock.mock.calls[0][0]).toMatchObject({ maxKcal: 500 });
+    expect(requestPickMock.mock.calls[1][0]).not.toHaveProperty("maxKcal");
+    expect(screen.getByRole("radio", { name: "500kcal 이하" })).toHaveAttribute("aria-checked", "false");
+  });
+
   it("결과에 1인분 열량이 있으면 보이고, 없으면 자리를 만들지 않는다", async () => {
     const user = userEvent.setup();
     requestPickMock.mockResolvedValueOnce({ ...baseResult, kcalPerServing: 1244 });

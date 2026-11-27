@@ -41,6 +41,17 @@ public class PickAlternativesService {
             }
         }
 
+        // 열량 상한은 거리보다 먼저 본다. 거리는 실제로 걸어야 하는 제약이지만, 열량 버튼은
+        // 대개 "되면 좋고"에 가깝고 끄는 비용이 작다.
+        if (base.request() != null && base.request().maxKcal() != null) {
+            int withoutKcal = count(universe, base.withoutKcalLimit());
+            if (withoutKcal > 0) {
+                alternatives.add(new PickAlternativesResponse.Alternative(
+                        PickAlternativesResponse.Type.DROP_KCAL_LIMIT, withoutKcal,
+                        PickAlternativesResponse.Changes.dropKcalLimit()));
+            }
+        }
+
         Integer expandedDistance = firstSuccessfulDistance(universe, base, base.categories());
         if (expandedDistance != null) {
             int count = count(universe, base.with(base.categories(), expandedDistance));

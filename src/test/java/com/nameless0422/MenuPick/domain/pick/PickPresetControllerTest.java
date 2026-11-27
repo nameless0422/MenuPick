@@ -38,7 +38,7 @@ class PickPresetControllerTest extends AbstractControllerTest {
 
     private PickPresetResponse.Detail detail() {
         return new PickPresetResponse.Detail(1L, "회사 점심", Set.of("한식"), Set.of(7L),
-                Set.of(9L), 500, false, 0L, LocalDateTime.now(), LocalDateTime.now());
+                Set.of(9L), 500, 700, false, 0L, LocalDateTime.now(), LocalDateTime.now());
     }
 
     @Test

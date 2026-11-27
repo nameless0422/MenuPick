@@ -11,7 +11,9 @@ public record PickAlternativesResponse(List<Alternative> alternatives) {
         CLEAR_CATEGORIES,
         CLEAR_CATEGORIES_AND_EXPAND_DISTANCE,
         /** 최근에 뽑은 메뉴를 다시 포함한다. */
-        DROP_RECENT_EXCLUSION
+        DROP_RECENT_EXCLUSION,
+        /** 1인분 열량 상한을 끈다. */
+        DROP_KCAL_LIMIT
     }
 
     public record Alternative(Type type, int candidateCount, Changes changes) {
@@ -19,24 +21,29 @@ public record PickAlternativesResponse(List<Alternative> alternatives) {
 
     /**
      * 바뀌는 조건만 담는다. null은 "그대로"라는 뜻이고, 그래서 "끈다"를 null로 표현할 수 없다
-     * — 카테고리는 빈 집합이, 최근 제외는 {@code true} 플래그가 그 자리를 맡는다.
+     * — 카테고리는 빈 집합이, 최근 제외와 열량 상한은 {@code true} 플래그가 그 자리를 맡는다.
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record Changes(Integer maxDistance, Set<String> categories, Boolean clearRecentExclusion) {
+    public record Changes(Integer maxDistance, Set<String> categories, Boolean clearRecentExclusion,
+                          Boolean clearKcalLimit) {
         public static Changes distance(int meters) {
-            return new Changes(meters, null, null);
+            return new Changes(meters, null, null, null);
         }
 
         public static Changes clearCategories() {
-            return new Changes(null, Set.of(), null);
+            return new Changes(null, Set.of(), null, null);
         }
 
         public static Changes both(int meters) {
-            return new Changes(meters, Set.of(), null);
+            return new Changes(meters, Set.of(), null, null);
         }
 
         public static Changes dropRecentExclusion() {
-            return new Changes(null, null, true);
+            return new Changes(null, null, true, null);
+        }
+
+        public static Changes dropKcalLimit() {
+            return new Changes(null, null, null, true);
         }
     }
 }

@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchPickPreset, updatePickPreset, PRESET_DISTANCES, type PickPreset } from "../api/pickPresets";
+import { fetchPickPreset, updatePickPreset, PRESET_DISTANCES, PRESET_KCALS, type PickPreset } from "../api/pickPresets";
 import { fetchAllTags } from "../api/tags";
 import { apiErrorCode, apiErrorMessage } from "../api/http";
 import { useFocusOnMount } from "../a11y/useFocusOnMount";
@@ -27,6 +27,7 @@ function PresetForm({ preset, onClose }: { preset: PickPreset; onClose: () => vo
   const [include, setInclude] = useState(original.includeTagIds);
   const [exclude, setExclude] = useState(original.additionalExcludeTagIds);
   const [distance, setDistance] = useState(original.maxDistance == null ? "" : String(original.maxDistance));
+  const [kcal, setKcal] = useState(original.maxKcal == null ? "" : String(original.maxKcal));
   const [acknowledged, setAcknowledged] = useState(false);
   const tags = useQuery({ queryKey: ["tags", "all"], queryFn: fetchAllTags });
   const client = useQueryClient();
@@ -38,7 +39,8 @@ function PresetForm({ preset, onClose }: { preset: PickPreset; onClose: () => vo
   const update = useMutation({
     mutationFn: () => updatePickPreset(original.id, {
       name: name.trim(), categories, includeTagIds: include, additionalExcludeTagIds: exclude,
-      maxDistance: distance === "" ? null : Number(distance), version: original.version,
+      maxDistance: distance === "" ? null : Number(distance),
+      maxKcal: kcal === "" ? null : Number(kcal), version: original.version,
       acknowledgeRemovedTags: original.needsReview && acknowledged,
     }),
     onSuccess: (saved) => {
@@ -77,6 +79,13 @@ function PresetForm({ preset, onClose }: { preset: PickPreset; onClose: () => vo
         {PRESET_DISTANCES.map(value => <option key={value} value={value}>{value}m 이내</option>)}
       </select>
       <p>위치는 저장하지 않습니다. 실행할 때 현재 위치를 다시 받습니다.</p>
+      <label htmlFor={`${id}-kcal`}>수정할 1인분 열량 조건</label>
+      <select id={`${id}-kcal`} value={kcal} aria-describedby={`${id}-kcal-help`}
+        onChange={event => setKcal(event.target.value)}>
+        <option value="">열량 제한 없음</option>
+        {PRESET_KCALS.map(value => <option key={value} value={value}>{value}kcal 이하</option>)}
+      </select>
+      <p id={`${id}-kcal-help`}>열량을 모르는 메뉴는 열량 조건이 있으면 후보에서 빠집니다.</p>
       <fieldset>
         <legend>포함·추가 제외 태그 수정</legend>
         <p>기본 제외 태그는 실행 시점의 설정이 함께 적용되며 여기서 해제할 수 없습니다. 포함과 추가 제외는 각각 최대 20개입니다.</p>

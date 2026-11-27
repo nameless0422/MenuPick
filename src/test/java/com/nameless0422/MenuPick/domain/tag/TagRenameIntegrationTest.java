@@ -69,7 +69,7 @@ class TagRenameIntegrationTest extends AbstractIntegrationTest {
             menus.saveAndFlush(menu);
             tags.insertDefaultExcludedTag(user.getId(), original.getId());
             PickPreset preset = PickPreset.builder().user(user).name("점심").build();
-            preset.replaceConditions("점심", null, Set.of(), Set.of(PickPresetTag.exclude(original.getId())));
+            preset.replaceConditions("점심", null, null, Set.of(), Set.of(PickPresetTag.exclude(original.getId())));
             presets.saveAndFlush(preset);
         });
         var renamed = service.renameTag(user.getId(), original.getId(), new TagRequest.Rename("  견과류  ", 0L));

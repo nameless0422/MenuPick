@@ -6,13 +6,14 @@ export type PickAlternativeType =
   | "EXPAND_DISTANCE"
   | "CLEAR_CATEGORIES"
   | "CLEAR_CATEGORIES_AND_EXPAND_DISTANCE"
-  | "DROP_RECENT_EXCLUSION";
+  | "DROP_RECENT_EXCLUSION"
+  | "DROP_KCAL_LIMIT";
 
 export interface PickAlternative {
   type: PickAlternativeType;
   candidateCount: number;
   /** 바뀌는 조건만 담긴다. 없는 키는 "그대로"라는 뜻이다. */
-  changes: { categories?: []; maxDistance?: number; clearRecentExclusion?: true };
+  changes: { categories?: []; maxDistance?: number; clearRecentExclusion?: true; clearKcalLimit?: true };
 }
 
 export interface PickAlternativesResult {
@@ -27,10 +28,12 @@ export function pickAlternativesEnabled() {
  * 응답에 올 수 있는 종류와 그 순서.
  *
  * 서버는 최근 제외를 먼저 제안한다 — 그게 범인일 때 거리를 넓히라는 조언은 사용자를 한 번
- * 더 헛걸음시키기 때문이다. 아래 순서가 그 약속이고, 응답이 이 순서를 어기면 거부한다.
+ * 더 헛걸음시키기 때문이다. 열량 상한은 그다음이다(끄는 비용이 거리보다 작다).
+ * 아래 순서가 그 약속이고, 응답이 이 순서를 어기면 거부한다.
  */
 const TYPES: PickAlternativeType[] = [
   "DROP_RECENT_EXCLUSION",
+  "DROP_KCAL_LIMIT",
   "EXPAND_DISTANCE",
   "CLEAR_CATEGORIES",
   "CLEAR_CATEGORIES_AND_EXPAND_DISTANCE",
@@ -44,12 +47,13 @@ const TYPES: PickAlternativeType[] = [
  */
 const EXPECTED_CHANGES: Record<
   PickAlternativeType,
-  { distance: boolean; categories: boolean; dropRecent: boolean }
+  { distance: boolean; categories: boolean; dropRecent: boolean; dropKcal: boolean }
 > = {
-  DROP_RECENT_EXCLUSION: { distance: false, categories: false, dropRecent: true },
-  EXPAND_DISTANCE: { distance: true, categories: false, dropRecent: false },
-  CLEAR_CATEGORIES: { distance: false, categories: true, dropRecent: false },
-  CLEAR_CATEGORIES_AND_EXPAND_DISTANCE: { distance: true, categories: true, dropRecent: false },
+  DROP_RECENT_EXCLUSION: { distance: false, categories: false, dropRecent: true, dropKcal: false },
+  DROP_KCAL_LIMIT: { distance: false, categories: false, dropRecent: false, dropKcal: true },
+  EXPAND_DISTANCE: { distance: true, categories: false, dropRecent: false, dropKcal: false },
+  CLEAR_CATEGORIES: { distance: false, categories: true, dropRecent: false, dropKcal: false },
+  CLEAR_CATEGORIES_AND_EXPAND_DISTANCE: { distance: true, categories: true, dropRecent: false, dropKcal: false },
 };
 
 function parseAlternative(value: unknown): PickAlternative {
@@ -71,7 +75,9 @@ function parseAlternative(value: unknown): PickAlternative {
         || parsedChanges.categories.length !== 0))
       || (!expected.categories && parsedChanges.categories !== undefined)
       || (expected.dropRecent && parsedChanges.clearRecentExclusion !== true)
-      || (!expected.dropRecent && parsedChanges.clearRecentExclusion !== undefined)) {
+      || (!expected.dropRecent && parsedChanges.clearRecentExclusion !== undefined)
+      || (expected.dropKcal && parsedChanges.clearKcalLimit !== true)
+      || (!expected.dropKcal && parsedChanges.clearKcalLimit !== undefined)) {
     throw new Error("대안 응답 형식이 올바르지 않습니다.");
   }
   return {
@@ -81,6 +87,7 @@ function parseAlternative(value: unknown): PickAlternative {
       ...(expected.categories && { categories: [] as [] }),
       ...(expected.distance && { maxDistance: parsedChanges.maxDistance as number }),
       ...(expected.dropRecent && { clearRecentExclusion: true as const }),
+      ...(expected.dropKcal && { clearKcalLimit: true as const }),
     },
   };
 }

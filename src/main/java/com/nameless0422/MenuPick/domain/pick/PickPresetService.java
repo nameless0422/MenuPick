@@ -80,7 +80,7 @@ public class PickPresetService {
         Set<Long> includeIds = normalizeTagIds(request.includeTagIds());
         Set<Long> excludeIds = normalizeTagIds(request.additionalExcludeTagIds());
 
-        validateConditions(userId, request.maxDistance(), includeIds, excludeIds);
+        validateConditions(userId, request.maxDistance(), request.maxKcal(), includeIds, excludeIds);
 
         // 사용자 행을 먼저 잠근다. 세면서 잠그는 방식(SELECT COUNT(*) ... FOR UPDATE)은
         // 이미 있는 행만 잠그고 새 INSERT를 막지 못해 경쟁이 그대로 남는다 — 실제로 그렇게
@@ -102,7 +102,8 @@ public class PickPresetService {
                 .name(name)
                 .maxDistance(request.maxDistance())
                 .build();
-        preset.replaceConditions(name, request.maxDistance(), categories, toTags(includeIds, excludeIds));
+        preset.replaceConditions(name, request.maxDistance(), request.maxKcal(), categories,
+                toTags(includeIds, excludeIds));
 
         try {
             return PickPresetResponse.Detail.from(presetRepository.saveAndFlush(preset));
@@ -125,7 +126,7 @@ public class PickPresetService {
         Set<Long> includeIds = normalizeTagIds(request.includeTagIds());
         Set<Long> excludeIds = normalizeTagIds(request.additionalExcludeTagIds());
 
-        validateConditions(userId, request.maxDistance(), includeIds, excludeIds);
+        validateConditions(userId, request.maxDistance(), request.maxKcal(), includeIds, excludeIds);
 
         // 검토가 필요한 상태는 명시적 승인 없이 풀리지 않는다. 승인은 "지금 이 조건이 맞다"는
         // 확인이므로, 조건 검증을 모두 통과한 뒤에야 의미가 있다.
@@ -140,7 +141,7 @@ public class PickPresetService {
             throw new BusinessException(ErrorCode.PICK_PRESET_NAME_DUPLICATE);
         }
 
-        preset.replaceConditions(name, request.maxDistance(), categories,
+        preset.replaceConditions(name, request.maxDistance(), request.maxKcal(), categories,
                 toTags(includeIds, excludeIds));
         try {
             presetRepository.flush();
@@ -218,7 +219,9 @@ public class PickPresetService {
                 effectiveExclude,
                 latitude,
                 longitude,
-                preset.getMaxDistance());
+                preset.getMaxDistance(),
+                null,
+                preset.getMaxKcal());
 
         return new PickPresetResponse.ExecutionResult(
                 pickService.pick(userId, synthesized),
@@ -226,7 +229,8 @@ public class PickPresetService {
                         Set.copyOf(preset.getCategories()),
                         includeIds,
                         effectiveExclude,
-                        preset.getMaxDistance()));
+                        preset.getMaxDistance(),
+                        preset.getMaxKcal()));
     }
 
     // ── 검증 도우미 ─────────────────────────────────────────────────────
@@ -236,9 +240,9 @@ public class PickPresetService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PICK_PRESET_NOT_FOUND));
     }
 
-    private void validateConditions(Long userId, Integer maxDistance,
+    private void validateConditions(Long userId, Integer maxDistance, Integer maxKcal,
                                     Set<Long> includeIds, Set<Long> excludeIds) {
-        if (!PickPresetDistance.isValid(maxDistance)) {
+        if (!PickPresetDistance.isValid(maxDistance) || !PickPresetKcal.isValid(maxKcal)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT);
         }
         // 저장 시점의 직접 충돌은 400이다 — 사용자가 방금 고른 두 값이 모순이라 고칠 수 있다.

@@ -67,5 +67,16 @@ class PickRequestNormalizer {
                     source.latitude(), source.longitude(), source.maxDistance(), null, source.maxKcal()),
                     categories);
         }
+
+        /** 열량 상한만 풀고 나머지는 그대로 둔 요청. 대안("열량 조건 끄기")의 후보 수를 센다. */
+        NormalizedPickRequest withoutKcalLimit() {
+            PickRequest source = request;
+            if (source == null || source.maxKcal() == null) return this;
+            return new NormalizedPickRequest(new PickRequest(
+                    source.categories(), source.tagIds(), source.excludeTagIds(),
+                    source.latitude(), source.longitude(), source.maxDistance(),
+                    source.excludeRecentDays(), null),
+                    categories);
+        }
     }
 }

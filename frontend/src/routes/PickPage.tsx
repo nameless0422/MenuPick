@@ -420,6 +420,10 @@ export default function PickPage() {
       setExcludeRecentDays(null);
       delete nextRequest.excludeRecentDays;
     }
+    if (alternative.changes.clearKcalLimit) {
+      setMaxKcal(null);
+      delete nextRequest.maxKcal;
+    }
     pickButton.current?.focus();
     spinStartRef.current = Date.now();
     setSpinning(true);
@@ -665,6 +669,8 @@ export default function PickPage() {
                   {presetResult.appliedFilters.effectiveExcludeTagIds.length}개
                   {presetResult.appliedFilters.maxDistance != null &&
                     `, ${presetResult.appliedFilters.maxDistance}m 이내`}
+                  {presetResult.appliedFilters.maxKcal != null &&
+                    `, 1인분 ${presetResult.appliedFilters.maxKcal}kcal 이하`}
                 </p>
               </>
             )}
@@ -699,6 +705,7 @@ export default function PickPage() {
               excludeTagIds={excludeTags.map((t) => t.id)}
               defaultExcludedTagIds={(defaultExcludedTags ?? []).map((t) => t.id)}
               maxDistance={geo.status === "ready" ? maxDistance : null}
+              maxKcal={maxKcal}
             />
           </MobileSection>
 

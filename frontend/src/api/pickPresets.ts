@@ -13,6 +13,9 @@ import type { PickResult } from "./pick";
 export const PRESET_DISTANCES = [300, 500, 1000, 2000] as const;
 export type PresetDistance = (typeof PRESET_DISTANCES)[number];
 
+/** 저장할 수 있는 1인분 열량 상한. 픽 화면의 "1인분 열량" 버튼과 같은 단계다(백엔드 PickPresetKcal). */
+export const PRESET_KCALS = [500, 700, 900] as const;
+
 /** 사용자당 상한. 서버 응답의 `limit`과 같은 값이지만 화면이 미리 알아야 할 때가 있다. */
 export const PRESET_LIMIT = 10;
 
@@ -27,6 +30,8 @@ export interface PickPreset {
    */
   additionalExcludeTagIds: number[];
   maxDistance: number | null;
+  /** 1인분 열량 상한. 없으면 열량 조건 없음. 이 필드가 생기기 전 응답에는 아예 없을 수 있다. */
+  maxKcal?: number | null;
   /**
    * 참조하던 태그가 삭제돼 조건이 줄었다. 이 값이 true인 동안 **실행이 막힌다** —
    * 화면은 경고를 보여주고 편집으로 유도해야 한다.
@@ -49,6 +54,7 @@ export interface PickPresetSaveRequest {
   includeTagIds: number[];
   additionalExcludeTagIds: number[];
   maxDistance: number | null;
+  maxKcal: number | null;
 }
 
 export interface PickPresetUpdateRequest extends PickPresetSaveRequest {
@@ -75,6 +81,7 @@ export interface AppliedFilters {
   /** 기본 제외 + 추가 제외의 합집합. 실행 시점 값이다. */
   effectiveExcludeTagIds: number[];
   maxDistance: number | null;
+  maxKcal?: number | null;
 }
 
 export interface PickPresetExecutionResult {
