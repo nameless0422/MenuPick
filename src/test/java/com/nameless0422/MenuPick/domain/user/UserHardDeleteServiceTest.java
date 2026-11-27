@@ -124,7 +124,7 @@ class UserHardDeleteServiceTest extends AbstractIntegrationTest {
 
         // 빠른 픽도 purge 대상이다. 픽스처에 넣어 두지 않으면 "지워졌는가"를 물을 수 없다.
         PickPreset preset = PickPreset.builder().user(user).name("점심").maxDistance(500).build();
-        preset.replaceConditions("점심", 500, java.util.Set.of("한식"),
+        preset.replaceConditions("점심", 500, null, java.util.Set.of("한식"),
                 java.util.Set.of(PickPresetTag.exclude(tag.getId())));
         pickPresetRepository.save(preset);
 

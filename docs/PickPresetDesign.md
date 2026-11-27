@@ -82,6 +82,7 @@ PK 또는 UNIQUE는 `(preset_id, category)`다.
 - 모든 태그 ID: 양수, non-null, 현재 인증 사용자 소유이며 존재해야 함
 - 포함과 추가 제외의 직접 교집합: 400
 - `maxDistance`: `null`, 300, 500, 1000, 2000 중 하나
+- `maxKcal`: `null`, 500, 700, 900 중 하나(V30, D-094). 픽 화면 "1인분 열량" 버튼과 같은 단계다
 
 태그 ID는 중복 제거 후 소유 태그 조회 수와 비교한다. 타인 소유 또는 존재하지 않는 태그는
 리소스 존재를 노출하지 않도록 404로 응답한다. 카테고리는 기존 `PickService` 및 메뉴 저장 경로와
@@ -104,7 +105,7 @@ count-then-insert 경쟁 상태를 허용하지 않는다. 사용자 행을 DB�
 - `POST /pick/presets/{id}/pick`: 저장 조건으로 즉시 픽
 
 목록·상세 응답에는 `id`, `name`, `categories`, `includeTagIds`,
-`additionalExcludeTagIds`, `maxDistance`, `needsReview`, `version`, 생성·수정 시각을 담는다.
+`additionalExcludeTagIds`, `maxDistance`, `maxKcal`, `needsReview`, `version`, 생성·수정 시각을 담는다.
 저장 DTO나 응답에 좌표, 장소, `userId`를 넣지 않는다.
 
 모든 조회와 변경은 인증 사용자 범위로 찾는다. 타인 프리셋과 없는 프리셋은 같은 404다.

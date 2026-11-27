@@ -25,6 +25,7 @@ public final class PickPresetResponse {
             /** <b>추가</b> 제외만. 기본 제외는 실행 시점에 합쳐지므로 여기 없다. */
             Set<Long> additionalExcludeTagIds,
             Integer maxDistance,
+            Integer maxKcal,
             /** 참조 태그가 지워져 실행이 막힌 상태인가. 화면이 경고와 편집을 유도한다. */
             boolean needsReview,
             Long version,
@@ -39,6 +40,7 @@ public final class PickPresetResponse {
                     preset.includeTagIds(),
                     preset.excludeTagIds(),
                     preset.getMaxDistance(),
+                    preset.getMaxKcal(),
                     preset.isNeedsReview(),
                     preset.getVersion(),
                     preset.getCreatedAt(),
@@ -63,8 +65,14 @@ public final class PickPresetResponse {
             Set<Long> includeTagIds,
             /** 기본 제외 + 추가 제외의 합집합. 프리셋에 저장된 값이 아니라 실행 시점 값이다. */
             Set<Long> effectiveExcludeTagIds,
-            Integer maxDistance
+            Integer maxDistance,
+            Integer maxKcal
     ) {
+        public AppliedFilters(Set<String> categories, Set<Long> includeTagIds,
+                              Set<Long> effectiveExcludeTagIds, Integer maxDistance) {
+            this(categories, includeTagIds, effectiveExcludeTagIds, maxDistance, null);
+        }
+
         /** 화면이 "기본 제외가 몇 개 더해졌는지"를 설명할 수 있도록 셈을 돕는다. */
         public int effectiveExcludeCount() {
             return effectiveExcludeTagIds.size();

@@ -23,6 +23,7 @@ export default function SavePickPresetForm({
   excludeTagIds,
   defaultExcludedTagIds,
   maxDistance,
+  maxKcal = null,
 }: {
   categories: string[];
   includeTagIds: number[];
@@ -31,6 +32,8 @@ export default function SavePickPresetForm({
   defaultExcludedTagIds: number[];
   /** 거리 필터가 꺼져 있으면 null. */
   maxDistance: number | null;
+  /** 1인분 열량 상한. 픽 화면의 선택지가 프리셋 단계와 같아 그대로 저장한다. */
+  maxKcal?: number | null;
 }) {
   const queryClient = useQueryClient();
   const nameId = useId();
@@ -54,6 +57,7 @@ export default function SavePickPresetForm({
         includeTagIds,
         additionalExcludeTagIds,
         maxDistance: storedDistance,
+        maxKcal,
       }),
     onSuccess: () => {
       setName("");
@@ -100,6 +104,7 @@ export default function SavePickPresetForm({
         {storedDistance != null && maxDistance !== storedDistance && (
           <> (빠른 픽은 {PRESET_DISTANCES.join("/")}m만 저장해 가장 가까운 값으로 맞춥니다)</>
         )}
+        {maxKcal != null && <> · 1인분 {maxKcal}kcal 이하</>}
       </p>
 
       {/* 조용히 바꿔 저장하지 않는다 — 해제는 저장되지 않는다는 것을 먼저 말한다. */}

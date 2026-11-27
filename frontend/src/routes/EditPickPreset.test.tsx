@@ -45,9 +45,22 @@ it("최신 상세의 버전과 편집한 전체 조건을 저장하며 추가 �
   await user.click(save());
   await waitFor(() => expect(update).toHaveBeenCalledWith(1, {
     name: "주말 점심", categories: ["중식", "직접 분류"], includeTagIds: [9], additionalExcludeTagIds: [7],
-    maxDistance: 1000, version: 8, acknowledgeRemovedTags: false,
+    maxDistance: 1000, maxKcal: null, version: 8, acknowledgeRemovedTags: false,
   }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
+});
+
+it("저장된 열량 상한을 보여 주고, 바꾸거나 끈 값을 그대로 보낸다", async () => {
+  const user = userEvent.setup();
+  get.mockResolvedValue({ ...original, maxKcal: 700 });
+  mount();
+  const kcal = await screen.findByLabelText("수정할 1인분 열량 조건");
+  expect(kcal).toHaveValue("700");
+  await user.selectOptions(kcal, "");
+  await screen.findByLabelText("혼밥");
+  await user.click(save());
+  await waitFor(() => expect(update).toHaveBeenCalled());
+  expect(update.mock.calls[0][1].maxKcal).toBeNull();
 });
 
 it("삭제 태그 검토 상태는 전체 조건 확인 동의 없이 저장하지 않는다", async () => {

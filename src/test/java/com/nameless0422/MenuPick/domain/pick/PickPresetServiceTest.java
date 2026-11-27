@@ -227,7 +227,51 @@ class PickPresetServiceTest extends AbstractIntegrationTest {
         assertThat(presetRepository.findById(saved.id())).isEmpty();
     }
 
+    @Test
+    @DisplayName("생성·수정 - 열량 상한을 저장하고, 전체 교체라 비워 보내면 꺼진다")
+    void kcalIsStoredAndClearedByUpdate() {
+        PickPresetResponse.Detail saved = service.create(me.getId(),
+                new PickPresetRequest.Create("가벼운 점심", Set.of(), Set.of(), Set.of(), null, 700));
+        assertThat(saved.maxKcal()).isEqualTo(700);
+        flushAndClear();
+
+        PickPresetResponse.Detail cleared = service.update(me.getId(), saved.id(),
+                new PickPresetRequest.Update("가벼운 점심", Set.of(), Set.of(), Set.of(), null,
+                        saved.version(), null, null));
+        flushAndClear();
+
+        assertThat(cleared.maxKcal()).isNull();
+        assertThat(service.get(me.getId(), saved.id()).maxKcal()).isNull();
+    }
+
+    @Test
+    @DisplayName("생성 - 허용되지 않은 열량 값은 400")
+    void create_invalidKcal() {
+        assertThatThrownBy(() -> service.create(me.getId(),
+                new PickPresetRequest.Create("이상한 열량", Set.of(), Set.of(), Set.of(), null, 650)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
     // ── 실행 ────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("실행 - 저장된 열량 상한으로 뽑고 적용 조건에도 싣는다")
+    void execute_appliesStoredKcal() {
+        menu("삼겹살", "한식").setCustomKcal(900);
+        menu("비빔밥", "한식").setCustomKcal(560);
+        menu("모르는메뉴", "한식");
+        PickPresetResponse.Detail preset = service.create(me.getId(),
+                new PickPresetRequest.Create("가벼운 한식", Set.of("한식"), Set.of(), Set.of(), null, 700));
+        flushAndClear();
+
+        PickPresetResponse.ExecutionResult result = service.execute(me.getId(), preset.id(),
+                new PickPresetRequest.Execute(preset.version(), null, null));
+
+        assertThat(result.pick().menu().name()).isEqualTo("비빔밥");
+        assertThat(result.pick().kcalPerServing()).isEqualTo(560);
+        assertThat(result.appliedFilters().maxKcal()).isEqualTo(700);
+    }
 
     @Test
     @DisplayName("실행 - 저장 조건으로 뽑고 적용된 조건을 함께 돌려준다")

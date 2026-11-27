@@ -50,8 +50,22 @@ describe("현재 조건을 빠른 픽으로 저장", () => {
         includeTagIds: [7],
         additionalExcludeTagIds: [9],
         maxDistance: null,
+        maxKcal: null,
       }),
     );
+  });
+
+  it("고른 1인분 열량 상한을 함께 저장하고 저장될 조건에 보여 준다", async () => {
+    const user = userEvent.setup();
+    render({ maxKcal: 700 });
+    await openForm(user);
+
+    expect(screen.getByText(/1인분 700kcal 이하/)).toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "빠른 픽 이름" }), "가벼운 점심");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0][0].maxKcal).toBe(700);
   });
 
   /**

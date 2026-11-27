@@ -39,8 +39,27 @@ describe("requestPickAlternatives", () => {
     });
   });
 
+  it("열량 조건 끄기 대안은 최근 제외 다음, 거리 앞에 온다", async () => {
+    respond({ alternatives: [
+      { type: "DROP_KCAL_LIMIT", candidateCount: 4, changes: { clearKcalLimit: true } },
+      { type: "EXPAND_DISTANCE", candidateCount: 2, changes: { maxDistance: 1000 } },
+    ] });
+    await expect(requestPickAlternatives({ maxKcal: 500 })).resolves.toEqual({
+      alternatives: [
+        { type: "DROP_KCAL_LIMIT", candidateCount: 4, changes: { clearKcalLimit: true } },
+        { type: "EXPAND_DISTANCE", candidateCount: 2, changes: { maxDistance: 1000 } },
+      ],
+    });
+  });
+
   it.each([
     { alternatives: [{ type: "UNKNOWN", candidateCount: 1, changes: {} }] },
+    { alternatives: [{ type: "DROP_KCAL_LIMIT", candidateCount: 1, changes: {} }] },
+    { alternatives: [{ type: "EXPAND_DISTANCE", candidateCount: 1, changes: { maxDistance: 1000, clearKcalLimit: true } }] },
+    { alternatives: [
+      { type: "DROP_KCAL_LIMIT", candidateCount: 1, changes: { clearKcalLimit: true } },
+      { type: "DROP_RECENT_EXCLUSION", candidateCount: 5, changes: { clearRecentExclusion: true } },
+    ] },
     // 종류와 맞지 않는 변경 키는 거부한다. 화면은 받은 키를 그대로 조건에 반영하므로,
     // 섞여 들어온 키 하나가 사용자가 켜 둔 조건을 조용히 바꿔 버린다.
     { alternatives: [{ type: "DROP_RECENT_EXCLUSION", candidateCount: 1, changes: { maxDistance: 1000 } }] },

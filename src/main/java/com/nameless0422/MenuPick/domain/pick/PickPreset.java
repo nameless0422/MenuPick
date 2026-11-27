@@ -61,6 +61,9 @@ public class PickPreset extends BaseTimeEntity {
     /** NULL이면 거리 조건 없음. 값이 있으면 {@link PickPresetDistance}의 허용값만 들어온다. */
     private Integer maxDistance;
 
+    /** NULL이면 열량 조건 없음. 값이 있으면 {@link PickPresetKcal}의 허용값만 들어온다. */
+    private Integer maxKcal;
+
     /** 낙관적 락. 수정·삭제·실행이 모두 확인한다(V9의 다른 테이블과 같은 관례). */
     @Version
     @Column(nullable = false)
@@ -97,10 +100,11 @@ public class PickPreset extends BaseTimeEntity {
      * <p>PUT이 전체 교체인 이유는 검토 복구와 맞물려 있다 — 태그가 지워진 프리셋을 되살리려면
      * 사용자가 남은 조건 전부를 다시 보고 승인해야 하므로, 그 화면이 보내는 것이 곧 전체다.
      */
-    public void replaceConditions(String name, Integer maxDistance,
+    public void replaceConditions(String name, Integer maxDistance, Integer maxKcal,
                                   Set<String> categories, Set<PickPresetTag> tags) {
         this.name = name;
         this.maxDistance = maxDistance;
+        this.maxKcal = maxKcal;
         this.categories.clear();
         this.categories.addAll(categories);
         this.tags.clear();

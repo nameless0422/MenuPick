@@ -1279,6 +1279,22 @@
   권장 비율과 견주는 표시는 D-084가 뺀 그대로다.
 - **관련**: `KcalReferenceSection.tsx`, `NutritionGuideLines.tsx`, `NutritionService.updateKcalReference`
 
+### D-094. 빠른 픽에 열량 상한을 저장하고, 열량 때문에 후보가 비면 "열량 끄기"를 먼저 권한다
+
+- **날짜/상태**: 2026-11-27 / 채택
+- **배경**: D-092로 픽에 "1인분 열량" 조건이 생겼지만 빠른 픽(프리셋)은 그 값을 저장하지 못했다. 저장하면 조건이
+  조용히 빠진 채 돈다. 또 열량 상한 때문에 후보가 0이 돼도 대안 패널은 거리·카테고리만 권했다.
+- **검토한 대안**:
+  1. 프리셋은 자유 값(100~5,000)을 저장 — 픽 화면에 없는 값이 생기고, 거리를 네 단계로 고정한 프리셋 설계(PickPresetDesign.md)와 어긋난다.
+  2. **픽 화면 버튼과 같은 500/700/900만 저장** — 화면이 만든 값이 그대로 들어가 맞출 일이 없다.
+  3. 열량 끄기 대안을 맨 뒤에 둔다 — 대안은 두 개까지만 나가서 사실상 보이지 않는다.
+- **결정**: 2. V30이 `pick_presets.max_kcal INT NULL`을 더하고 `PickPresetKcal`이 값을 막는다. 실행 결과의
+  `appliedFilters.maxKcal`에도 싣는다. 대안에 `DROP_KCAL_LIMIT`(`changes.clearKcalLimit: true`)를 더해
+  최근 제외 다음, 거리 앞에 둔다 — 열량은 끄는 비용이 작고 거리는 실제로 걸어야 하는 제약이라서다.
+- **트레이드오프**: 대안이 두 개까지라 열량 끄기가 들어가면 카테고리 해제가 밀려날 수 있다. 다른 대안의 후보 수는
+  여전히 열량 조건을 지켜 센다.
+- **관련**: `PickPresetKcal`, `PickAlternativesService`, `EditPickPreset.tsx`, `SavePickPresetForm.tsx`
+
 ### D-073. 메뉴 일괄 추천 설정을 기존 제외 API에 연결한다
 
 - **날짜/상태**: 2026-10-30 / 구현, main 머지(PR #364)·미배포

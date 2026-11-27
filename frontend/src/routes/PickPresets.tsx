@@ -201,6 +201,8 @@ export default function PickPresets({
                 ? "제한 없음"
                 : `${selected.maxDistance}m 이내 (실행할 때 현재 위치를 받아요)`}
             </dd>
+            <dt>1인분 열량</dt>
+            <dd>{selected.maxKcal == null ? "제한 없음" : `${selected.maxKcal}kcal 이하`}</dd>
           </dl>
 
           {executeMutation.isError && (

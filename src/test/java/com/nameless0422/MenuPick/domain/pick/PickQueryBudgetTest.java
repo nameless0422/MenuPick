@@ -289,10 +289,33 @@ class PickQueryBudgetTest extends AbstractIntegrationTest {
         var alternatives = pickAlternativesService.find(me.getId(),
                 new PickRequest(Set.of("한식"), null, Set.of(), null, null, null, null, 600));
 
+        // 열량 끄기가 먼저, 카테고리 해제가 다음이다. 카테고리 해제의 후보 수는 열량 조건을 지켜
+        // 초밥 하나만 센다(삼겹살 770, 모르는메뉴는 열량 미상).
+        assertThat(alternatives.alternatives())
+                .extracting(PickAlternativesResponse.Alternative::type,
+                        PickAlternativesResponse.Alternative::candidateCount)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(PickAlternativesResponse.Type.DROP_KCAL_LIMIT, 1),
+                        org.assertj.core.groups.Tuple.tuple(PickAlternativesResponse.Type.CLEAR_CATEGORIES, 1));
+        assertThat(alternatives.alternatives().get(0).changes().clearKcalLimit()).isTrue();
+    }
+
+    @Test
+    @DisplayName("열량 끄기 대안은 열량만 풀고 카테고리·최근 제외는 그대로 센다")
+    void dropKcalAlternativeKeepsOtherConditions() {
+        menu("김치찌개", "한식").setCustomKcal(900);
+        menu("된장찌개", "한식");
+        menu("초밥", "일식").setCustomKcal(1200);
+        entityManager.flush();
+
+        var alternatives = pickAlternativesService.find(me.getId(),
+                new PickRequest(Set.of("한식"), null, Set.of(), null, null, null, null, 500));
+
         assertThat(alternatives.alternatives()).hasSize(1);
         assertThat(alternatives.alternatives().get(0).type())
-                .isEqualTo(PickAlternativesResponse.Type.CLEAR_CATEGORIES);
-        assertThat(alternatives.alternatives().get(0).candidateCount()).isEqualTo(1);
+                .isEqualTo(PickAlternativesResponse.Type.DROP_KCAL_LIMIT);
+        // 한식 두 개. 일식 초밥은 카테고리 조건 때문에 세지 않는다.
+        assertThat(alternatives.alternatives().get(0).candidateCount()).isEqualTo(2);
     }
 
     @Test
