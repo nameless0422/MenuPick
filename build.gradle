@@ -16,6 +16,16 @@ buildscript {
 			classpath('org.apache.commons:commons-lang3:3.20.0') {
 				because 'CVE-2025-48924 — 빌드 클래스패스의 3.16.0을 수정 버전으로 올린다'
 			}
+			// CycloneDX 플러그인이 끌어오는 것들(2026-11-27 Dependabot #34~#38). 런타임 jackson은 2.21.7이라 해당 없다.
+			classpath('com.fasterxml.jackson.core:jackson-core:2.22.3') {
+				because 'Dependabot #36·#37 — 2.22.0~2.22.2의 DoS'
+			}
+			classpath('com.fasterxml.jackson.core:jackson-databind:2.22.3') {
+				because 'Dependabot #34·#35 — 2.22.0~2.22.2의 DoS'
+			}
+			classpath('com.google.guava:guava:33.7.2-jre') {
+				because 'Dependabot #38 — 역직렬화 시 메모리 폭주(33.7.1 이하)'
+			}
 		}
 	}
 }
@@ -179,6 +189,19 @@ checkstyle {
 	toolVersion = '12.3.1'
 	maxWarnings = 0
 	maxErrors = 0
+}
+
+// Checkstyle 실행 클래스패스도 의존성 그래프로 제출된다. 빌드 때만 쓰이고 입력은 이 리포의 소스뿐이지만,
+// 열린 알림을 남기지 않으려고 위 buildscript와 같은 이유로 올린다.
+dependencies {
+	constraints {
+		checkstyle('com.google.guava:guava:33.7.2-jre') {
+			because 'Dependabot #38 — Checkstyle이 끌어오는 33.5.0'
+		}
+		checkstyle('org.codehaus.plexus:plexus-utils:3.6.2') {
+			because 'Dependabot #33 — 3.6.1 미만의 extractFile 경로 탈출'
+		}
+	}
 }
 
 tasks.named('check') {
