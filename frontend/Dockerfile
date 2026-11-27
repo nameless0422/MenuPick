@@ -47,7 +47,10 @@ FROM nginx:1.30.7-alpine
 # 지운다. 베이스 태그가 수정판을 담게 되면 이 줄은 지운다 — 그때는 아무 일도 하지 않는 줄이 된다.
 #
 # libxml2는 2026-11-21 같은 스캔이 잡은 CVE-2026-86144(HIGH, 2.13.9-r3에서 수정)다. 이유와 기준은 위와 같다.
-RUN apk upgrade --no-cache libxslt libxml2
+# 2026-11-27 HIGH 6건(CVE-2026-11979, CVE-2026-86138~86143)이 r4·r5에서 고쳐졌다. 최소 버전을 적어 둔다 —
+# 줄이 그대로면 빌드 캐시가 옛 r3 레이어를 재사용해 업그레이드가 실제로 일어나지 않는다(그날 CI가 그랬다).
+RUN apk upgrade --no-cache libxslt libxml2 \
+ && apk add --no-cache 'libxml2>=2.13.9-r5'
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
