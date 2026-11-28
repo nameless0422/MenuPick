@@ -652,6 +652,11 @@ ul.chip-row {
   color: var(--text);
 }
 
+.pick-preset-often {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
 .chip-tag {
   color: var(--accent);
   background: var(--accent-bg);

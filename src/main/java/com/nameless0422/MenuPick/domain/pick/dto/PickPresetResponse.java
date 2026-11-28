@@ -79,9 +79,19 @@ public final class PickPresetResponse {
         }
     }
 
-    public record ListResult(List<Detail> presets, int limit) {
+    /**
+     * @param suggestion 지금 끼니에 자주 쓴 빠른 픽. 근거가 모자라면 {@code null}이다(D-095).
+     */
+    public record ListResult(List<Detail> presets, int limit, Suggestion suggestion) {
         public static ListResult of(List<Detail> presets) {
-            return new ListResult(presets, PickPreset.MAX_PER_USER);
+            return new ListResult(presets, PickPreset.MAX_PER_USER, null);
+        }
+
+        public ListResult withSuggestion(Suggestion suggestion) {
+            return new ListResult(presets, limit, suggestion);
         }
     }
+
+    /** "점심에 자주 써요" — 끼니와 그 끼니에 쓴 횟수(최근 {@code windowDays}일). */
+    public record Suggestion(Long presetId, String mealSlot, int uses, int windowDays) {}
 }

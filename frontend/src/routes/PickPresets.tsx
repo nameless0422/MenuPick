@@ -10,6 +10,8 @@ import {
 import { apiErrorMessage as errorMessage } from "../api/http";
 import EditPickPreset from "./EditPickPreset";
 
+const MEAL_SLOT_LABEL = { BREAKFAST: "아침", LUNCH: "점심", DINNER: "저녁", SNACK: "간식" } as const;
+
 /**
  * 상황별 빠른 픽 — 저장해 둔 조건으로 바로 뽑는다(docs/PickPresetDesign.md 9절).
  *
@@ -44,6 +46,9 @@ export default function PickPresets({
   const headingId = useId();
   const presetsQuery = useQuery({ queryKey: ["pick-presets"], queryFn: fetchPickPresets });
   const presets = presetsQuery.data?.presets ?? [];
+  // 순서는 바꾸지 않고 표시만 단다 — 매번 자리가 바뀌면 손이 기억한 위치가 어긋난다.
+  const suggestion = presetsQuery.data?.suggestion ?? null;
+  const suggestedLabel = suggestion ? MEAL_SLOT_LABEL[suggestion.mealSlot] : undefined;
 
   const [selection, setSelection] = useState<{
     resetKey: number;
@@ -153,6 +158,12 @@ export default function PickPresets({
                 }}
               >
                 {preset.name}
+                {suggestedLabel && suggestion?.presetId === preset.id && (
+                  <span className="pick-preset-often"
+                    title={`최근 ${suggestion.windowDays}일 동안 ${suggestedLabel}에 ${suggestion.uses}번 썼어요`}>
+                    {" "}· {suggestedLabel}에 자주
+                  </span>
+                )}
                 {preset.needsReview && <span aria-hidden="true"> ⚠</span>}
                 {preset.needsReview && <span className="sr-only"> (확인 필요)</span>}
               </button>

@@ -77,6 +77,12 @@ public class PickService {
 
     @Transactional
     public PickResponse.PickResult pick(Long userId, PickRequest request) {
+        return pick(userId, request, null);
+    }
+
+    /** {@code presetId}가 있으면 기록에 남긴다 — 빠른 픽 실행 경로만 넘긴다. */
+    @Transactional
+    public PickResponse.PickResult pick(Long userId, PickRequest request, Long presetId) {
         PickRequestNormalizer.NormalizedPickRequest normalized = requestNormalizer.normalize(userId, request);
         request = normalized.request();
         Set<String> categories = normalized.categories();
@@ -104,7 +110,7 @@ public class PickService {
                 buildRestaurantList(picked, lat, lng, maxDistance);
 
         History history = saveHistory(userId, picked, findNearestRestaurant(picked, lat, lng),
-                request, categories);
+                request, categories, presetId);
 
         return new PickResponse.PickResult(
                 history.getId(), toDetail(picked), restaurants,
@@ -318,13 +324,16 @@ public class PickService {
      * 좌표는 픽 시점의 후보 필터링에만 쓰이고 저장되지 않는다.
      */
     private History saveHistory(Long userId, Menu picked, Restaurant restaurant,
-                                PickRequest request, Set<String> categories) {
+                                PickRequest request, Set<String> categories, Long presetId) {
         History history = History.builder()
                 .user(userRepository.getReferenceById(userId))
                 .menu(picked)
                 .restaurant(restaurant)
                 .recommendedAt(LocalDateTime.now(clock))
                 .build();
+        if (presetId != null) {
+            history.markFromPreset(presetId);
+        }
 
         if (request != null) {
             // 원본이 아니라 정규화된 값을 남긴다. 원본을 남기면 히스토리에는 " 한식"이 보이는데
