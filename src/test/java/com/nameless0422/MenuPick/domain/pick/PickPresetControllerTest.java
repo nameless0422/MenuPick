@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PickPresetControllerTest extends AbstractControllerTest {
 
     @MockitoBean private PickPresetService pickPresetService;
+    @MockitoBean private PickPresetSuggestionService suggestionService;
 
     private PickPresetResponse.Detail detail() {
         return new PickPresetResponse.Detail(1L, "회사 점심", Set.of("한식"), Set.of(7L),

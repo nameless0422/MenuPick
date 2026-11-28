@@ -23,11 +23,14 @@ import org.springframework.web.bind.annotation.*;
 public class PickPresetController {
 
     private final PickPresetService pickPresetService;
+    private final PickPresetSuggestionService suggestionService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<PickPresetResponse.ListResult>> list(
             @AuthenticationPrincipal Long userId) {
-        return ResponseEntity.ok(ApiResponse.ok(pickPresetService.list(userId)));
+        PickPresetResponse.ListResult result = pickPresetService.list(userId);
+        return ResponseEntity.ok(ApiResponse.ok(
+                result.withSuggestion(suggestionService.suggest(userId, result.presets()))));
     }
 
     @GetMapping("/{presetId}")

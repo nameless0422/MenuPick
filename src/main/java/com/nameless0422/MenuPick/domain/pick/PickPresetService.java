@@ -224,7 +224,7 @@ public class PickPresetService {
                 preset.getMaxKcal());
 
         return new PickPresetResponse.ExecutionResult(
-                pickService.pick(userId, synthesized),
+                pickService.pick(userId, synthesized, preset.getId()),
                 new PickPresetResponse.AppliedFilters(
                         Set.copyOf(preset.getCategories()),
                         includeIds,

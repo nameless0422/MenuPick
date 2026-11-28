@@ -1,12 +1,17 @@
 # MenuPick 현재 상태
 
-**최종 갱신: 2026-11-27 / 기준 브랜치: `main`**
+**최종 갱신: 2026-11-29 / 기준 브랜치: `main`**
 
 이 문서는 구현·배포·운영의 현재 상태를 빠르게 확인하는 요약이다. 세부 기능 계약은
 [Specification.md](Specification.md), 설계 근거는 [DecisionLog.md](DecisionLog.md), 운영 절차는
 [deploy/oci/README.md](../deploy/oci/README.md)를 따른다.
 
 ## 제품 완성도
+
+### 2026-11-29 끼니별 자주 쓴 빠른 픽 표시 (main, 미배포)
+
+- 빠른 픽 목록에서 지금 끼니에 자주 쓴 것 하나에 "점심에 자주" 같은 표시가 붙는다. 순서는 그대로다. 근거는 D-095다.
+- 마이그레이션 V31이 `histories.pick_preset_id`를 더한다(INPLACE, 기존 기록은 비어 있음). 빠른 픽 실행이 채운다.
 
 ### 2026-11-27 빠른 픽 열량 조건과 "열량 끄기" 대안 (운영 반영 `4db2ef4`)
 

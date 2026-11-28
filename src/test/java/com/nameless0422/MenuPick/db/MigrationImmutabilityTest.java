@@ -122,7 +122,9 @@ class MigrationImmutabilityTest {
             Map.entry("V29__user_daily_kcal_reference.sql",
                     "dfae77f83b298708fc973e9675d646b6046c0b70f1aad13ad08d26f24e2544c9"),
             Map.entry("V30__pick_preset_max_kcal.sql",
-                    "40eba810bce26851dcf8e5e74f22628b3e7d9216583f0c26dc9a5e653f6fecf5"));
+                    "40eba810bce26851dcf8e5e74f22628b3e7d9216583f0c26dc9a5e653f6fecf5"),
+            Map.entry("V31__history_pick_preset.sql",
+                    "e11d2f6f98d60c6980a98e2012b5d903d59f9718ed6e2a5e0448209862133ee2"));
 
     @Test
     @DisplayName("이미 머지된 마이그레이션 파일은 내용이 바뀌지 않았다")

@@ -359,4 +359,16 @@ public interface HistoryRepository extends JpaRepository<History, Long> {
     @Query("select h.user.id, h.recommendedAt from History h where h.user.id in :userIds " +
             "and h.source = com.nameless0422.MenuPick.domain.history.HistorySource.PICK")
     List<Object[]> findPickTimesForUsers(@Param("userIds") List<Long> userIds);
+
+    /** 빠른 픽에서 나온 기록의 (빠른 픽 id, 뽑은 시각). 끼니별 제안을 센다(D-095). */
+    @Query("select h.pickPresetId as presetId, h.recommendedAt as recommendedAt from History h "
+            + "where h.user.id = :userId and h.pickPresetId is not null and h.recommendedAt >= :since")
+    List<PresetUse> findPresetUsesSince(@Param("userId") Long userId,
+                                                  @Param("since") LocalDateTime since);
+
+    interface PresetUse {
+        Long getPresetId();
+
+        LocalDateTime getRecommendedAt();
+    }
 }

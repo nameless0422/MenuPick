@@ -274,6 +274,22 @@ class PickPresetServiceTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @DisplayName("실행 - 기록에 어느 빠른 픽에서 나왔는지 남긴다 (끼니별 제안의 근거)")
+    void execute_recordsPresetId() {
+        menu("김치찌개", "한식");
+        PickPresetResponse.Detail preset = service.create(me.getId(),
+                create("점심", Set.of(), Set.of(), Set.of(), null));
+        flushAndClear();
+
+        PickPresetResponse.ExecutionResult result = service.execute(me.getId(), preset.id(),
+                new PickPresetRequest.Execute(preset.version(), null, null));
+        flushAndClear();
+
+        assertThat(historyRepository.findById(result.pick().historyId()).orElseThrow().getPickPresetId())
+                .isEqualTo(preset.id());
+    }
+
+    @Test
     @DisplayName("실행 - 저장 조건으로 뽑고 적용된 조건을 함께 돌려준다")
     void execute_usesStoredConditions() {
         Tag honbap = tag(me, "혼밥");

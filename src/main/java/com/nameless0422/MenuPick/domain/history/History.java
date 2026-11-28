@@ -70,6 +70,12 @@ public class History {
     @Column(nullable = false, precision = 3, scale = 1)
     private java.math.BigDecimal servings = java.math.BigDecimal.ONE;
 
+    /**
+     * 이 기록을 만든 빠른 픽. 수동 픽·직접 기록이면 NULL. 끼니별 빠른 픽 제안에만 쓴다(D-095).
+     * 외래 키가 아니라 id만 든다 — 근거는 V31.
+     */
+    private Long pickPresetId;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -83,6 +89,11 @@ public class History {
         this.menu = menu;
         this.restaurant = restaurant;
         this.recommendedAt = recommendedAt;
+    }
+
+    /** 빠른 픽 실행이 만든 기록임을 남긴다. 저장 전에만 부른다. */
+    public void markFromPreset(Long presetId) {
+        this.pickPresetId = presetId;
     }
 
     /**

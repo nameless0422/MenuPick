@@ -108,6 +108,9 @@ count-then-insert 경쟁 상태를 허용하지 않는다. 사용자 행을 DB�
 `additionalExcludeTagIds`, `maxDistance`, `maxKcal`, `needsReview`, `version`, 생성·수정 시각을 담는다.
 저장 DTO나 응답에 좌표, 장소, `userId`를 넣지 않는다.
 
+목록 응답에는 `suggestion`(지금 끼니에 자주 쓴 빠른 픽 하나, 없으면 `null`)이 함께 온다(V31, D-095).
+실행 기록의 `histories.pick_preset_id`로 센다. 화면은 표시만 달고 순서를 바꾸거나 자동 실행하지 않는다.
+
 모든 조회와 변경은 인증 사용자 범위로 찾는다. 타인 프리셋과 없는 프리셋은 같은 404다.
 수정·삭제의 오래된 버전은 기존 `VersionGuard`/`CONCURRENT_MODIFICATION` 관례의 409다.
 실행은 조회 행위이므로 성공해도 프리셋 버전을 증가시키지 않는다.

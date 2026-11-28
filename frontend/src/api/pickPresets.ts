@@ -43,9 +43,18 @@ export interface PickPreset {
   updatedAt: string;
 }
 
+/** 지금 끼니에 자주 쓴 빠른 픽(D-095). 근거가 모자라면 서버가 null을 준다. */
+export interface PickPresetSuggestion {
+  presetId: number;
+  mealSlot: "BREAKFAST" | "LUNCH" | "DINNER" | "SNACK";
+  uses: number;
+  windowDays: number;
+}
+
 export interface PickPresetListResponse {
   presets: PickPreset[];
   limit: number;
+  suggestion?: PickPresetSuggestion | null;
 }
 
 export interface PickPresetSaveRequest {

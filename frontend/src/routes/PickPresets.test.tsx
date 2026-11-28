@@ -190,4 +190,25 @@ describe("빠른 픽", () => {
     expect(deleteMock).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
+
+  it("지금 끼니에 자주 쓴 빠른 픽에 표시를 달고, 목록 순서는 그대로 둔다", async () => {
+    fetchMock.mockResolvedValue({
+      presets: [preset({ id: 1, name: "혼밥" }), preset({ id: 2, name: "회사 점심" })],
+      limit: 10,
+      suggestion: { presetId: 2, mealSlot: "LUNCH", uses: 3, windowDays: 60 },
+    });
+    render();
+
+    const chips = await screen.findAllByRole("button", { pressed: false });
+    expect(chips[0]).toHaveTextContent("혼밥");
+    expect(chips[0]).not.toHaveTextContent("자주");
+    expect(chips[1]).toHaveTextContent("회사 점심 · 점심에 자주");
+  });
+
+  it("제안이 없으면 표시도 없다", async () => {
+    fetchMock.mockResolvedValue({ presets: [preset()], limit: 10, suggestion: null });
+    render();
+
+    expect(await screen.findByRole("button", { pressed: false })).not.toHaveTextContent("자주");
+  });
 });
